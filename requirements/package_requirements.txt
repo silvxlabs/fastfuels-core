@@ -1,0 +1,11 @@
+dask
+geopandas
+matplotlib
+numpy<2
+pandas
+pandera
+psycopg2
+pyvista
+rasterio
+scipy
+shapely>=2
