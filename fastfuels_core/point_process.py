@@ -7,7 +7,6 @@ from __future__ import annotations
 
 # External imports
 import numpy as np
-import pandas as pd
 import geopandas as gpd
 from pandas import DataFrame
 from geopandas import GeoDataFrame
@@ -58,10 +57,20 @@ class InhomogeneousPoissonProcess(PointProcess):
         ) = self._create_structured_coords_grid(roi, intensity_resolution)
 
         all_plots_density_grid = self._calculate_and_interpolate_plot_data(
-            trees, plots, structured_grid_x, structured_grid_y, plot_type="all"
+            trees,
+            plots,
+            structured_grid_x,
+            structured_grid_y,
+            intensity_resolution,
+            plot_type="all",
         )
         occupied_plots_id_grid = self._calculate_and_interpolate_plot_data(
-            trees, plots, structured_grid_x, structured_grid_y, plot_type="occupied"
+            trees,
+            plots,
+            structured_grid_x,
+            structured_grid_y,
+            intensity_resolution,
+            plot_type="occupied",
         )
 
         # # Get the tree density for ALL plots and occupied plots in the grid
@@ -115,9 +124,8 @@ class InhomogeneousPoissonProcess(PointProcess):
         """
         west, south, east, north = roi.total_bounds
         x = np.arange(west + resolution / 2, east, resolution)
+        # TODO: Flip y axis so that it is oriented correctly
         y = np.arange(south + resolution / 2, north, resolution)
-        # x = np.arange(west, east, resolution)
-        # y = np.arange(south, north, resolution)
         xx, yy = np.meshgrid(x, y)
         return xx, yy
 
@@ -132,13 +140,13 @@ class InhomogeneousPoissonProcess(PointProcess):
         return merged_plots.fillna(0)
 
     @staticmethod
-    def _interpolate_plot_data_to_grid(plots, col_name, grid_x, grid_y, method):
+    def _interpolate_plot_data_to_grid(plots, data, grid_x, grid_y, method):
         """
         Interpolate unstructured plot data to a structured grid.
         """
         interpolated_grid = griddata(
             (plots.geometry.x, plots.geometry.y),
-            plots[col_name],
+            data,
             (grid_x, grid_y),
             method=method,
         )
@@ -148,27 +156,33 @@ class InhomogeneousPoissonProcess(PointProcess):
         return interpolated_grid
 
     def _calculate_and_interpolate_plot_data(
-        self, trees, plots, grid_x, grid_y, plot_type
+        self, trees, plots, grid_x, grid_y, cell_resolution, plot_type
     ):
         """
         Calculate and interpolate tree density based on plot type (all or occupied).
         """
-        if plot_type == "all":
-            merge_type = "left"
-            method = "linear"
-            column_to_interpolate = "TPA_UNADJ"
-        elif plot_type == "occupied":
-            merge_type = "right"
-            method = "nearest"
-            column_to_interpolate = "TM_CN"
-        else:
-            raise ValueError("Invalid plot type. Must be 'all' or 'occupied'.")
+        if plot_type not in ("all", "occupied"):
+            raise ValueError(
+                f"Invalid plot type '{plot_type}'. Plot type must be either 'all' or 'occupied'."
+            )
 
+        # Calculate tree density for each plot (all or occupied)
+        merge_type = "left" if plot_type == "all" else "right"
         plots_with_data_col = self._calculate_per_plot_tree_density(
             plots, trees, merge_type
         )
+
+        # Interpolate data for each plot to a structured grid. If all plots,
+        # linearly interpolate TPA_UNADJ. If occupied plots, interpolate TM_CN
+        # using nearest neighbors.
+        method = "cubic" if plot_type == "all" else "nearest"
+        data_to_interpolate = (
+            plots_with_data_col["TPA_UNADJ"] * cell_resolution**2
+            if plot_type == "all"
+            else plots_with_data_col["TM_CN"]
+        )
         interpolated_plot_data = self._interpolate_plot_data_to_grid(
-            plots_with_data_col, column_to_interpolate, grid_x, grid_y, method
+            plots_with_data_col, data_to_interpolate, grid_x, grid_y, method
         )
         return interpolated_plot_data
 

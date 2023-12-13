@@ -173,8 +173,9 @@ class TestInterpolatePlotDensityToGrid:
         plots["PlotID"] = [1, 2, 3, 4]
 
         # Use nearest neighbor to interpolate the plotIDs to the grid
+        data_to_interpolate = plots["PlotID"]
         interpolated_grid = InhomogeneousPoissonProcess._interpolate_plot_data_to_grid(
-            plots, "PlotID", x_grid, y_grid, method="nearest"
+            plots, data_to_interpolate, x_grid, y_grid, method="nearest"
         )
 
         # Assert that each quadrant has the correct plotID
@@ -193,16 +194,66 @@ class TestCalculateAndInterpolatePlotData:
     plots_data = plots_data.to_crs(plots_data.estimate_utm_crs())
     plot_id_col = "TM_CN"
 
-    create_visualization = True
+    grid_resolution = 5
+    grid_cell_area = grid_resolution**2
+
+    create_all_plots_visualization = True
+    create_occupied_plots_visualization = True
 
     def test_all_plots(self):
         """
         This test case calculates the tree density for all plots in the plots
         and interpolates tree density to a structured grid.
         """
+        # Build the structured grid for interpolation
         grid_x, grid_y = InhomogeneousPoissonProcess._create_structured_coords_grid(
-            self.roi, 1
+            self.roi, self.grid_resolution
         )
+        all_plots_grid = (
+            InhomogeneousPoissonProcess._calculate_and_interpolate_plot_data(
+                InhomogeneousPoissonProcess,
+                self.tree_data,
+                self.plots_data,
+                grid_x,
+                grid_y,
+                self.grid_resolution,
+                "all",
+            )
+        )
+
+        # Check that the output is a 2D array with the same shape as the grid
+        assert len(all_plots_grid.shape) == 2
+        assert all_plots_grid.shape == grid_x.shape
+        assert all_plots_grid.shape == grid_y.shape
+
+        # Do this for a list of grid cell resolutions. All density sums should
+        # be close to eachother. I.e. the density sum should not change much
+        # when the grid cell resolution changes.
+        for resolution in [0.5, 1, 2, 5, 10, 15, 30]:
+            grid_x, grid_y = InhomogeneousPoissonProcess._create_structured_coords_grid(
+                self.roi, resolution
+            )
+            res_grid = InhomogeneousPoissonProcess._calculate_and_interpolate_plot_data(
+                InhomogeneousPoissonProcess,
+                self.tree_data,
+                self.plots_data,
+                grid_x,
+                grid_y,
+                resolution,
+                "all",
+            )
+            assert np.allclose(
+                np.sum(res_grid),
+                0.22,
+                atol=0.02,
+            )
+
+        all_plots_df = InhomogeneousPoissonProcess._calculate_per_plot_tree_density(
+            self.plots_data, self.tree_data, merge_type="left"
+        )
+
+        if self.create_all_plots_visualization:
+            self.visualize_all_plots(grid_x, grid_y, all_plots_grid, all_plots_df)
 
     def test_occupied_plots(self):
         """
@@ -214,10 +265,10 @@ class TestCalculateAndInterpolatePlotData:
         This test case only accounts for OCCUPIED PLOTS, i.e. those with a
         tree density > 0. Plots without trees should not be in the output.
         """
+        # Build the structured grid for interpolation
         grid_x, grid_y = InhomogeneousPoissonProcess._create_structured_coords_grid(
-            self.roi, 5
+            self.roi, self.grid_resolution
         )
-
         occupied_plots_grid = (
             InhomogeneousPoissonProcess._calculate_and_interpolate_plot_data(
                 InhomogeneousPoissonProcess,
@@ -225,38 +276,44 @@ class TestCalculateAndInterpolatePlotData:
                 self.plots_data,
                 grid_x,
                 grid_y,
+                self.grid_resolution,
                 "occupied",
             )
         )
+
         # Check that the output is a 2D array with the same shape as the grid
         assert len(occupied_plots_grid.shape) == 2
         assert occupied_plots_grid.shape == grid_x.shape
         assert occupied_plots_grid.shape == grid_y.shape
 
-        # Check that the same number of unique occupied plots are in the output
+        # Get the occupied plots from the plots data
         occupied_plots_df = (
             InhomogeneousPoissonProcess._calculate_per_plot_tree_density(
                 self.plots_data, self.tree_data, merge_type="right"
             )
         )
         occupied_plots_df = occupied_plots_df.to_crs(self.roi.crs)
-        # occupied_plots_df = occupied_plots_df[
-        #     occupied_plots_df.geometry.within(self.roi.geometry)
-        # ]
+        plots_inside_roi = gpd.sjoin(
+            occupied_plots_df, self.roi, how="inner", predicate="within"
+        )
         occupied_plots_set = set(occupied_plots_grid.flatten().tolist())
-        # for _, plot in occupied_plots_df.iterrows():
-        #     plot_id = plot[self.plot_id_col]
-        #     assert plot_id in occupied_plots_set
+
+        # Check that all plots in the output are within the ROI
+        for _, plot in plots_inside_roi.iterrows():
+            plot_id = plot[self.plot_id_col]
+            assert plot_id in occupied_plots_set
+        for plot_id in occupied_plots_set:
+            assert plot_id in occupied_plots_df[self.plot_id_col].values
 
         # Visually inspect the output, if required
-        if self.create_visualization:
+        if self.create_occupied_plots_visualization:
             self.visualize_occupied_plots(
                 grid_x, grid_y, occupied_plots_grid, occupied_plots_df
             )
 
     def test_invalid_plot_type(self):
         grid_x, grid_y = InhomogeneousPoissonProcess._create_structured_coords_grid(
-            self.roi, 1
+            self.roi, self.grid_resolution
         )
 
         with pytest.raises(ValueError):
@@ -266,6 +323,7 @@ class TestCalculateAndInterpolatePlotData:
                 self.plots_data,
                 grid_x,
                 grid_y,
+                self.grid_resolution,
                 "invalid",
             )
 
@@ -329,4 +387,18 @@ class TestCalculateAndInterpolatePlotData:
                 for pid in plot_ids
             ]
         )
+        plt.show()
+
+    @staticmethod
+    def visualize_all_plots(grid_x, grid_y, all_plots_grid, all_plots_df):
+        fig, ax = plt.subplots(figsize=(10, 8))
+        ax.imshow(
+            all_plots_grid,
+            origin="lower",
+            extent=[grid_x.min(), grid_x.max(), grid_y.min(), grid_y.max()],
+        )
+        all_plots_df.plot(ax=ax, color="none", edgecolor="red")
+        plt.xlabel("X Coordinate")
+        plt.ylabel("Y Coordinate")
+        plt.title("Tree Intensity Visualization")
         plt.show()
