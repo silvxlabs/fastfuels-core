@@ -1,3 +1,8 @@
+"""
+Point process module for expanding trees to a region of interest (ROI) and
+generating random tree locations based on a specified point process.
+"""
+
 from __future__ import annotations
 
 # External imports
@@ -52,8 +57,11 @@ class InhomogeneousPoissonProcess(PointProcess):
             structured_grid_y,
         ) = self._create_structured_coords_grid(roi, intensity_resolution)
 
-        all_plots_density_grid = self._interpolate_all_plots_density(
-            trees, plots, structured_grid_x, structured_grid_y
+        all_plots_density_grid = self._calculate_and_interpolate_plot_data(
+            trees, plots, structured_grid_x, structured_grid_y, plot_type="all"
+        )
+        occupied_plots_id_grid = self._calculate_and_interpolate_plot_data(
+            trees, plots, structured_grid_x, structured_grid_y, plot_type="occupied"
         )
 
         # # Get the tree density for ALL plots and occupied plots in the grid
@@ -108,17 +116,10 @@ class InhomogeneousPoissonProcess(PointProcess):
         west, south, east, north = roi.total_bounds
         x = np.arange(west + resolution / 2, east, resolution)
         y = np.arange(south + resolution / 2, north, resolution)
+        # x = np.arange(west, east, resolution)
+        # y = np.arange(south, north, resolution)
         xx, yy = np.meshgrid(x, y)
         return xx, yy
-
-    def _interpolate_all_plots_density(self, trees, plots, grid_x, grid_y):
-        """
-        Calculate and interpolate tree density for all plots onto a structured grid.
-        """
-        all_plots_density = self._calculate_per_plot_tree_density(plots, trees, "left")
-        return self._interpolate_plot_density_to_grid(
-            all_plots_density, grid_x, grid_y, "linear"
-        )
 
     @staticmethod
     def _calculate_per_plot_tree_density(plots, trees, merge_type):
@@ -131,13 +132,13 @@ class InhomogeneousPoissonProcess(PointProcess):
         return merged_plots.fillna(0)
 
     @staticmethod
-    def _interpolate_plot_density_to_grid(plots, data, grid_x, grid_y, method):
+    def _interpolate_plot_data_to_grid(plots, col_name, grid_x, grid_y, method):
         """
-        Interpolate unstructured plot data (density) to a structured grid.
+        Interpolate unstructured plot data to a structured grid.
         """
         interpolated_grid = griddata(
             (plots.geometry.x, plots.geometry.y),
-            data,
+            plots[col_name],
             (grid_x, grid_y),
             method=method,
         )
@@ -145,6 +146,31 @@ class InhomogeneousPoissonProcess(PointProcess):
         interpolated_grid[interpolated_grid < 0] = 0
 
         return interpolated_grid
+
+    def _calculate_and_interpolate_plot_data(
+        self, trees, plots, grid_x, grid_y, plot_type
+    ):
+        """
+        Calculate and interpolate tree density based on plot type (all or occupied).
+        """
+        if plot_type == "all":
+            merge_type = "left"
+            method = "linear"
+            column_to_interpolate = "TPA_UNADJ"
+        elif plot_type == "occupied":
+            merge_type = "right"
+            method = "nearest"
+            column_to_interpolate = "TM_CN"
+        else:
+            raise ValueError("Invalid plot type. Must be 'all' or 'occupied'.")
+
+        plots_with_data_col = self._calculate_per_plot_tree_density(
+            plots, trees, merge_type
+        )
+        interpolated_plot_data = self._interpolate_plot_data_to_grid(
+            plots_with_data_col, column_to_interpolate, grid_x, grid_y, method
+        )
+        return interpolated_plot_data
 
     # @staticmethod
     # def _interpolate_unstructured_plot_data_to_structured_grid(

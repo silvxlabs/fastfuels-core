@@ -4,16 +4,17 @@ Tests for the InhomogeneousPoissonProcess class.
 
 # Core imports
 from pathlib import Path
-from collections import defaultdict
-
-import numpy as np
 
 # Internal imports
-from fastfuels_core.point_process import PointProcess, InhomogeneousPoissonProcess
+from fastfuels_core.point_process import InhomogeneousPoissonProcess
 
 # External imports
+import pytest
+import numpy as np
 import pandas as pd
 import geopandas as gpd
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from shapely.geometry import Point, Polygon
 
 TEST_PATH = Path(__file__).parent
@@ -27,7 +28,6 @@ class TestGenerateTreeLocations:
         trees_df = pd.read_parquet(TEST_DATA_PATH / "trees_test_data.parquet")
         point_process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
         point_process.generate_tree_locations(roi_gdf, trees_df, plots_gdf)
-        print()
 
 
 class TestGetStructuredCoordsGrid:
@@ -74,7 +74,6 @@ class TestCalculateTreeDensityByPlot:
     tree_data = pd.read_parquet(TEST_DATA_PATH / "trees_test_data.parquet")
     plots_data = gpd.read_file(TEST_DATA_PATH / "plots_test_data.geojson")
     plots_data = plots_data.to_crs(plots_data.estimate_utm_crs())
-    plots_data["PlotID"] = plots_data.index
     plot_id_col = "TM_CN"
 
     def test_all_plots(self):
@@ -127,7 +126,7 @@ class TestCalculateTreeDensityByPlot:
 
         # Not all plots are occupied, so the output should be less than the
         # number of plots in the plots data
-        assert len(occupied_plots_with_tree_density) < len(self.plots_data)
+        assert 0 < len(occupied_plots_with_tree_density) < len(self.plots_data)
 
         # Sum the TPA_UNADJ for each tree belonging to a plot
         plot_tpa_sum = {}
@@ -144,7 +143,7 @@ class TestCalculateTreeDensityByPlot:
         # Make sure that plots with 0 density are not in the output, plots with
         # tree density > 0 should be in the output
         for _, plot in self.plots_data.iterrows():
-            plot_id = plot["PlotID"]
+            plot_id = plot[self.plot_id_col]
             if plot_id not in plot_tpa_sum:
                 assert (
                     plot_id
@@ -174,10 +173,8 @@ class TestInterpolatePlotDensityToGrid:
         plots["PlotID"] = [1, 2, 3, 4]
 
         # Use nearest neighbor to interpolate the plotIDs to the grid
-        interpolated_grid = (
-            InhomogeneousPoissonProcess._interpolate_plot_density_to_grid(
-                plots, plots["PlotID"], x_grid, y_grid, method="nearest"
-            )
+        interpolated_grid = InhomogeneousPoissonProcess._interpolate_plot_data_to_grid(
+            plots, "PlotID", x_grid, y_grid, method="nearest"
         )
 
         # Assert that each quadrant has the correct plotID
@@ -187,4 +184,149 @@ class TestInterpolatePlotDensityToGrid:
         assert np.allclose(interpolated_grid[2:, :2], 3)
         assert np.allclose(interpolated_grid[2:, 2:], 4)
 
-class TestInterpolatePlotDensity
+
+class TestCalculateAndInterpolatePlotData:
+    roi = gpd.read_file(TEST_DATA_PATH / "polygon.geojson")
+    roi = roi.to_crs(roi.estimate_utm_crs())
+    tree_data = pd.read_parquet(TEST_DATA_PATH / "trees_test_data.parquet")
+    plots_data = gpd.read_file(TEST_DATA_PATH / "plots_test_data.geojson")
+    plots_data = plots_data.to_crs(plots_data.estimate_utm_crs())
+    plot_id_col = "TM_CN"
+
+    create_visualization = True
+
+    def test_all_plots(self):
+        """
+        This test case calculates the tree density for all plots in the plots
+        and interpolates tree density to a structured grid.
+        """
+        grid_x, grid_y = InhomogeneousPoissonProcess._create_structured_coords_grid(
+            self.roi, 1
+        )
+
+    def test_occupied_plots(self):
+        """
+        This test case calculates the tree density for occupied plots (i.e.
+        those containing trees) in the plots data. The sum of the tree density
+        for each plot in the plots data should equal the sum of the TPA_UNADJ
+        for each tree in the tree data that belongs to that plot.
+
+        This test case only accounts for OCCUPIED PLOTS, i.e. those with a
+        tree density > 0. Plots without trees should not be in the output.
+        """
+        grid_x, grid_y = InhomogeneousPoissonProcess._create_structured_coords_grid(
+            self.roi, 5
+        )
+
+        occupied_plots_grid = (
+            InhomogeneousPoissonProcess._calculate_and_interpolate_plot_data(
+                InhomogeneousPoissonProcess,
+                self.tree_data,
+                self.plots_data,
+                grid_x,
+                grid_y,
+                "occupied",
+            )
+        )
+        # Check that the output is a 2D array with the same shape as the grid
+        assert len(occupied_plots_grid.shape) == 2
+        assert occupied_plots_grid.shape == grid_x.shape
+        assert occupied_plots_grid.shape == grid_y.shape
+
+        # Check that the same number of unique occupied plots are in the output
+        occupied_plots_df = (
+            InhomogeneousPoissonProcess._calculate_per_plot_tree_density(
+                self.plots_data, self.tree_data, merge_type="right"
+            )
+        )
+        occupied_plots_df = occupied_plots_df.to_crs(self.roi.crs)
+        # occupied_plots_df = occupied_plots_df[
+        #     occupied_plots_df.geometry.within(self.roi.geometry)
+        # ]
+        occupied_plots_set = set(occupied_plots_grid.flatten().tolist())
+        # for _, plot in occupied_plots_df.iterrows():
+        #     plot_id = plot[self.plot_id_col]
+        #     assert plot_id in occupied_plots_set
+
+        # Visually inspect the output, if required
+        if self.create_visualization:
+            self.visualize_occupied_plots(
+                grid_x, grid_y, occupied_plots_grid, occupied_plots_df
+            )
+
+    def test_invalid_plot_type(self):
+        grid_x, grid_y = InhomogeneousPoissonProcess._create_structured_coords_grid(
+            self.roi, 1
+        )
+
+        with pytest.raises(ValueError):
+            InhomogeneousPoissonProcess._calculate_and_interpolate_plot_data(
+                InhomogeneousPoissonProcess,
+                self.tree_data,
+                self.plots_data,
+                grid_x,
+                grid_y,
+                "invalid",
+            )
+
+    def visualize_occupied_plots(
+        self, grid_x, grid_y, occupied_plots_grid, occupied_plots_df
+    ):
+        # Create a consistent mapping of plot IDs to randomized indices
+        plot_ids = occupied_plots_df[self.plot_id_col].unique()
+        plot_indices = list(range(len(plot_ids)))
+        plot_id_to_index = {
+            pid: plot_indices[i] for i, pid in enumerate(sorted(plot_ids))
+        }
+        num_colors = len(plot_id_to_index)
+
+        # Create a colormap
+        colors = plt.cm.get_cmap("Set3", num_colors)
+        cmap = mcolors.ListedColormap(colors.colors)
+
+        # Map grid values to indices based on plot_id_to_index
+        grid_color_indices = np.vectorize(plot_id_to_index.get)(occupied_plots_grid)
+        grid_color_indices[np.isnan(grid_color_indices)] = -1  # Handle NaN values
+
+        # Display the grid
+        plt.figure(figsize=(10, 8))
+        plt.imshow(
+            grid_color_indices,
+            cmap=cmap,
+            origin="lower",
+            extent=[grid_x.min(), grid_x.max(), grid_y.min(), grid_y.max()],
+        )
+        plt.colorbar()
+
+        # Overlay plot locations
+        for plot_id, idx in plot_id_to_index.items():
+            plot_color = colors.colors[idx]
+            plot_subset = occupied_plots_df[
+                occupied_plots_df[self.plot_id_col] == plot_id
+            ]
+            x = plot_subset.geometry.centroid.x
+            y = plot_subset.geometry.centroid.y
+            plt.scatter(
+                x, y, color=plot_color, edgecolor="black", label=f"Plot {plot_id}"
+            )
+
+        plt.xlabel("X Coordinate")
+        plt.ylabel("Y Coordinate")
+        plt.title("Occupied Plots Visualization")
+
+        # Create custom legend
+        plt.legend(
+            handles=[
+                plt.Line2D(
+                    [0],
+                    [0],
+                    marker="o",
+                    color="w",
+                    label=f"Plot {pid}",
+                    markerfacecolor=colors.colors[plot_id_to_index[pid]],
+                    markersize=10,
+                )
+                for pid in plot_ids
+            ]
+        )
+        plt.show()
