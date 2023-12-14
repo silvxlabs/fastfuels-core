@@ -69,7 +69,6 @@ class InhomogeneousPoissonProcess(PointProcess):
             plots,
             structured_grid_x,
             structured_grid_y,
-            intensity_resolution,
         )
 
         tree_count_grid = self._generate_tree_counts(tree_density_grid)
@@ -86,6 +85,7 @@ class InhomogeneousPoissonProcess(PointProcess):
 
     @staticmethod
     def _set_seed(seed):
+        """Sets the seed for the random number generator."""
         seed = np.random.randint(0, 1000000) if seed is None else seed
         np.random.seed(seed)
         return seed
@@ -93,19 +93,23 @@ class InhomogeneousPoissonProcess(PointProcess):
     @staticmethod
     def _create_structured_coords_grid(roi, resolution):
         """
-        Creates a structured grid of cell-center plot coordinates from a list
-        of plots.
+        Creates a structured grid of cell-centered coordinates for the ROI.
+        The resolution parameter specifies the size of each cell in the grid.
         """
         west, south, east, north = roi.total_bounds
         x = np.arange(west + resolution / 2, east, resolution)
-        # TODO: Flip y axis so that it is oriented correctly
-        y = np.arange(south + resolution / 2, north, resolution)
+        y = np.arange(north - resolution / 2, south, -resolution)
         xx, yy = np.meshgrid(x, y)
         return xx, yy
 
     def _interpolate_tree_density_to_grid(
         self, trees, plots, grid_x, grid_y, cell_resolution
     ):
+        """
+        Interpolates tree density to a structured grid of cells. Tree density
+        is calculated for each plot and then interpolated to the grid using
+        the specified interpolation method, typically "linear" or "cubic".
+        """
         plots_with_data_col = self._calculate_all_plots_tree_density(plots, trees)
         data_to_interpolate = plots_with_data_col["TPA_UNADJ"] * cell_resolution**2
         interpolated_plot_data = self._interpolate_data_to_grid(
@@ -113,9 +117,13 @@ class InhomogeneousPoissonProcess(PointProcess):
         )
         return interpolated_plot_data
 
-    def _interpolate_plot_id_to_grid(
-        self, trees, plots, grid_x, grid_y, cell_resolution
-    ):
+    def _interpolate_plot_id_to_grid(self, trees, plots, grid_x, grid_y):
+        """
+        Interpolates the plot IDs of plots containing trees to a structured
+        grid of cells. The plot ID is a categorical value that is used to
+        assign trees to plots. This function effectively creates a
+        discretized Veroni diagram of the plots containing trees.
+        """
         plots_with_data_col = self._calculate_occupied_plots_tree_density(plots, trees)
         data_to_interpolate = plots_with_data_col["TM_CN"]
         interpolated_plot_data = self._interpolate_data_to_grid(
@@ -124,16 +132,31 @@ class InhomogeneousPoissonProcess(PointProcess):
         return interpolated_plot_data
 
     def _calculate_all_plots_tree_density(self, plots, trees):
+        """
+        Calculates the tree density, stored in the TPA_UNADJ column, for all
+        plots in the ROI. Returns a DataFrame of all plots with a TPA_UNADJ
+        column containing the tree density for each plot.
+        """
         return self._calculate_per_plot_tree_density(plots, trees, "left")
 
     def _calculate_occupied_plots_tree_density(self, plots, trees):
+        """
+        Calculates the tree density, stored in the TPA_UNADJ column, for plots
+        containing trees in the ROI. Returns a DataFrame of plots containing
+        trees with a TPA_UNADJ column containing the tree density for each
+        plot.
+        """
         return self._calculate_per_plot_tree_density(plots, trees, "right")
 
     @staticmethod
     def _calculate_per_plot_tree_density(plots, trees, merge_type):
         """
-        Calculate the tree density for plots based on merge type (all or occupied). Returns a
-        DataFrame of plots with a TPA_UNADJ column containing the tree density for each plot.
+        Calculate the tree density for a specific grouping of plots based on
+        the merge type. if the merge type is "left", the tree density is
+        calculated for all plots in the ROI. If the merge type is "right", the
+        tree density is calculated only for plots containing trees in the ROI.
+        Returns a DataFrame of plots with a TPA_UNADJ column containing the
+        tree density for each plot.
         """
         sum_by_plot = trees.groupby("TM_CN")["TPA_UNADJ"].sum().reset_index()
         merged_plots = plots.merge(sum_by_plot, on="TM_CN", how=merge_type)

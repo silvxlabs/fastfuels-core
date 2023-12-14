@@ -52,9 +52,9 @@ class TestGetStructuredCoordsGrid:
         assert x.shape == (10, 10)
         assert y.shape == (10, 10)
         assert x[0, 0] == 5
-        assert y[0, 0] == 5
+        assert y[0, 0] == 95
         assert x[9, 9] == 95
-        assert y[9, 9] == 95
+        assert y[9, 9] == 5
 
     def test_play_data_1m_resolution(self):
         polygon = Polygon(
@@ -71,9 +71,9 @@ class TestGetStructuredCoordsGrid:
         assert x.shape == (100, 100)
         assert y.shape == (100, 100)
         assert x[0, 0] == 0.5
-        assert y[0, 0] == 0.5
+        assert y[0, 0] == 99.5
         assert x[99, 99] == 99.5
-        assert y[99, 99] == 99.5
+        assert y[99, 99] == 0.5
 
 
 class TestCalculateTreeDensityByPlot:
@@ -288,7 +288,7 @@ class TestInterpolateTreeDensityToGrid:
     plots_data = plots_data.to_crs(plots_data.estimate_utm_crs())
     plot_id_col = "TM_CN"
 
-    grid_resolution = 5
+    grid_resolution = 15
     grid_cell_area = grid_resolution**2
 
     create_visualization = False
@@ -350,7 +350,6 @@ class TestInterpolateTreeDensityToGrid:
         fig, ax = plt.subplots(figsize=(10, 8))
         ax.imshow(
             all_plots_grid,
-            origin="lower",
             extent=[grid_x.min(), grid_x.max(), grid_y.min(), grid_y.max()],
         )
         plt.xlabel("X Coordinate")
@@ -371,7 +370,7 @@ class TestInterpolatePlotIdToGrid:
     plots_data = plots_data.to_crs(plots_data.estimate_utm_crs())
     plot_id_col = "TM_CN"
 
-    grid_resolution = 5
+    grid_resolution = 15
     grid_cell_area = grid_resolution**2
 
     create_visualization = False
@@ -398,7 +397,6 @@ class TestInterpolatePlotIdToGrid:
             self.plots_data,
             grid_x,
             grid_y,
-            self.grid_resolution,
         )
 
         # Check that the output is a 2D array with the same shape as the grid
@@ -450,7 +448,6 @@ class TestInterpolatePlotIdToGrid:
         plt.imshow(
             grid_color_indices,
             cmap=cmap,
-            origin="lower",
             extent=[grid_x.min(), grid_x.max(), grid_y.min(), grid_y.max()],
         )
         plt.colorbar()
@@ -491,3 +488,23 @@ class TestInterpolatePlotIdToGrid:
             plt.savefig(TEST_FIGS_PATH / "plot_id_grid.png")
         if self.show_visualization:
             plt.show()
+
+
+class TestGenerateTreeCounts:
+    def test_null_case(self):
+        density_grid = np.zeros((10, 10))
+        tree_counts = InhomogeneousPoissonProcess._generate_tree_counts(density_grid)
+        assert np.allclose(tree_counts, 0)
+
+    def test_play_data(self):
+        density_grid = np.array([0, 1, 2, 3])
+        tree_counts = InhomogeneousPoissonProcess._generate_tree_counts(density_grid)
+        assert tree_counts[0] == 0
+        assert tree_counts[:-1].sum() > 0
+
+    def test_seed(self):
+        seed = 42
+        np.random.seed(seed)
+        density_grid = np.array([100, 100, 100, 100])
+        tree_counts = InhomogeneousPoissonProcess._generate_tree_counts(density_grid)
+        assert np.allclose(tree_counts, np.array([96, 107, 88, 103]))
