@@ -7,6 +7,7 @@ from __future__ import annotations
 
 # External imports
 import numpy as np
+import pandas as pd
 import geopandas as gpd
 from pandas import DataFrame
 from geopandas import GeoDataFrame
@@ -46,75 +47,48 @@ class InhomogeneousPoissonProcess(PointProcess):
         trees: DataFrame,
         plots: GeoDataFrame,
         intensity_resolution: int = 15,
+        seed: int = None,
     ) -> GeneratedTreeLocations:
         """
         Generates random tree locations based on an inhomogeneous Poisson
         point process.
         """
-        (
-            structured_grid_x,
-            structured_grid_y,
-        ) = self._create_structured_coords_grid(roi, intensity_resolution)
+        seed = self._set_seed(seed)
+        grids = self._create_structured_coords_grid(roi, intensity_resolution)
+        structured_grid_x, structured_grid_y = grids
 
-        all_plots_density_grid = self._calculate_and_interpolate_plot_data(
+        tree_density_grid = self._interpolate_tree_density_to_grid(
             trees,
             plots,
             structured_grid_x,
             structured_grid_y,
             intensity_resolution,
-            plot_type="all",
         )
-        occupied_plots_id_grid = self._calculate_and_interpolate_plot_data(
+        plot_id_grid = self._interpolate_plot_id_to_grid(
             trees,
             plots,
             structured_grid_x,
             structured_grid_y,
             intensity_resolution,
-            plot_type="occupied",
         )
 
-        # # Get the tree density for ALL plots and occupied plots in the grid
-        # density = self._sum_by_plot(
-        #     trees.assign(EXP_tpm=exp_tpm), "PlotID", "TPA_UNADJ"
-        # )
-        # all_plots = self._get_tree_density_all_plots(plots, density)
-        # occupied_plots = self._get_tree_density_occupied_plots(all_plots, density)
-        #
-        # # Create a structured grid of plot coordinates
-        # (
-        #     structured_grid_x,
-        #     structured_grid_y,
-        # ) = self._create_structured_coords_grid_from_roi(roi, intensity_resolution)
-        #
-        # # Interpolate the tree density for all plots in the grid
-        # grid_cell_area = intensity_resolution * intensity_resolution
-        # density_grid = self._interpolate_unstructured_plot_data_to_structured_grid(
-        #     all_plots,
-        #     all_plots["EXP_tpm"] * grid_cell_area,
-        #     structured_grid_x,
-        #     structured_grid_y,
-        #     method="linear",
-        # )
-        # plot_id_grid = self._interpolate_unstructured_plot_data_to_structured_grid(
-        #     occupied_plots,
-        #     occupied_plots["PlotID"],
-        #     structured_grid_x,
-        #     structured_grid_y,
-        # )
-        #
-        # # Sample the density grid with a Poisson distribution to get the number of trees per plot
-        # tree_count_grid = np.random.poisson(density_grid)
-        #
-        # # Generate tree locations for each plot in the tree count grid
-        # tree_locations = self._generate_tree_locations_in_grid(
-        #     tree_count_grid,
-        #     plot_id_grid,
-        #     intensity_resolution,
-        #     structured_grid_x,
-        #     structured_grid_y,
-        # )
+        tree_count_grid = self._generate_tree_counts(tree_density_grid)
 
-        # return GeneratedTreeLocations(trees, tree_locations)
+        tree_locations = self._generate_tree_locations_in_grid(
+            tree_count_grid,
+            plot_id_grid,
+            intensity_resolution,
+            structured_grid_x,
+            structured_grid_y,
+        )
+
+        return GeneratedTreeLocations(trees, tree_locations)
+
+    @staticmethod
+    def _set_seed(seed):
+        seed = np.random.randint(0, 1000000) if seed is None else seed
+        np.random.seed(seed)
+        return seed
 
     @staticmethod
     def _create_structured_coords_grid(roi, resolution):
@@ -129,6 +103,32 @@ class InhomogeneousPoissonProcess(PointProcess):
         xx, yy = np.meshgrid(x, y)
         return xx, yy
 
+    def _interpolate_tree_density_to_grid(
+        self, trees, plots, grid_x, grid_y, cell_resolution
+    ):
+        plots_with_data_col = self._calculate_all_plots_tree_density(plots, trees)
+        data_to_interpolate = plots_with_data_col["TPA_UNADJ"] * cell_resolution**2
+        interpolated_plot_data = self._interpolate_data_to_grid(
+            plots_with_data_col, data_to_interpolate, grid_x, grid_y, "cubic"
+        )
+        return interpolated_plot_data
+
+    def _interpolate_plot_id_to_grid(
+        self, trees, plots, grid_x, grid_y, cell_resolution
+    ):
+        plots_with_data_col = self._calculate_occupied_plots_tree_density(plots, trees)
+        data_to_interpolate = plots_with_data_col["TM_CN"]
+        interpolated_plot_data = self._interpolate_data_to_grid(
+            plots_with_data_col, data_to_interpolate, grid_x, grid_y, "nearest"
+        )
+        return interpolated_plot_data
+
+    def _calculate_all_plots_tree_density(self, plots, trees):
+        return self._calculate_per_plot_tree_density(plots, trees, "left")
+
+    def _calculate_occupied_plots_tree_density(self, plots, trees):
+        return self._calculate_per_plot_tree_density(plots, trees, "right")
+
     @staticmethod
     def _calculate_per_plot_tree_density(plots, trees, merge_type):
         """
@@ -140,7 +140,7 @@ class InhomogeneousPoissonProcess(PointProcess):
         return merged_plots.fillna(0)
 
     @staticmethod
-    def _interpolate_plot_data_to_grid(plots, data, grid_x, grid_y, method):
+    def _interpolate_data_to_grid(plots, data, grid_x, grid_y, method):
         """
         Interpolate unstructured plot data to a structured grid.
         """
@@ -155,87 +155,45 @@ class InhomogeneousPoissonProcess(PointProcess):
 
         return interpolated_grid
 
-    def _calculate_and_interpolate_plot_data(
-        self, trees, plots, grid_x, grid_y, cell_resolution, plot_type
+    @staticmethod
+    def _generate_tree_counts(density_grid):
+        return np.random.poisson(density_grid)
+
+    @staticmethod
+    def _generate_tree_locations_in_grid(
+        count_grid, plot_grid, grid_resolution, grid_x, grid_y
     ):
         """
-        Calculate and interpolate tree density based on plot type (all or occupied).
+        Generates tree locations in a grid of plots.
         """
-        if plot_type not in ("all", "occupied"):
-            raise ValueError(
-                f"Invalid plot type '{plot_type}'. Plot type must be either 'all' or 'occupied'."
-            )
+        # Calculate indices for each tree
+        tree_indices = np.repeat(np.arange(count_grid.size), count_grid.ravel())
 
-        # Calculate tree density for each plot (all or occupied)
-        merge_type = "left" if plot_type == "all" else "right"
-        plots_with_data_col = self._calculate_per_plot_tree_density(
-            plots, trees, merge_type
+        # Calculate the cell indices for each tree
+        cell_i, cell_j = np.unravel_index(tree_indices, count_grid.shape)
+
+        # Get the plot ID for each tree
+        plot_id_total = plot_grid.ravel()[tree_indices]
+
+        # Generate random offsets within the cell for each tree
+        num_tree_indices = len(tree_indices)
+        random_offsets_x = np.random.uniform(
+            -grid_resolution / 2, grid_resolution / 2, num_tree_indices
+        )
+        random_offsets_y = np.random.uniform(
+            -grid_resolution / 2, grid_resolution / 2, num_tree_indices
         )
 
-        # Interpolate data for each plot to a structured grid. If all plots,
-        # linearly interpolate TPA_UNADJ. If occupied plots, interpolate TM_CN
-        # using nearest neighbors.
-        method = "cubic" if plot_type == "all" else "nearest"
-        data_to_interpolate = (
-            plots_with_data_col["TPA_UNADJ"] * cell_resolution**2
-            if plot_type == "all"
-            else plots_with_data_col["TM_CN"]
-        )
-        interpolated_plot_data = self._interpolate_plot_data_to_grid(
-            plots_with_data_col, data_to_interpolate, grid_x, grid_y, method
-        )
-        return interpolated_plot_data
+        # Calculate the actual coordinates of each tree
+        x_coords = grid_x[cell_i, cell_j] + random_offsets_x
+        y_coords = grid_y[cell_i, cell_j] + random_offsets_y
 
-    # @staticmethod
-    # def _interpolate_unstructured_plot_data_to_structured_grid(
-    #     plots, data, grid_x, grid_y, method="nearest"
-    # ):
-    #     """
-    #     Interpolated unstructured plot data to a structured grid.
-    #     """
-    #     grid = griddata(
-    #         (plots.geometry.x, plots.geometry.y), data, (grid_x, grid_y), method=method
-    #     )
-    #     if method != "nearest":
-    #         grid[grid < 0] = 0
-    #         grid = np.nan_to_num(grid)
-    #     return grid
-    #
-    # @staticmethod
-    # def _generate_tree_locations_in_grid(
-    #     count_grid, plot_grid, grid_resolution, grid_x, grid_y
-    # ):
-    #     """
-    #     Generates tree locations in a grid of plots.
-    #     """
-    #     # Calculate indices for each tree
-    #     tree_indices = np.repeat(np.arange(count_grid.size), count_grid.ravel())
-    #
-    #     # Calculate the cell indices for each tree
-    #     cell_i, cell_j = np.unravel_index(tree_indices, count_grid.shape)
-    #
-    #     # Get the plot ID for each tree
-    #     plot_id_total = plot_grid.ravel()[tree_indices]
-    #
-    #     # Generate random offsets within the cell for each tree
-    #     num_tree_indices = len(tree_indices)
-    #     random_offsets_x = np.random.uniform(
-    #         -grid_resolution / 2, grid_resolution / 2, num_tree_indices
-    #     )
-    #     random_offsets_y = np.random.uniform(
-    #         -grid_resolution / 2, grid_resolution / 2, num_tree_indices
-    #     )
-    #
-    #     # Calculate the actual coordinates of each tree
-    #     x_coords = grid_x[cell_i, cell_j] + random_offsets_x
-    #     y_coords = grid_y[cell_i, cell_j] + random_offsets_y
-    #
-    #     # Create DataFrame
-    #     tree_locations = pd.DataFrame(
-    #         {"x": x_coords, "y": y_coords, "PlotID": plot_id_total}
-    #     )
-    #
-    #     return tree_locations
+        # Create DataFrame
+        tree_locations = pd.DataFrame(
+            {"x": x_coords, "y": y_coords, "PlotID": plot_id_total}
+        )
+
+        return tree_locations
 
 
 class GeneratedTreeLocations:
