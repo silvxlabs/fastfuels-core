@@ -4,103 +4,76 @@ from fastfuels_core.base import ObjectIterableGeoDataFrame
 
 
 # External Imports
-import pandera as pa
-from pandera import Check
+from pandera import DataFrameSchema, Column, Check, Index
 
 
 class TreeCollection(ObjectIterableGeoDataFrame):
-    schema = pa.DataFrameSchema(
+    schema = DataFrameSchema(
         columns={
-            "TreeMapID": pa.Column(int, required=False),
-            "PlotID": pa.Column(int, required=False),
-            "TreeID": pa.Column(int, required=False),
-            "SPCD": pa.Column(int),
-            "STATUSCD": pa.Column(
+            "TREE_ID": Column(int, required=True),
+            "PLOT_ID": Column(int, required=False),
+            "SPCD": Column(
+                int, title="Species Code", description="An FIA integer species code"
+            ),
+            "STATUSCD": Column(
                 int,
                 checks=Check.isin([1, 2, 3]),
+                title="Status Code",
+                description="1 = Live, 2 = Dead, 3 = Missing",
             ),
-            "DIA": pa.Column(
+            "DIA": Column(
                 float,
                 checks=[
                     Check.gt(0),
                     Check.lt(1200),
                 ],
                 nullable=True,
+                title="Diameter at breast height (cm)",
+                description="Diameter of the tree measured at breast height (1.37 m)",
             ),
-            "HT": pa.Column(
+            "HT": Column(
                 float,
                 checks=[
                     Check.gt(0),
                     Check.le(116),
                 ],
                 nullable=True,
+                title="Height (m)",
+                description="Height of the tree measured from the ground",
             ),
-            "CR": pa.Column(
+            "CR": Column(
                 float,
                 checks=Check.in_range(min_value=0, max_value=1),
                 nullable=True,
+                title="Crown Ratio",
+                description="Ratio of the crown length to the total tree height",
             ),
-            "TPA_UNADJ": pa.Column(float, nullable=True),
-            "X": pa.Column(float, nullable=True),
-            "Y": pa.Column(float, nullable=True),
+            "TPA": Column(
+                dtype=float,
+                nullable=True,
+                title="Trees per Area (1/m^2)",
+                description="The number of trees per unit area that the sample "
+                "tree represents based on the plot design",
+            ),
+            "X": Column(
+                float,
+                nullable=True,
+                required=False,
+                title="X Coordinate (m)",
+                description="X coordinate of the tree in a projected coordinate system",
+            ),
+            "Y": Column(
+                float,
+                nullable=True,
+                required=False,
+                title="Y Coordinate (m)",
+                description="Y coordinate of the tree in a projected coordinate system",
+            ),
         },
         coerce=True,
         add_missing_columns=True,
-        index=pa.Index(int, unique=True),
+        index=Index(int, unique=True),
     )
-
-    @classmethod
-    def from_fia_data(cls, data):
-        """
-        Create a TreeCollection from FIA data. This function takes in a
-        dataframe with FIA tree data in imperial units, converts it to metric
-        units, and creates a TreeCollection object.
-
-        Columns that are converted from imperial to metric units:
-            - CR: percentage to fraction
-            - HT: feet to meters
-            - DIA: inches to centimeters
-            - TPA_UNADJ: trees per acre to trees per m^2
-
-        Columns that are renamed:
-            - PLT_CN to PlotID
-            - CN to TreeID
-
-        Parameters
-        ----------
-        data : DataFrame
-            A dataframe containing FIA data in imperial units.
-
-        Returns
-        -------
-        TreeCollection
-            A TreeCollection object containing the FIA data in metric units.
-
-        Raises
-        ------
-        SchemaError
-            If the dataframe does not match the required schema for a
-            TreeCollection.
-        """
-        # Create a copy of the data
-        metric_data = data.copy()
-
-        # Convert CR from percentage to fraction
-        metric_data["CR"] = metric_data["CR"] / 100
-
-        # Convert HT from feet to meters
-        metric_data["HT"] = metric_data["HT"] * 0.3048
-
-        # Convert DIA from inches to centimeters
-        metric_data["DIA"] = metric_data["DIA"] * 2.54
-
-        # Convert TPA_UNADJ from trees per acre to trees per m^2
-        metric_data["TPA_UNADJ"] = metric_data["TPA_UNADJ"] / 4046.85642
-
-        # Rename PLT_CN to PlotID, CN to TreeID
-        metric_data = metric_data.rename(columns={"PLT_CN": "PlotID", "CN": "TreeID"})
-
-        return cls(metric_data)
 
     def expand_to_roi(self, process, roi, **kwargs):
         """
@@ -135,28 +108,6 @@ class TreeCollection(ObjectIterableGeoDataFrame):
 
         Example
         -------
-        >>> import fastfuels_core as ff_core
-        >>> import geopandas as gpd
-        >>>
-        >>> # Create a TreeMap connector object
-        >>> treemap = ff_core.TreeMap(
-        ...     raster_path="<raster_path>",
-        ...     tree_table_path="<tree_table_path>",
-        ...     cn_lookup_path="<cn_lookup_path>"
-        ... )
-        >>>
-        >>> # Load a region of interest geojson
-        >>> my_roi = gpd.read_file("<roi_geojson_path>")
-        >>> my_roi = my_roi.to_crs(roi.estimate_utm_crs())
-        >>>
-        >>> # Extract treemap plots from the region of interest
-        >>> plots = ff_core.Plots.from_treemap(treemap, my_roi)
-        >>> trees = ff_core.Trees.from_treemap(treemap, plots)
-        >>>
-        >>> # Use the expand_to_roi method to expand the trees to the ROI
-        >>> expanded_trees = trees.expand_to_roi("inhomogeneous_poisson",
-        >>>                                      my_roi,
-        >>>                                      plots=plots,
-        >>>                                      intensity_resolution=15)
+        # TODO: Add example
         """
         return TreeCollection(run_point_process(process, roi, self, **kwargs))
