@@ -10,7 +10,6 @@ from time import time
 from fastfuels_core.point_process import InhomogeneousPoissonProcess
 
 # External imports
-import pytest
 import numpy as np
 import pandas as pd
 import geopandas as gpd
@@ -37,14 +36,13 @@ class TestGenerateTreeLocations:
 
         point_process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
         start = time()
-        trees = point_process.generate_tree_locations(roi_gdf, trees_df, plots_gdf)
+        trees = point_process.simulate(roi_gdf, trees_df, plots_gdf)
         print(f"Time to generate tree locations: {time() - start} seconds")
 
-        fig, ax = plt.subplots(figsize=(10, 8))
-        trees.plot(ax=ax, color="black", markersize=1)
-        roi_gdf.plot(ax=ax, color="none", edgecolor="red")
-        plots_gdf.plot(ax=ax, color="none", edgecolor="blue")
-        plt.show()
+        # fig, ax = plt.subplots(figsize=(10, 8))
+        # trees.plot(ax=ax, color="black", markersize=1)
+        # roi_gdf.plot(ax=ax, color="none", edgecolor="red")
+        # plt.show()
 
 
 class TestGetStructuredCoordsGrid:
@@ -308,7 +306,6 @@ class TestInterpolateTreeDensityToGrid:
     )
     plots_data = gpd.read_file(TEST_DATA_PATH / "treemap_2016_plots_data.geojson")
     plots_data = plots_data.to_crs(plots_data.estimate_utm_crs())
-    plot_id_col = "PLOT_ID"
 
     grid_resolution = 15
     grid_cell_area = grid_resolution**2
@@ -579,7 +576,8 @@ class TestGenerateTreeCounts:
 
 class TestCalculateTreeIndices:
     """
-    Tests for the _get_flattened_tree_indices method of the InhomogeneousPoissonProcess class.
+    Tests for the _get_flattened_tree_indices method of the
+    InhomogeneousPoissonProcess class.
     """
 
     process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
@@ -652,10 +650,7 @@ class TestGetCellIndices:
         tree_indices = np.array([0, 1, 1, 1, 2, 2, 3, 3, 3, 3])
 
         # Expected result
-        expected_result = (
-            np.array([0, 0, 0, 0, 1, 1, 1, 1, 1, 1]),
-            np.array([0, 1, 1, 1, 0, 0, 1, 1, 1, 1]),
-        )
+        expected_result = self._get_expected_result(count_grid)
 
         # Call the method
         result = self.process._get_grid_cell_indices(tree_indices, count_grid)
@@ -671,10 +666,7 @@ class TestGetCellIndices:
         tree_indices = np.array([0, 0, 1, 1, 2, 2, 3, 3])
 
         # Expected result
-        expected_result = (
-            np.array([0, 0, 0, 0, 1, 1, 1, 1]),
-            np.array([0, 0, 1, 1, 0, 0, 1, 1]),
-        )
+        expected_result = self._get_expected_result(count_grid)
 
         # Call the method
         result = self.process._get_grid_cell_indices(tree_indices, count_grid)
@@ -683,3 +675,131 @@ class TestGetCellIndices:
         assert np.array_equal(
             result, expected_result
         ), "The _get_cell_indices method does not return the expected result."
+
+    @staticmethod
+    def _get_expected_result(count_grid):
+        """
+        This function manually creates the expected result for a given
+        count grid and tree indices without the fancy numpy tricks. This is
+        used to test the logic of the _get_cell_indices method.
+        """
+        x_indices = []
+        y_indices = []
+        for i in range(count_grid.shape[0]):
+            for j in range(count_grid.shape[1]):
+                for _ in range(count_grid[i, j]):
+                    x_indices.append(i)
+                    y_indices.append(j)
+        return np.array(x_indices), np.array(y_indices)
+
+
+class TestCalculateTreeCoordinates:
+    process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+    process._set_seed(42)
+
+    def test_basic_case(self):
+        # Build mock data.
+        # 1x2 grid of plots
+        # 1 tree in plot 0, 2 trees in plot 1
+        cell_i = np.array([0, 0, 0])
+        cell_j = np.array([0, 1, 1])
+        grid_resolution = 1
+        x = np.array([0.5, 1.5])
+        y = np.array([0.5, 0.5])
+        grid_x, grid_y = np.meshgrid(x, y)
+
+        # Call the method
+        result = self.process._calculate_tree_coordinates(
+            cell_i, cell_j, grid_resolution, grid_x, grid_y
+        )
+
+        # Make sure that the results make sense
+        x_tree_coords = result[0]
+        y_tree_coords = result[1]
+        assert x_tree_coords.shape == y_tree_coords.shape
+        assert x_tree_coords.shape == cell_i.shape
+        assert y_tree_coords.shape == cell_j.shape
+
+        # First tree should be in the range of the first plot
+        assert 0 <= x_tree_coords[0] <= 1
+        assert 0 <= y_tree_coords[0] <= 1
+
+        # Second tree should be in the range of the second plot
+        assert 1 <= x_tree_coords[1] <= 2
+        assert 0 <= y_tree_coords[1] <= 1
+
+        # Third tree should be in the range of the second plot
+        assert 1 <= x_tree_coords[2] <= 2
+        assert 0 <= y_tree_coords[2] <= 1
+
+
+class TestCountTreesPerPlot:
+    process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+    plot_id_list = [1, 1, 2, 2, 2, 3]
+    num_trees = len(plot_id_list)
+    trees = pd.DataFrame({"PLOT_ID": plot_id_list})
+    tree_locations = pd.DataFrame(
+        {
+            "X": np.random.rand(num_trees),
+            "Y": np.random.rand(num_trees),
+            "PLOT_ID": plot_id_list,
+        }
+    )
+
+    def test_count_trees_per_plot(self):
+        num_trees_per_plot = self.process._count_trees_per_plot(
+            self.trees, self.tree_locations
+        )
+        assert num_trees_per_plot[1] == 2
+        assert num_trees_per_plot[2] == 3
+        assert num_trees_per_plot[3] == 1
+
+    def test_count_trees_per_plot_empty_trees(self):
+        empty_trees = pd.DataFrame(columns=["PLOT_ID"])
+        num_trees_per_plot = self.process._count_trees_per_plot(self.trees, empty_trees)
+        assert num_trees_per_plot[1] == 0
+        assert num_trees_per_plot[2] == 0
+        assert num_trees_per_plot[3] == 0
+
+
+class TestSampleTreesWithinPlots:
+    process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+    trees = pd.DataFrame(
+        {
+            "PLOT_ID": [1, 1, 2, 2, 2, 3],
+            "TREE_ID": [1, 2, 3, 4, 5, 6],
+            "TPA": [1, 2, 3, 4, 5, 6],
+        }
+    )
+    num_trees_per_plot = pd.Series([2, 3, 1], index=[1, 2, 3])
+
+    def test_sample_trees_within_plots(self):
+        sampled_trees = self.process._sample_trees_within_plots(
+            self.trees, self.num_trees_per_plot
+        )
+        assert len(sampled_trees) == self.num_trees_per_plot.sum()
+
+        # Make sure that each sampled tree belongs to the correct plot
+        for _, tree in sampled_trees.iterrows():
+            sampled_plot_id = tree["PLOT_ID"]
+            sampled_tree_id = tree["TREE_ID"]
+            original_tree = self.trees[self.trees["TREE_ID"] == sampled_tree_id]
+            original_plot_id = original_tree["PLOT_ID"].values[0]
+            assert sampled_plot_id == original_plot_id
+
+    def test_sample_trees_within_plots_empty(self):
+        empty_trees = pd.DataFrame(columns=["PLOT_ID", "TPA"])
+        sampled_trees = self.process._sample_trees_within_plots(
+            empty_trees, self.num_trees_per_plot
+        )
+        assert len(sampled_trees) == 0
+
+
+class TestAssignTreeLocations:
+    process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+    sampled_trees = pd.DataFrame(
+        {"PLOT_ID": [1, 1, 2, 2, 2, 3], "TPA": [1, 2, 3, 4, 5, 6]}
+    )
+    tree_locations = pd.DataFrame(
+        {"X": np.random.rand(6), "Y": np.random.rand(6), "PLOT_ID": [1, 1, 2, 2, 2, 3]}
+    )

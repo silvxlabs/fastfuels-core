@@ -29,11 +29,9 @@ class PointProcess:
                 f"implemented."
             )
 
-    def run(self, roi, trees, **kwargs):
+    def run(self, roi: GeoDataFrame, trees: DataFrame, **kwargs) -> GeoDataFrame:
         try:
-            return self.process.generate_tree_locations(
-                self.process, roi, trees, **kwargs
-            )
+            return self.process.simulate(self.process, roi, trees, **kwargs)
         except AttributeError:
             raise NotImplementedError(
                 f"Point process type {self.process_type} does not have a "
@@ -42,7 +40,7 @@ class PointProcess:
 
 
 class InhomogeneousPoissonProcess(PointProcess):
-    def generate_tree_locations(
+    def simulate(
         self,
         roi: GeoDataFrame,
         trees: DataFrame,
@@ -55,38 +53,27 @@ class InhomogeneousPoissonProcess(PointProcess):
         point process.
         """
         self._set_seed(seed)
-        grids = self._create_structured_coords_grid(roi, intensity_resolution)
-        structured_grid_x, structured_grid_y = grids
+        grid_x, grid_y = self._create_structured_coords_grid(roi, intensity_resolution)
         tree_density_grid = self._interpolate_tree_density_to_grid(
-            trees,
-            plots,
-            structured_grid_x,
-            structured_grid_y,
-            intensity_resolution,
+            trees, plots, grid_x, grid_y, intensity_resolution
         )
-        plot_id_grid = self._interpolate_plot_id_to_grid(
-            trees,
-            plots,
-            structured_grid_x,
-            structured_grid_y,
-        )
+        plot_id_grid = self._interpolate_plot_id_to_grid(trees, plots, grid_x, grid_y)
         tree_count_grid = self._generate_tree_counts(tree_density_grid)
         tree_locations = self._generate_tree_locations_in_grid(
             tree_count_grid,
             plot_id_grid,
             intensity_resolution,
-            structured_grid_x,
-            structured_grid_y,
+            grid_x,
+            grid_y,
         )
         sampled_trees = self._sample_trees_by_location(trees, tree_locations)
         return self._convert_to_geodataframe(sampled_trees, roi.crs)
 
     @staticmethod
-    def _set_seed(seed) -> int:
+    def _set_seed(seed):
         """Sets the seed for the random number generator."""
         seed = np.random.randint(0, 1000000) if seed is None else seed
         np.random.seed(seed)
-        return seed
 
     @staticmethod
     def _create_structured_coords_grid(roi, resolution) -> tuple[ndarray, ndarray]:
@@ -228,7 +215,8 @@ class InhomogeneousPoissonProcess(PointProcess):
     @staticmethod
     def _get_grid_cell_indices(tree_indices, count_grid) -> tuple[ndarray, ndarray]:
         """
-        Converts the flattened tree indices into 2D cell indices.
+        Converts the flattened tree indices into 2D cell indices. Returns two
+        1D arrays containing the row and column indices of each tree.
 
         This method takes a 1D array of tree indices and the 2D count grid as
         input. It uses the `numpy.unravel_index` function to convert the
@@ -241,12 +229,22 @@ class InhomogeneousPoissonProcess(PointProcess):
         self, cell_i, cell_j, grid_resolution, grid_x, grid_y
     ) -> tuple[ndarray, ndarray]:
         """
-        Calculates the coordinates of trees within each plot. Returns two 1D
-        arrays containing the x and y coordinates of each tree.
+        Calculates the x and y coordinates of trees within each plot in the
+        grid. Returns two 1D arrays containing the x and y coordinates of each
+        tree.
+
+        This function takes the row and column indices of each tree's
+        location in the grid, the resolution of the grid, and the x and y
+        coordinates of the grid as inputs. It generates random offsets for
+        each tree within its respective plot, ensuring that the tree's
+        location is within the plot's boundaries. The offsets are generated
+        uniformly at random within the range of [-grid_resolution / 2,
+        grid_resolution / 2]. These offsets are then added to the x and y
+        coordinates of the plot's center to get the final coordinates of each
+        tree.
         """
-        num_tree_indices = len(cell_i)
         random_offsets_x, random_offsets_y = self._generate_random_offsets(
-            num_tree_indices, grid_resolution
+            len(cell_i), grid_resolution
         )
         x_coords = grid_x[cell_i, cell_j] + random_offsets_x
         y_coords = grid_y[cell_i, cell_j] + random_offsets_y
@@ -255,7 +253,9 @@ class InhomogeneousPoissonProcess(PointProcess):
     @staticmethod
     def _generate_random_offsets(num_indices, grid_resolution):
         """
-        Places a tree at a uniform random x, y location within each plot.
+        Generates a random offset for each tree centered at 0. The offsets are
+        generated uniformly at random within the range of
+        [-grid_resolution / 2, grid_resolution / 2].
         """
         return (
             np.random.uniform(-grid_resolution / 2, grid_resolution / 2, num_indices),
@@ -275,7 +275,6 @@ class InhomogeneousPoissonProcess(PointProcess):
         trees. Finally, it converts the sampled trees to a GeoDataFrame with
         spatial coordinates and returns it.
         """
-
         num_trees_per_plot = self._count_trees_per_plot(trees, tree_locations)
         sampled_trees = self._sample_trees_within_plots(trees, num_trees_per_plot)
         sampled_trees = self._assign_tree_locations(sampled_trees, tree_locations)
