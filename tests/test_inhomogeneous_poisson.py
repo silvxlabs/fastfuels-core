@@ -4,6 +4,7 @@ Tests for the InhomogeneousPoissonProcess class.
 
 # Core imports
 from pathlib import Path
+from time import time
 
 # Internal imports
 from fastfuels_core.point_process import InhomogeneousPoissonProcess
@@ -26,14 +27,24 @@ TEST_FIGS_PATH.mkdir(exist_ok=True)
 class TestGenerateTreeLocations:
     def test_basic_case(self):
         roi_gdf = gpd.read_file(TEST_DATA_PATH / "polygon.geojson")
-        plots_gdf = gpd.read_file(TEST_DATA_PATH / "plots_test_data.geojson")
-        trees_df = pd.read_parquet(TEST_DATA_PATH / "trees_test_data.parquet")
+        plots_gdf = gpd.read_file(TEST_DATA_PATH / "treemap_2016_plots_data.geojson")
+        trees_df = pd.read_parquet(
+            TEST_DATA_PATH / "tree_collection_from_treemap_2016.parquet"
+        )
 
         roi_gdf = roi_gdf.to_crs(roi_gdf.estimate_utm_crs())
         plots_gdf = plots_gdf.to_crs(plots_gdf.estimate_utm_crs())
 
         point_process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
-        point_process.generate_tree_locations(roi_gdf, trees_df, plots_gdf)
+        start = time()
+        trees = point_process.generate_tree_locations(roi_gdf, trees_df, plots_gdf)
+        print(f"Time to generate tree locations: {time() - start} seconds")
+
+        fig, ax = plt.subplots(figsize=(10, 8))
+        trees.plot(ax=ax, color="black", markersize=1)
+        roi_gdf.plot(ax=ax, color="none", edgecolor="red")
+        plots_gdf.plot(ax=ax, color="none", edgecolor="blue")
+        plt.show()
 
 
 class TestGetStructuredCoordsGrid:
@@ -77,48 +88,58 @@ class TestGetStructuredCoordsGrid:
 
 
 class TestCalculateTreeDensityByPlot:
-    tree_data = pd.read_parquet(TEST_DATA_PATH / "trees_test_data.parquet")
-    plots_data = gpd.read_file(TEST_DATA_PATH / "plots_test_data.geojson")
-    plots_data = plots_data.to_crs(plots_data.estimate_utm_crs())
-    plot_id_col = "TM_CN"
+    def test_treemap_2016(self):
+        tree_data = pd.read_parquet(
+            TEST_DATA_PATH / "tree_collection_from_treemap_2016.parquet"
+        )
+        plot_data = gpd.read_file(TEST_DATA_PATH / "treemap_2016_plots_data.geojson")
+        plot_data = plot_data.to_crs(plot_data.estimate_utm_crs())
 
-    def test_all_plots(self):
+        # Calculate the tree density for all plots
+        self._test_all_plots(tree_data, plot_data)
+
+        # Calculate the tree density for occupied plots
+        self._test_occupied_plots(tree_data, plot_data)
+
+    @staticmethod
+    def _test_all_plots(tree_data, plot_data):
         """
         This test case calculates the tree density for all plots in the plots
         data. The sum of the tree density for each plot in the plots data should
-        equal the sum of the TPA_UNADJ for each tree in the tree data that
+        equal the sum of the TPA for each tree in the tree data that
         belongs to that plot.
 
         This test case accounts for ALL PLOTS, even those with 0 density.
         """
         all_plots_with_tree_density = (
             InhomogeneousPoissonProcess._calculate_per_plot_tree_density(
-                self.plots_data, self.tree_data, merge_type="left"
+                plot_data, tree_data, merge_type="left"
             )
         )
 
         # Make sure that all plots are in the output
-        assert len(all_plots_with_tree_density) == len(self.plots_data)
+        assert len(all_plots_with_tree_density) == len(plot_data)
 
-        # Sum the TPA_UNADJ for each tree belonging to a plot
+        # Sum the TPA for each tree belonging to a plot
         plot_tpa_sum = {}
-        for _, tree in self.tree_data.iterrows():
-            plot_id = tree[self.plot_id_col]
-            tpa_unadj = tree["TPA_UNADJ"] if tree["TPA_UNADJ"] > 0 else 0
-            plot_tpa_sum[plot_id] = plot_tpa_sum.get(plot_id, 0) + tpa_unadj
+        for _, tree in tree_data.iterrows():
+            plot_id = tree["PLOT_ID"]
+            TPA = tree["TPA"] if tree["TPA"] > 0 else 0
+            plot_tpa_sum[plot_id] = plot_tpa_sum.get(plot_id, 0) + TPA
 
         # Compare the calculated tree density to the expected tree density
         for _, plot in all_plots_with_tree_density.iterrows():
-            plot_id = plot[self.plot_id_col]
+            plot_id = plot["PLOT_ID"]
             if plot_id not in plot_tpa_sum:
                 plot_tpa_sum[plot_id] = 0
-            assert np.allclose(plot["TPA_UNADJ"], plot_tpa_sum[plot_id])
+            assert np.allclose(plot["TPA"], plot_tpa_sum[plot_id])
 
-    def test_occupied_plots(self):
+    @staticmethod
+    def _test_occupied_plots(tree_data, plot_data):
         """
         This test case calculates the tree density for occupied plots (i.e.
         those containing trees) in the plots data. The sum of the tree density
-        for each plot in the plots data should equal the sum of the TPA_UNADJ
+        for each plot in the plots data should equal the sum of the TPA
         for each tree in the tree data that belongs to that plot.
 
         This test case only accounts for OCCUPIED PLOTS, i.e. those with a
@@ -126,52 +147,49 @@ class TestCalculateTreeDensityByPlot:
         """
         occupied_plots_with_tree_density = (
             InhomogeneousPoissonProcess._calculate_per_plot_tree_density(
-                self.plots_data, self.tree_data, merge_type="right"
+                plot_data, tree_data, merge_type="right"
             )
         )
 
         # Not all plots are occupied, so the output should be less than the
         # number of plots in the plots data
-        assert 0 < len(occupied_plots_with_tree_density) < len(self.plots_data)
+        assert 0 < len(occupied_plots_with_tree_density) < len(plot_data)
 
-        # Sum the TPA_UNADJ for each tree belonging to a plot
+        # Sum the TPA for each tree belonging to a plot
         plot_tpa_sum = {}
-        for _, tree in self.tree_data.iterrows():
-            plot_id = tree[self.plot_id_col]
-            tpa_unadj = tree["TPA_UNADJ"] if tree["TPA_UNADJ"] > 0 else 0
-            plot_tpa_sum[plot_id] = plot_tpa_sum.get(plot_id, 0) + tpa_unadj
+        for _, tree in tree_data.iterrows():
+            plot_id = tree["PLOT_ID"]
+            TPA = tree["TPA"] if tree["TPA"] > 0 else 0
+            plot_tpa_sum[plot_id] = plot_tpa_sum.get(plot_id, 0) + TPA
 
         # Compare the calculated tree density to the expected tree density
         for _, plot in occupied_plots_with_tree_density.iterrows():
-            plot_id = plot[self.plot_id_col]
-            assert np.allclose(plot["TPA_UNADJ"], plot_tpa_sum[plot_id])
+            plot_id = plot["PLOT_ID"]
+            assert np.allclose(plot["TPA"], plot_tpa_sum[plot_id])
 
         # Make sure that plots with 0 density are not in the output, plots with
         # tree density > 0 should be in the output
-        for _, plot in self.plots_data.iterrows():
-            plot_id = plot[self.plot_id_col]
+        for _, plot in plot_data.iterrows():
+            plot_id = plot["PLOT_ID"]
             if plot_id not in plot_tpa_sum:
-                assert (
-                    plot_id
-                    not in occupied_plots_with_tree_density[self.plot_id_col].values
-                )
+                assert plot_id not in occupied_plots_with_tree_density["PLOT_ID"].values
             else:
-                assert (
-                    plot_id in occupied_plots_with_tree_density[self.plot_id_col].values
-                )
+                assert plot_id in occupied_plots_with_tree_density["PLOT_ID"].values
 
 
 class TestCalculateAllPlotsTreeDensity:
-    tree_data = pd.read_parquet(TEST_DATA_PATH / "trees_test_data.parquet")
-    plots_data = gpd.read_file(TEST_DATA_PATH / "plots_test_data.geojson")
+    tree_data = pd.read_parquet(
+        TEST_DATA_PATH / "tree_collection_from_treemap_2016.parquet"
+    )
+    plots_data = gpd.read_file(TEST_DATA_PATH / "treemap_2016_plots_data.geojson")
     plots_data = plots_data.to_crs(plots_data.estimate_utm_crs())
-    plot_id_col = "TM_CN"
+    plot_id_col = "PLOT_ID"
 
     def test_all_plots(self):
         """
         This test case calculates the tree density for all plots in the plots
         data. The sum of the tree density for each plot in the plots data should
-        equal the sum of the TPA_UNADJ for each tree in the tree data that
+        equal the sum of the TPA for each tree in the tree data that
         belongs to that plot.
 
         This test case accounts for ALL PLOTS, even those with 0 density.
@@ -185,32 +203,34 @@ class TestCalculateAllPlotsTreeDensity:
         # Make sure that all plots are in the output
         assert len(all_plots_with_tree_density) == len(self.plots_data)
 
-        # Sum the TPA_UNADJ for each tree belonging to a plot
+        # Sum the TPA for each tree belonging to a plot
         plot_tpa_sum = {}
         for _, tree in self.tree_data.iterrows():
             plot_id = tree[self.plot_id_col]
-            tpa_unadj = tree["TPA_UNADJ"] if tree["TPA_UNADJ"] > 0 else 0
-            plot_tpa_sum[plot_id] = plot_tpa_sum.get(plot_id, 0) + tpa_unadj
+            TPA = tree["TPA"] if tree["TPA"] > 0 else 0
+            plot_tpa_sum[plot_id] = plot_tpa_sum.get(plot_id, 0) + TPA
 
         # Compare the calculated tree density to the expected tree density
         for _, plot in all_plots_with_tree_density.iterrows():
             plot_id = plot[self.plot_id_col]
             if plot_id not in plot_tpa_sum:
                 plot_tpa_sum[plot_id] = 0
-            assert np.allclose(plot["TPA_UNADJ"], plot_tpa_sum[plot_id])
+            assert np.allclose(plot["TPA"], plot_tpa_sum[plot_id])
 
 
 class TestCalculateOccupiedPlotsTreeDensity:
-    tree_data = pd.read_parquet(TEST_DATA_PATH / "trees_test_data.parquet")
-    plots_data = gpd.read_file(TEST_DATA_PATH / "plots_test_data.geojson")
+    tree_data = pd.read_parquet(
+        TEST_DATA_PATH / "tree_collection_from_treemap_2016.parquet"
+    )
+    plots_data = gpd.read_file(TEST_DATA_PATH / "treemap_2016_plots_data.geojson")
     plots_data = plots_data.to_crs(plots_data.estimate_utm_crs())
-    plot_id_col = "TM_CN"
+    plot_id_col = "PLOT_ID"
 
     def test_occupied_plots(self):
         """
         This test case calculates the tree density for occupied plots (i.e.
         those containing trees) in the plots data. The sum of the tree density
-        for each plot in the plots data should equal the sum of the TPA_UNADJ
+        for each plot in the plots data should equal the sum of the TPA
         for each tree in the tree data that belongs to that plot.
 
         This test case only accounts for OCCUPIED PLOTS, i.e. those with a
@@ -226,17 +246,17 @@ class TestCalculateOccupiedPlotsTreeDensity:
         # number of plots in the plots data
         assert 0 < len(occupied_plots_with_tree_density) < len(self.plots_data)
 
-        # Sum the TPA_UNADJ for each tree belonging to a plot
+        # Sum the TPA for each tree belonging to a plot
         plot_tpa_sum = {}
         for _, tree in self.tree_data.iterrows():
             plot_id = tree[self.plot_id_col]
-            tpa_unadj = tree["TPA_UNADJ"] if tree["TPA_UNADJ"] > 0 else 0
-            plot_tpa_sum[plot_id] = plot_tpa_sum.get(plot_id, 0) + tpa_unadj
+            TPA = tree["TPA"] if tree["TPA"] > 0 else 0
+            plot_tpa_sum[plot_id] = plot_tpa_sum.get(plot_id, 0) + TPA
 
         # Compare the calculated tree density to the expected tree density
         for _, plot in occupied_plots_with_tree_density.iterrows():
             plot_id = plot[self.plot_id_col]
-            assert np.allclose(plot["TPA_UNADJ"], plot_tpa_sum[plot_id])
+            assert np.allclose(plot["TPA"], plot_tpa_sum[plot_id])
 
         # Make sure that plots with 0 density are not in the output, plots with
         # tree density > 0 should be in the output
@@ -283,10 +303,12 @@ class TestInterpolateDataToGrid:
 class TestInterpolateTreeDensityToGrid:
     roi = gpd.read_file(TEST_DATA_PATH / "polygon.geojson")
     roi = roi.to_crs(roi.estimate_utm_crs())
-    tree_data = pd.read_parquet(TEST_DATA_PATH / "trees_test_data.parquet")
-    plots_data = gpd.read_file(TEST_DATA_PATH / "plots_test_data.geojson")
+    tree_data = pd.read_parquet(
+        TEST_DATA_PATH / "tree_collection_from_treemap_2016.parquet"
+    )
+    plots_data = gpd.read_file(TEST_DATA_PATH / "treemap_2016_plots_data.geojson")
     plots_data = plots_data.to_crs(plots_data.estimate_utm_crs())
-    plot_id_col = "TM_CN"
+    plot_id_col = "PLOT_ID"
 
     grid_resolution = 15
     grid_cell_area = grid_resolution**2
@@ -323,8 +345,12 @@ class TestInterpolateTreeDensityToGrid:
         # Do this for a list of grid cell resolutions. All density sums should
         # be close to eachother. I.e. the density sum should not change much
         # when the grid cell resolution changes.
+        intensity_sums = []
         for resolution in [0.5, 1, 2, 5, 10, 15, 30]:
-            grid_x, grid_y = InhomogeneousPoissonProcess._create_structured_coords_grid(
+            (
+                grid_x,
+                grid_y,
+            ) = InhomogeneousPoissonProcess._create_structured_coords_grid(
                 self.roi, resolution
             )
             interpolated_grid = (
@@ -337,11 +363,10 @@ class TestInterpolateTreeDensityToGrid:
                     resolution,
                 )
             )
-            assert np.allclose(
-                np.sum(interpolated_grid),
-                0.22,
-                atol=0.02,
-            )
+            intensity_sums.append(interpolated_grid.sum())
+
+        # Assert that the density sums are within a few trees of eachother
+        assert np.allclose(intensity_sums, intensity_sums[0], atol=4)
 
         if self.create_visualization or self.show_visualization:
             self.visualize_data(grid_x, grid_y, tree_density_grid)
@@ -365,10 +390,12 @@ class TestInterpolateTreeDensityToGrid:
 class TestInterpolatePlotIdToGrid:
     roi = gpd.read_file(TEST_DATA_PATH / "polygon.geojson")
     roi = roi.to_crs(roi.estimate_utm_crs())
-    tree_data = pd.read_parquet(TEST_DATA_PATH / "trees_test_data.parquet")
-    plots_data = gpd.read_file(TEST_DATA_PATH / "plots_test_data.geojson")
+    tree_data = pd.read_parquet(
+        TEST_DATA_PATH / "tree_collection_from_treemap_2016.parquet"
+    )
+    plots_data = gpd.read_file(TEST_DATA_PATH / "treemap_2016_plots_data.geojson")
     plots_data = plots_data.to_crs(plots_data.estimate_utm_crs())
-    plot_id_col = "TM_CN"
+    plot_id_col = "PLOT_ID"
 
     grid_resolution = 15
     grid_cell_area = grid_resolution**2
@@ -380,7 +407,7 @@ class TestInterpolatePlotIdToGrid:
         """
         This test case calculates the tree density for occupied plots (i.e.
         those containing trees) in the plots data. The sum of the tree density
-        for each plot in the plots data should equal the sum of the TPA_UNADJ
+        for each plot in the plots data should equal the sum of the TPA
         for each tree in the tree data that belongs to that plot.
 
         This test case only accounts for OCCUPIED PLOTS, i.e. those with a
@@ -450,7 +477,7 @@ class TestInterpolatePlotIdToGrid:
             cmap=cmap,
             extent=[grid_x.min(), grid_x.max(), grid_y.min(), grid_y.max()],
         )
-        plt.colorbar()
+        # plt.colorbar()
 
         # Overlay plot locations
         for plot_id, idx in plot_id_to_index.items():
@@ -466,7 +493,7 @@ class TestInterpolatePlotIdToGrid:
 
         plt.xlabel("X Coordinate")
         plt.ylabel("Y Coordinate")
-        plt.title("Plot ID Interpolated to Grid")
+        plt.title("PLOT_ID Interpolated to Grid")
 
         # Create custom legend
         plt.legend(
@@ -508,3 +535,151 @@ class TestGenerateTreeCounts:
         density_grid = np.array([100, 100, 100, 100])
         tree_counts = InhomogeneousPoissonProcess._generate_tree_counts(density_grid)
         assert np.allclose(tree_counts, np.array([96, 107, 88, 103]))
+
+    def test_treemap_2016_data(self):
+        roi = gpd.read_file(TEST_DATA_PATH / "polygon.geojson")
+        roi = roi.to_crs(roi.estimate_utm_crs())
+        plot_data = gpd.read_file(TEST_DATA_PATH / "treemap_2016_plots_data.geojson")
+        plot_data = plot_data.to_crs(plot_data.estimate_utm_crs())
+        tree_data = pd.read_parquet(
+            TEST_DATA_PATH / "tree_collection_from_treemap_2016.parquet"
+        )
+        self._test_real_data(roi, 5, tree_data, plot_data)
+
+    def _test_real_data(self, roi, resolution, tree_data, plot_data):
+        grid_x, grid_y = InhomogeneousPoissonProcess._create_structured_coords_grid(
+            roi, resolution
+        )
+        process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+        # process._set_seed(124678)
+        tree_density_grid = (
+            InhomogeneousPoissonProcess._interpolate_tree_density_to_grid(
+                process,
+                tree_data,
+                plot_data,
+                grid_x,
+                grid_y,
+                resolution,
+            )
+        )
+
+        # Draw tree counts from the tree density grid
+        tree_counts_sums = []
+        for _ in range(100):
+            tree_counts = InhomogeneousPoissonProcess._generate_tree_counts(
+                tree_density_grid
+            )
+            tree_counts_sums.append(tree_counts.sum())
+
+        # Assert that tree density sum is in the range of tree counts sums
+        tree_counts_sums = np.array(tree_counts_sums)
+        tree_density_sum = tree_density_grid.sum()
+        assert tree_counts_sums.min() < tree_density_sum < tree_counts_sums.max()
+
+
+class TestCalculateTreeIndices:
+    """
+    Tests for the _get_flattened_tree_indices method of the InhomogeneousPoissonProcess class.
+    """
+
+    process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+
+    def test_empty_grid(self):
+        """
+        Test with an empty grid (all zeros). Should return an empty array.
+        """
+        count_grid = np.zeros((5, 5), dtype=int)
+        expected_indices = np.array([], dtype=int)
+        calculated_indices = self.process._get_flattened_tree_indices(count_grid)
+        np.testing.assert_array_equal(calculated_indices, expected_indices)
+
+    def test_uniform_grid(self):
+        """
+        Test with a uniform grid (same count in each cell). Should return indices
+        with equal counts for each cell.
+        """
+        count = 3
+        count_grid = np.full((4, 4), count)
+        expected_indices = self._get_expected_indices(count_grid)
+        calculated_indices = self.process._get_flattened_tree_indices(count_grid)
+        np.testing.assert_array_equal(calculated_indices, expected_indices)
+
+    def test_varied_grid(self):
+        """
+        Test with a varied count grid. Should return indices that reflect
+        the distribution of tree counts.
+        """
+        count_grid = np.array([[1, 2], [0, 3]])
+        expected_indices = self._get_expected_indices(count_grid)
+        calculated_indices = self.process._get_flattened_tree_indices(count_grid)
+        np.testing.assert_array_equal(calculated_indices, expected_indices)
+
+    def test_large_grid(self):
+        """
+        Test with a larger grid to ensure scalability.
+        """
+        count_grid = np.random.randint(0, 5, (10, 10))
+        expected_indices = self._get_expected_indices(count_grid)
+        calculated_indices = self.process._get_flattened_tree_indices(count_grid)
+        np.testing.assert_array_equal(calculated_indices, expected_indices)
+
+    @staticmethod
+    def _get_expected_indices(grid):
+        """
+        This function manually creates the expected indices array for a given
+        count grid without the fancy numpy tricks. This is used to test the
+        logic of the _get_flattened_tree_indices method.
+
+        The way this works is that for each cell in the grid we get the count
+        value at that cell. Then, there should be an entry in that list with
+        the index of that cell repeated count times.
+        """
+        indices_list = []
+        for i in range(grid.shape[0]):
+            for j in range(grid.shape[1]):
+                index = i * grid.shape[1] + j
+                count = grid[i, j]
+                indices_list.extend([index] * count)
+        return np.array(indices_list)
+
+
+class TestGetCellIndices:
+    process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+
+    def test_get_cell_indices_case_1(self):
+        # Mock data
+        count_grid = np.array([[1, 3], [2, 4]])
+        tree_indices = np.array([0, 1, 1, 1, 2, 2, 3, 3, 3, 3])
+
+        # Expected result
+        expected_result = (
+            np.array([0, 0, 0, 0, 1, 1, 1, 1, 1, 1]),
+            np.array([0, 1, 1, 1, 0, 0, 1, 1, 1, 1]),
+        )
+
+        # Call the method
+        result = self.process._get_grid_cell_indices(tree_indices, count_grid)
+
+        # Assert the result
+        assert np.array_equal(
+            result, expected_result
+        ), "The _get_cell_indices method does not return the expected result."
+
+    def test_get_cell_indices_case_2(self):
+        # Mock data
+        count_grid = np.array([[2, 2], [2, 2]])
+        tree_indices = np.array([0, 0, 1, 1, 2, 2, 3, 3])
+
+        # Expected result
+        expected_result = (
+            np.array([0, 0, 0, 0, 1, 1, 1, 1]),
+            np.array([0, 0, 1, 1, 0, 0, 1, 1]),
+        )
+
+        # Call the method
+        result = self.process._get_grid_cell_indices(tree_indices, count_grid)
+
+        # Assert the result
+        assert np.array_equal(
+            result, expected_result
+        ), "The _get_cell_indices method does not return the expected result."
