@@ -37,12 +37,6 @@ class TestGenerateTreeLocations:
         point_process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
         start = time()
         trees = point_process.simulate(roi_gdf, trees_df, plots_gdf)
-        print(f"Time to generate tree locations: {time() - start} seconds")
-
-        # fig, ax = plt.subplots(figsize=(10, 8))
-        # trees.plot(ax=ax, color="black", markersize=1)
-        # roi_gdf.plot(ax=ax, color="none", edgecolor="red")
-        # plt.show()
 
 
 class TestGetStructuredCoordsGrid:
