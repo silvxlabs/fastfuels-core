@@ -22,6 +22,8 @@ TEST_DATA_PATH = TEST_PATH / "data"
 TEST_FIGS_PATH = TEST_PATH / "figs"
 TEST_FIGS_PATH.mkdir(exist_ok=True)
 
+# TODO: Revisit tests with additional data
+
 
 class TestGenerateTreeLocations:
     def test_basic_case(self):
