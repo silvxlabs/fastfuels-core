@@ -129,6 +129,11 @@ class InhomogeneousPoissonProcess:
         """
         Interpolate unstructured plot data to a structured grid.
         """
+        # If there is no data to interpolate, return a grid of zeros.
+        # This can happen if there are no trees in the ROI.
+        if len(data) == 0:
+            return np.zeros(grid_x.shape)
+
         interpolated_grid = griddata(
             (plots.geometry.x, plots.geometry.y),
             data,
