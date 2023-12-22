@@ -36,8 +36,7 @@ class TestGenerateTreeLocations:
         roi_gdf = roi_gdf.to_crs(roi_gdf.estimate_utm_crs())
         plots_gdf = plots_gdf.to_crs(plots_gdf.estimate_utm_crs())
 
-        point_process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
-        start = time()
+        point_process = InhomogeneousPoissonProcess()
         trees = point_process.simulate(roi_gdf, trees_df, plots_gdf)
 
 
@@ -318,7 +317,7 @@ class TestInterpolateTreeDensityToGrid:
         grid_x, grid_y = InhomogeneousPoissonProcess._create_structured_coords_grid(
             self.roi, self.grid_resolution
         )
-        process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+        process = InhomogeneousPoissonProcess()
         tree_density_grid = (
             InhomogeneousPoissonProcess._interpolate_tree_density_to_grid(
                 process,
@@ -410,7 +409,7 @@ class TestInterpolatePlotIdToGrid:
         grid_x, grid_y = InhomogeneousPoissonProcess._create_structured_coords_grid(
             self.roi, self.grid_resolution
         )
-        process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+        process = InhomogeneousPoissonProcess()
         plot_id_grid = InhomogeneousPoissonProcess._interpolate_plot_id_to_grid(
             process,
             self.tree_data,
@@ -543,7 +542,7 @@ class TestGenerateTreeCounts:
         grid_x, grid_y = InhomogeneousPoissonProcess._create_structured_coords_grid(
             roi, resolution
         )
-        process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+        process = InhomogeneousPoissonProcess()
         # process._set_seed(124678)
         tree_density_grid = (
             InhomogeneousPoissonProcess._interpolate_tree_density_to_grid(
@@ -576,7 +575,7 @@ class TestCalculateTreeIndices:
     InhomogeneousPoissonProcess class.
     """
 
-    process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+    process = InhomogeneousPoissonProcess()
 
     def test_empty_grid(self):
         """
@@ -638,7 +637,7 @@ class TestCalculateTreeIndices:
 
 
 class TestGetCellIndices:
-    process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+    process = InhomogeneousPoissonProcess()
 
     def test_get_cell_indices_case_1(self):
         # Mock data
@@ -690,7 +689,7 @@ class TestGetCellIndices:
 
 
 class TestCalculateTreeCoordinates:
-    process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+    process = InhomogeneousPoissonProcess()
     process._set_seed(42)
 
     def test_basic_case(self):
@@ -730,7 +729,7 @@ class TestCalculateTreeCoordinates:
 
 
 class TestCountTreesPerPlot:
-    process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+    process = InhomogeneousPoissonProcess()
     plot_id_list = [1, 1, 2, 2, 2, 3]
     num_trees = len(plot_id_list)
     trees = pd.DataFrame({"PLOT_ID": plot_id_list})
@@ -759,7 +758,7 @@ class TestCountTreesPerPlot:
 
 
 class TestSampleTreesWithinPlots:
-    process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+    process = InhomogeneousPoissonProcess()
     trees = pd.DataFrame(
         {
             "PLOT_ID": [1, 1, 2, 2, 2, 3],
@@ -792,7 +791,7 @@ class TestSampleTreesWithinPlots:
 
 
 class TestAssignTreeLocations:
-    process = InhomogeneousPoissonProcess("inhomogeneous_poisson")
+    process = InhomogeneousPoissonProcess()
     sampled_trees = pd.DataFrame(
         {"PLOT_ID": [1, 1, 2, 2, 2, 3], "TPA": [1, 2, 3, 4, 5, 6]}
     )

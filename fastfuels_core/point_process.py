@@ -2,7 +2,7 @@
 Point process module for expanding trees to a region of interest (ROI) and
 generating random tree locations based on a specified point process.
 """
-
+# Core imports
 from __future__ import annotations
 
 # External imports
@@ -15,31 +15,7 @@ from geopandas import GeoDataFrame
 from scipy.interpolate import griddata
 
 
-class PointProcess:
-    def __init__(self, process_type):
-        self.process_type = process_type
-
-        if process_type == "inhomogeneous_poisson":
-            self.process = InhomogeneousPoissonProcess
-        else:
-            raise NotImplementedError(
-                f"Point process type {process_type} is "
-                f"not implemented. Currently only "
-                f"'inhomogeneous_poisson' is "
-                f"implemented."
-            )
-
-    def run(self, roi: GeoDataFrame, trees: DataFrame, **kwargs) -> GeoDataFrame:
-        try:
-            return self.process.simulate(self.process, roi, trees, **kwargs)
-        except AttributeError:
-            raise NotImplementedError(
-                f"Point process type {self.process_type} does not have a "
-                f"valid generate_tree_locations method."
-            )
-
-
-class InhomogeneousPoissonProcess(PointProcess):
+class InhomogeneousPoissonProcess:
     def simulate(
         self,
         roi: GeoDataFrame,
@@ -333,7 +309,9 @@ class InhomogeneousPoissonProcess(PointProcess):
         )
 
 
-def run_point_process(process, roi, trees, **kwargs):
-    point_process = PointProcess(process)
-    distributed_trees = point_process.run(roi, trees, **kwargs)
-    return distributed_trees
+def run_point_process(process_type: str, roi, trees, **kwargs):
+    if process_type == "inhomogeneous_poisson":
+        point_process = InhomogeneousPoissonProcess()
+    else:
+        raise ValueError(f"Invalid point process type: {process_type}")
+    return point_process.simulate(roi, trees, **kwargs)
