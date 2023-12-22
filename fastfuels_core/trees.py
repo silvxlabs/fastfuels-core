@@ -12,9 +12,9 @@ TREE_SCHEMA_COLS = {
     ),
     "STATUSCD": Column(
         int,
-        checks=Check.isin([1, 2, 3]),
+        checks=Check.isin([0, 1, 2, 3]),
         title="Status Code",
-        description="1 = Live, 2 = Dead, 3 = Missing",
+        description="0 = No status, 1 = Live, 2 = Dead, 3 = Missing",
     ),
     "DIA": Column(
         float,
