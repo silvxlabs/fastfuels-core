@@ -43,7 +43,8 @@ class InhomogeneousPoissonProcess:
             grid_y,
         )
         sampled_trees = self._sample_trees_by_location(trees, tree_locations)
-        return self._convert_to_geodataframe(sampled_trees, roi.crs)
+        trees_in_bounds = self._drop_trees_outside_roi_bounds(sampled_trees, roi)
+        return self._convert_to_geodataframe(trees_in_bounds, roi.crs)
 
     @staticmethod
     def _set_seed(seed):
@@ -296,6 +297,16 @@ class InhomogeneousPoissonProcess:
         sampled_trees["Y"] = tree_locations["Y"].values
 
         return sampled_trees
+
+    @staticmethod
+    def _drop_trees_outside_roi_bounds(df, roi):
+        """
+        Drop trees that are outside the total bounds of the ROI.
+        """
+        minx, miny, maxx, maxy = roi.total_bounds
+        df.drop(df[(df["Y"] < miny) | (df["Y"] > maxy)].index, inplace=True)
+        df.drop(df[(df["X"] < minx) | (df["X"] > maxx)].index, inplace=True)
+        return df
 
     @staticmethod
     def _convert_to_geodataframe(sampled_trees, crs):
