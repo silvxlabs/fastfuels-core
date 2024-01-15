@@ -1,3 +1,3 @@
-from trees import TreeSample, TreePopulation
+from fastfuels_core.trees import TreeSample, TreePopulation
 
 __all__ = ["TreeSample", "TreePopulation"]
