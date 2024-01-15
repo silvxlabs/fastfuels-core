@@ -1,12 +1,13 @@
 # External Imports
 import geopandas as gpd
-from pandera import DataFrameSchema
+from pandas import DataFrame
 from geopandas import GeoDataFrame
+from pandera import DataFrameSchema
 
 
-class ObjectIterableGeoDataFrame:
+class ObjectIterableDataFrame:
     schema: DataFrameSchema
-    data: GeoDataFrame
+    data: DataFrame | GeoDataFrame
 
     def __init__(self, data):
         self.data = self.schema.validate(data)
@@ -60,3 +61,52 @@ class ObjectIterableGeoDataFrame:
         This method must be implemented by the subclass.
         """
         raise NotImplementedError("_row_to_object() must be implemented by subclass")
+
+    def dataframe_to_geodataframe(self, crs=None) -> GeoDataFrame:
+        """
+        Convert the object to a GeoDataFrame using columns X and Y as geometry.
+
+        Parameters
+        ----------
+        crs : str, optional
+            The coordinate reference system to use for the GeoDataFrame.
+
+        Returns
+        -------
+        GeoDataFrame
+            A GeoDataFrame representation of the object.
+        """
+        try:
+            gdf = GeoDataFrame(
+                self.data,
+                geometry=gpd.points_from_xy(self.data.X, self.data.Y),
+                crs=crs,
+            )
+        except AttributeError:
+            raise AttributeError(
+                "Cannot convert to GeoDataFrame. DataFrame does not contain X and Y columns."
+            )
+
+        self.data = gdf.drop(columns=["X", "Y"])
+
+    def geodataframe_to_dataframe(self) -> DataFrame:
+        """
+        Convert the object to a DataFrame by dropping the geometry column.
+
+        Returns
+        -------
+        DataFrame
+            A DataFrame representation of the object.
+        """
+        try:
+            # Add X and Y columns to the dataframe from the geometry
+            df = DataFrame(self.data)
+            df["X"] = self.data.geometry.x
+            df["Y"] = self.data.geometry.y
+            df = df.drop(columns=["geometry"])
+        except AttributeError:
+            raise AttributeError(
+                "Cannot convert to DataFrame. Object does not contain geometry column."
+            )
+
+        self.data = df

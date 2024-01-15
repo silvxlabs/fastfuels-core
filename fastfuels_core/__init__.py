@@ -1,3 +1,3 @@
-from trees import TreeCollection
+from trees import TreeSample, TreePopulation
 
-__all__ = ["TreeCollection"]
+__all__ = ["TreeSample", "TreePopulation"]
