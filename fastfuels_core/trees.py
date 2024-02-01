@@ -1,9 +1,24 @@
+# Core imports
+import json
+from abc import ABC, abstractmethod
+from importlib_resources import files
+
 # Internal imports
 from fastfuels_core.base import ObjectIterableDataFrame
 from fastfuels_core.point_process import run_point_process
 
 # External Imports
 from pandera import DataFrameSchema, Column, Check, Index
+
+
+DATA_PATH = files("fastfuels_core.data")
+with open(DATA_PATH / "spgrp_parameters.json", "r") as f:
+    SPGRP_PARAMS = json.load(f)
+with open(DATA_PATH / "spcd_parameters.json", "r") as f:
+    SPCD_PARAMS = json.load(f)
+with open(DATA_PATH / "class_parameters.json", "r") as f:
+    CLASS_PARAMS = json.load(f)
+
 
 TREE_SCHEMA_COLS = {
     "TREE_ID": Column(int),
@@ -157,33 +172,61 @@ class Tree:
         Y coordinate of the tree in a projected coordinate system. Units: m.
     """
 
+    species_code: int
+    status_code: int
+    diameter: float
+    height: float
+    crown_ratio: float
+    x: float
+    y: float
+
     def __init__(
         self,
-        tree_id,
-        species_code,
-        status_code,
-        diameter,
-        height,
-        crown_ratio,
+        species_code: int,
+        status_code: int,
+        diameter: float,
+        height: float,
+        crown_ratio: float,
         x=0,
         y=0,
+        crown_profile_model="beta",
     ):
-        self.id = tree_id
+        # TODO: Species code needs to be valid
         self.species_code = species_code
+
+        # TODO: Status code needs to be valid
         self.status_code = status_code
+
+        # TODO: Diameter and height need to be greater than 0
         self.diameter = diameter
         self.height = height
+
+        # TODO: Crown ratio needs to be between 0 and 1
         self.crown_ratio = crown_ratio
+
         self.x = x
         self.y = y
 
     @property
-    def crown_length(self):
+    def crown_length(self) -> float:
+        """
+        Returns the length of the tree's crown.
+        """
         return self.height * self.crown_ratio
 
     @property
-    def crown_base_height(self):
+    def crown_base_height(self) -> float:
+        """
+        Returns the height at which the live crown starts.
+        """
         return self.height - self.crown_length
+
+    @property
+    def species_group(self) -> int:
+        """
+        Returns the species group of the tree based on the species code.
+        """
+        return SPCD_PARAMS[str(self.species_code)]["SPGRP"]
 
     def is_live(self):
         """
