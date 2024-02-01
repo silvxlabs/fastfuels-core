@@ -1,6 +1,9 @@
 # Core imports
+from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
+
+import numpy as np
 from importlib_resources import files
 
 # Internal imports
@@ -8,6 +11,8 @@ from fastfuels_core.base import ObjectIterableDataFrame
 from fastfuels_core.point_process import run_point_process
 
 # External Imports
+from numpy import ndarray
+from scipy.special import beta
 from pandera import DataFrameSchema, Column, Check, Index
 
 
@@ -189,7 +194,7 @@ class Tree:
         crown_ratio: float,
         x=0,
         y=0,
-        crown_profile_model="beta",
+        crown_profile_model_type="beta",
     ):
         # TODO: Species code needs to be valid
         self.species_code = species_code
@@ -206,6 +211,13 @@ class Tree:
 
         self.x = x
         self.y = y
+
+        if crown_profile_model_type not in ["beta"]:
+            raise ValueError(
+                "The crown profile model must be one of the following: 'beta'"
+            )
+        self._crown_profile_model_type = crown_profile_model_type
+        self._crown_profile_model = None
 
     @property
     def crown_length(self) -> float:
@@ -228,9 +240,150 @@ class Tree:
         """
         return SPCD_PARAMS[str(self.species_code)]["SPGRP"]
 
+    @property
     def is_live(self):
         """
-        Returns True if the tree is alive, False otherwise. Tree is alive if
+        Returns True if the tree is alive, False otherwise. The Tree is alive if
         the status code is 1.
         """
         return self.status_code == 1
+
+    @property
+    def crown_profile_model(self) -> CrownProfileModel:
+        # Initialize the beta crown profile model if it is not already initialized
+        if self._crown_profile_model_type == "beta":
+            if (
+                self._crown_profile_model is None
+                or self._crown_profile_model.crown_base_height != self.crown_base_height
+                or self._crown_profile_model.crown_length != self.crown_length
+                or self._crown_profile_model.species_group != self.species_group
+            ):
+                self._crown_profile_model = BetaCrownProfile(
+                    self.species_group, self.crown_base_height, self.crown_length
+                )
+        return self._crown_profile_model
+
+    @property
+    def max_crown_radius(self) -> float:
+        """
+        Returns the maximum radius of the tree's crown.
+        """
+        return self.crown_profile_model.get_max_radius()
+
+    def get_crown_radius_at_height(self, height: float | ndarray) -> float | ndarray:
+        """
+        Uses the crown profile model to get the radius of the crown at a given
+        height in meters.
+        """
+        return self.crown_profile_model.get_radius_at_height(height)
+
+
+class CrownProfileModel(ABC):
+    """
+    Abstract base class representing a tree crown profile model.
+    The crown profile model is a rotational solid that can be queried at any
+    height to get a radius, or crown width, at that height.
+
+    This abstract class provides methods to get the radius of the crown at a
+    given height and to get the maximum radius of the crown.
+    """
+
+    @abstractmethod
+    def get_radius_at_height(self, height: float | ndarray):
+        """
+        Abstract method to get the radius of the crown at a given height.
+        """
+        raise NotImplementedError(
+            "The get_radius method must be implemented in a subclass."
+        )
+
+    @abstractmethod
+    def get_max_radius(self):
+        """
+        Abstract method to get the maximum radius of the crown.
+        """
+        raise NotImplementedError(
+            "The get_max_radius method must be implemented in a subclass."
+        )
+
+
+class BetaCrownProfile(CrownProfileModel):
+    """
+    A crown profile model based on a beta distribution.
+    """
+
+    a: float
+    b: float
+    c: float
+    crown_length: float
+    species_group: int
+
+    def __init__(
+        self, species_group: int, crown_base_height: float, crown_length: float
+    ):
+        """
+        Initializes a BetaCrownProfile instance.
+        """
+        self.species_group = species_group
+        self.crown_base_height = crown_base_height
+        self.crown_length = crown_length
+        self.a = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_a"]
+        self.b = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_b"]
+        self.c = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_c"]
+        self.beta = beta(self.a, self.b)
+
+    def get_max_radius(self):
+        """
+        Returns the maximum radius of the crown. This function works by finding
+        the mode of the beta distribution, which is the value of z at which the
+        beta distribution is at its max, and then using this value to calculate
+        the radius at this height.
+        """
+        # Find the mode of the beta distribution. This is the value of z at
+        # which the beta distribution is at its max.
+        z_max = (self.a - 1) / (self.a + self.b - 2)
+        normalized_max_radius = self._get_radius_at_normalized_height(z_max)
+        return normalized_max_radius * self.crown_length
+
+    def get_radius_at_height(self, height: float | ndarray):
+        """
+        Returns the radius of the crown at a given height.
+        """
+        normalized_height = self._get_normalized_height(height)
+        radius_at_normalized_height = self._get_radius_at_normalized_height(
+            normalized_height
+        )
+        return radius_at_normalized_height * self.crown_length
+
+    def _get_normalized_height(self, height: float | ndarray) -> float | ndarray:
+        """
+        Converts a height (in meters) of the tree crown to a unitless height
+        between 0 and 1 representing the proportion of the crown length.
+        """
+        return (height - self.crown_base_height) / self.crown_length
+
+    def _get_radius_at_normalized_height(self, z: float | ndarray) -> float | ndarray:
+        """
+        Returns the unitless radius of the crown at a given normalized height.
+        The radius is scaled between 0 and 1 and represents a proportion of
+        the crown length of the tree.
+
+        The radius is calculated using the beta distribution probability density
+        function (PDF) at the given normalized height.
+        The PDF of the beta distribution uses an additional scaling factor, 'c',
+        for the application to crown profiles
+        and is described in Ferrarese et al. (2015).
+
+        """
+        z = np.asarray(z)
+        mask = (z >= 0) & (z <= 1)
+
+        result = np.zeros_like(z)  # Initialize the result array with zeros
+        result[mask] = (
+            z[mask] ** (self.a - 1) * (1 - z[mask]) ** (self.b - 1) / self.beta
+        )
+
+        if result.size == 1:
+            return result.item()  # Return as a scalar
+        else:
+            return result  # Return as an array
