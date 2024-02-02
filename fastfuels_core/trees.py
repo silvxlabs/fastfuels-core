@@ -315,19 +315,19 @@ class BetaCrownProfile(CrownProfileModel):
     a: float
     b: float
     c: float
-    species_group: int
     crown_length: float
     crown_base_height: float
 
     def __init__(
-        self, species_group: int, crown_base_height: float, crown_length: float
+        self, species_code: int, crown_base_height: float, crown_length: float
     ):
         """
         Initializes a BetaCrownProfile instance.
         """
-        self.species_group = species_group
         self.crown_base_height = crown_base_height
         self.crown_length = crown_length
+
+        species_group = SPCD_PARAMS[str(species_code)]["SPGRP"]
         self.a = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_a"]
         self.b = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_b"]
         self.c = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_c"]
@@ -393,3 +393,95 @@ class BetaCrownProfile(CrownProfileModel):
             return result.item()  # Return as a scalar
         else:
             return result  # Return as an array
+
+
+class BiomassAllometryModel(ABC):
+    """
+    Abstract base class representing a tree biomass allometry model.
+    The biomass allometry model is used to estimate the biomass of a tree
+    based on one or more independent variables, such as diameter and height.
+    """
+
+    @abstractmethod
+    def estimate_foliage_biomass(self) -> float:
+        """
+        Abstract method to estimate the biomass of a tree based on its diameter
+        and height.
+        """
+
+
+class JenkinsBiomassEquations(BiomassAllometryModel):
+    """
+    This class implements the National-Scale Biomass Estimators developed by
+    Jenkins et al. (2003). These equations are used to estimate above ground and
+    component biomass for 10 species groups in the United States.
+    """
+
+    def __init__(self, species_code, diameter):
+
+        if str(species_code) not in SPCD_PARAMS:
+            raise ValueError(f"Species code {species_code} is not valid.")
+
+        if diameter <= 0:
+            raise ValueError(f"Diameter {diameter} must be greater than 0.")
+
+        self.species_code = species_code
+        self.diameter = diameter
+
+        self._species_group = SPCD_PARAMS[str(species_code)]["SPGRP"]
+        self._is_softwood = SPCD_PARAMS[str(species_code)]["CLASS"]
+        self._sapling_adjustment = SPCD_PARAMS[str(species_code)]["SAPADJ"]
+
+    def _estimate_above_ground_biomass(self):
+        """
+        Uses Equation 1 and parameters in Table 4 of Jenkins et al. 2003 to
+        estimate the above ground biomass of a tree based on species group and
+        diameter at breast height.
+
+        Biomass equation: bm = Exp(β_0 + (β_1 * ln(dbh))) Where bm is above
+        ground biomass (kg) for trees 2.5cm dbh and larger, dbh is the
+        diameter at breast height (cm), and β_0 and β_1 are parameters
+        estimated from the data.
+
+        NOTE: This method also applies a sapling adjustment factor (sapadj) for
+        trees with dbh <= 12.7cm (5 inches).
+        """
+        # Get the parameters for the species group
+        beta_0 = SPGRP_PARAMS[str(self._species_group)]["JENKINS_AGB_b0"]
+        beta_1 = SPGRP_PARAMS[str(self._species_group)]["JENKINS_AGB_b1"]
+
+        # Estimate the above ground biomass
+        biomass = np.exp(beta_0 + (beta_1 * np.log(self.diameter)))
+
+        # Apply the sapling adjustment factor
+        if self.diameter <= 12.7 and self._sapling_adjustment > 0:
+            biomass *= self._sapling_adjustment
+
+        return biomass
+
+    def estimate_foliage_biomass(self):
+        """
+        Uses Equation 2 and parameters in Table 6 of Jenkins et al. 2003 to
+        estimate component ratio and foliage biomass of a tree based on species
+        group, hardwood classification, and diameter at breast height.
+
+        Biomass ratio equation:
+        r = Exp(β_0 + (β_1 / dbh))
+        Where r is the ratio of component to total aboveground biomass for
+        trees 2.5cm dbh and larger, dbh is the diameter at breast height in cm,
+        and β_0 and β_1 are parameters estimated from the data.
+
+        r is multiplied by the above ground biomass to estimate the
+        foliage biomass in kg.
+        """
+        # Get the parameters for the hardwood class
+        beta_0 = CLASS_PARAMS[str(self._is_softwood)]["foliage_b0"]
+        beta_1 = CLASS_PARAMS[str(self._is_softwood)]["foliage_b1"]
+
+        # Estimate the foliage component ratio
+        ratio = np.exp(beta_0 + (beta_1 / self.diameter))
+
+        # Estimate the foliage biomass
+        foliage_biomass = self._estimate_above_ground_biomass() * ratio
+
+        return foliage_biomass

@@ -1,10 +1,19 @@
-# Internal imports
-import numpy as np
+# Core imports
+from pathlib import Path
 
-from fastfuels_core.trees import Tree, BetaCrownProfile
+# Internal imports
+from fastfuels_core.trees import (
+    Tree,
+    BetaCrownProfile,
+    JenkinsBiomassEquations,
+    CLASS_PARAMS,
+    SPGRP_PARAMS,
+    SPCD_PARAMS,
+)
 
 # External imports
-from pathlib import Path
+import pytest
+import numpy as np
 
 TEST_PATH = Path(__file__).parent
 TEST_DATA_PATH = TEST_PATH / "data"
@@ -16,7 +25,9 @@ class TestBetaCrownProfileModel:
         """
         Tests that the radius at a given height is calculated correctly.
         """
-        model = BetaCrownProfile(species_group=4, crown_base_height=10, crown_length=10)
+        model = BetaCrownProfile(
+            species_code=122, crown_base_height=10, crown_length=10
+        )
 
         # Test that the bottom of the crown and the top of the crown both have
         # a radius of 0
@@ -52,7 +63,9 @@ class TestBetaCrownProfileModel:
         """
         # Suppose that I have a tree with a height of 20m, a crown base height
         # of 10m, and a crown length of 10m
-        model = BetaCrownProfile(species_group=4, crown_base_height=10, crown_length=10)
+        model = BetaCrownProfile(
+            species_code=122, crown_base_height=10, crown_length=10
+        )
         assert model._get_normalized_height(0) < 0
         assert model._get_normalized_height(5) < 0
         assert model._get_normalized_height(10) == 0
@@ -62,7 +75,9 @@ class TestBetaCrownProfileModel:
 
         # Suppose that I have a tree with a height of 100m, a crown base height
         # of 20m, and a crown length of 80m
-        model = BetaCrownProfile(species_group=4, crown_base_height=20, crown_length=80)
+        model = BetaCrownProfile(
+            species_code=122, crown_base_height=20, crown_length=80
+        )
         assert model._get_normalized_height(0) < 0
         assert model._get_normalized_height(10) < 0
         assert model._get_normalized_height(20) == 0
@@ -74,7 +89,9 @@ class TestBetaCrownProfileModel:
 
         # Test with numpy
         heights = np.linspace(10, 20, 100)
-        model = BetaCrownProfile(species_group=4, crown_length=10, crown_base_height=10)
+        model = BetaCrownProfile(
+            species_code=122, crown_length=10, crown_base_height=10
+        )
         normalized_heights = model._get_normalized_height(heights)
         assert len(normalized_heights) == 100
         assert normalized_heights[0] == 0
@@ -86,7 +103,9 @@ class TestBetaCrownProfileModel:
         """
         Tests that the radius at a given normalized height is calculated correctly.
         """
-        model = BetaCrownProfile(species_group=4, crown_base_height=10, crown_length=10)
+        model = BetaCrownProfile(
+            species_code=122, crown_base_height=10, crown_length=10
+        )
 
         # Test that the bottom of the crown and the top of the crown both have
         # a radius of 0
@@ -121,7 +140,9 @@ class TestBetaCrownProfileModel:
         Tests that the maximum radius of the crown is calculated correctly.
         """
         # Test with species group 4, crown base height 10, and crown length 10
-        model = BetaCrownProfile(species_group=4, crown_base_height=10, crown_length=10)
+        model = BetaCrownProfile(
+            species_code=122, crown_base_height=10, crown_length=10
+        )
         max_crown_radius = model.get_max_radius()
         assert max_crown_radius > 0
         heights = np.linspace(10, 20, 1000)
@@ -129,7 +150,7 @@ class TestBetaCrownProfileModel:
         assert np.all(max_crown_radius >= radii)
 
         # Test with species group 1, crown base height 5, and crown length 15
-        model = BetaCrownProfile(species_group=1, crown_base_height=5, crown_length=15)
+        model = BetaCrownProfile(species_code=202, crown_base_height=5, crown_length=15)
         max_crown_radius = model.get_max_radius()
         assert max_crown_radius > 0
         heights = np.linspace(5, 20, 1000)
@@ -137,12 +158,77 @@ class TestBetaCrownProfileModel:
         assert np.all(max_crown_radius >= radii)
 
         # Test with species group 2, crown base height 20, and crown length 5
-        model = BetaCrownProfile(species_group=2, crown_base_height=20, crown_length=5)
+        model = BetaCrownProfile(species_code=747, crown_base_height=20, crown_length=5)
         max_crown_radius = model.get_max_radius()
         assert max_crown_radius > 0
         heights = np.linspace(20, 25, 1000)
         radii = model.get_radius_at_height(heights)
         assert np.all(max_crown_radius >= radii)
+
+
+class TestJenkinsBiomassEquations:
+    def test_init(self):
+        # Test that the class can be initialized
+        model = JenkinsBiomassEquations(species_code=122, diameter=24)
+        assert model._species_group == 4
+        assert model._is_softwood == 1
+        assert model._sapling_adjustment == 0.43373999999999996
+
+        # Test with a different species code
+        model = JenkinsBiomassEquations(species_code=896, diameter=100)
+        assert model._species_group == 8
+        assert model._is_softwood == 0
+        assert model._sapling_adjustment == 0.84031
+
+        # Test with an invalid species code
+        with pytest.raises(ValueError):
+            JenkinsBiomassEquations(species_code=32480910, diameter=100)
+
+        # Test with an invalid diameter
+        with pytest.raises(ValueError):
+            JenkinsBiomassEquations(species_code=122, diameter=-100)
+
+        # Test initializing all species codes
+        for species_code in SPCD_PARAMS:
+            JenkinsBiomassEquations(species_code=int(species_code), diameter=100)
+
+    def test_estimate_above_ground_biomass(self):
+        # Test with a known species code and diameter
+        model = JenkinsBiomassEquations(species_code=122, diameter=24)
+        biomass = model._estimate_above_ground_biomass()
+        assert biomass > 0, "Biomass should be a positive number"
+
+        # Test each species code with a random diameter
+        for species_code in SPCD_PARAMS:
+            diameter = np.random.uniform(0, 100)
+            model = JenkinsBiomassEquations(
+                species_code=int(species_code), diameter=diameter
+            )
+            if model._species_group == -1:
+                continue
+            biomass = model._estimate_above_ground_biomass()
+            assert (
+                biomass > 0
+            ), f"{species_code} and {diameter} should yield a positive biomass"
+
+    def test_estimate_foliage_biomass(self):
+        # Test with a known species code and diameter
+        model = JenkinsBiomassEquations(species_code=122, diameter=24)
+        biomass = model.estimate_foliage_biomass()
+        assert biomass > 0, "Biomass should be a positive number"
+
+        # Test each species code with a random diameter
+        for species_code in SPCD_PARAMS:
+            diameter = np.random.uniform(0, 100)
+            model = JenkinsBiomassEquations(
+                species_code=int(species_code), diameter=diameter
+            )
+            if model._species_group == -1:
+                continue
+            biomass = model.estimate_foliage_biomass()
+            assert (
+                biomass > 0
+            ), f"{species_code} and {diameter} should yield a positive biomass"
 
 
 def test_tree():
