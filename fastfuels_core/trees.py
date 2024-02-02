@@ -289,7 +289,7 @@ class CrownProfileModel(ABC):
     """
 
     @abstractmethod
-    def get_radius_at_height(self, height: float | ndarray):
+    def get_radius_at_height(self, height):
         """
         Abstract method to get the radius of the crown at a given height.
         """
@@ -298,7 +298,7 @@ class CrownProfileModel(ABC):
         )
 
     @abstractmethod
-    def get_max_radius(self):
+    def get_max_radius(self) -> float:
         """
         Abstract method to get the maximum radius of the crown.
         """
@@ -315,8 +315,9 @@ class BetaCrownProfile(CrownProfileModel):
     a: float
     b: float
     c: float
-    crown_length: float
     species_group: int
+    crown_length: float
+    crown_base_height: float
 
     def __init__(
         self, species_group: int, crown_base_height: float, crown_length: float
@@ -332,12 +333,12 @@ class BetaCrownProfile(CrownProfileModel):
         self.c = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_c"]
         self.beta = beta(self.a, self.b)
 
-    def get_max_radius(self):
+    def get_max_radius(self) -> float:
         """
-        Returns the maximum radius of the crown. This function works by finding
-        the mode of the beta distribution, which is the value of z at which the
-        beta distribution is at its max, and then using this value to calculate
-        the radius at this height.
+        Returns the maximum radius of the crown. This function finds the mode
+        of the beta distribution, which is the value of z at which the beta
+        distribution is at its max, and then calculates the radius at that
+        height.
         """
         # Find the mode of the beta distribution. This is the value of z at
         # which the beta distribution is at its max.
@@ -345,9 +346,14 @@ class BetaCrownProfile(CrownProfileModel):
         normalized_max_radius = self._get_radius_at_normalized_height(z_max)
         return normalized_max_radius * self.crown_length
 
-    def get_radius_at_height(self, height: float | ndarray):
+    def get_radius_at_height(self, height):
         """
-        Returns the radius of the crown at a given height.
+        Returns the radius of the crown at a given height using the beta
+        distribution crown model described in equation (3) in Ferrarese et
+        al. (2015). Equation (3) gives the radius of the crown at a given
+        height as a proportion of the crown length scaled between 0 and 1. To
+        get a crown radius in meters, the result is multiplied by the crown
+        length.
         """
         normalized_height = self._get_normalized_height(height)
         radius_at_normalized_height = self._get_radius_at_normalized_height(
@@ -355,30 +361,30 @@ class BetaCrownProfile(CrownProfileModel):
         )
         return radius_at_normalized_height * self.crown_length
 
-    def _get_normalized_height(self, height: float | ndarray) -> float | ndarray:
+    def _get_normalized_height(self, height):
         """
         Converts a height (in meters) of the tree crown to a unitless height
         between 0 and 1 representing the proportion of the crown length.
         """
         return (height - self.crown_base_height) / self.crown_length
 
-    def _get_radius_at_normalized_height(self, z: float | ndarray) -> float | ndarray:
+    def _get_radius_at_normalized_height(self, z):
         """
         Returns the unitless radius of the crown at a given normalized height.
         The radius is scaled between 0 and 1 and represents a proportion of
         the crown length of the tree.
 
-        The radius is calculated using the beta distribution probability density
-        function (PDF) at the given normalized height.
-        The PDF of the beta distribution uses an additional scaling factor, 'c',
-        for the application to crown profiles
-        and is described in Ferrarese et al. (2015).
+        The radius is calculated using the beta distribution probability
+        density function (PDF) at the given normalized height. The PDF of the
+        beta distribution uses an additional scaling factor, 'c', for the
+        application to crown profiles and is described by equation (3) in
+        Ferrarese et al. (2015).
 
         """
         z = np.asarray(z)
         mask = (z >= 0) & (z <= 1)
 
-        result = np.zeros_like(z)  # Initialize the result array with zeros
+        result = np.zeros_like(z)
         result[mask] = (
             z[mask] ** (self.a - 1) * (1 - z[mask]) ** (self.b - 1) / self.beta
         )
