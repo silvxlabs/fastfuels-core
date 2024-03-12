@@ -195,6 +195,7 @@ class Tree:
         x=0,
         y=0,
         crown_profile_model_type="beta",
+        biomass_allometry_model_type="jenkins",
     ):
         # TODO: Species code needs to be valid
         self.species_code = species_code
@@ -217,7 +218,12 @@ class Tree:
                 "The crown profile model must be one of the following: 'beta'"
             )
         self._crown_profile_model_type = crown_profile_model_type
-        self._crown_profile_model = None
+
+        if biomass_allometry_model_type not in ["jenkins"]:
+            raise ValueError(
+                "The biomass allometry model must be one of the following: 'jenkins'"
+            )
+        self._biomass_allometry_model_type = biomass_allometry_model_type
 
     @property
     def crown_length(self) -> float:
@@ -250,18 +256,10 @@ class Tree:
 
     @property
     def crown_profile_model(self) -> CrownProfileModel:
-        # Initialize the beta crown profile model if it is not already initialized
         if self._crown_profile_model_type == "beta":
-            if (
-                self._crown_profile_model is None
-                or self._crown_profile_model.crown_base_height != self.crown_base_height
-                or self._crown_profile_model.crown_length != self.crown_length
-                or self._crown_profile_model.species_group != self.species_group
-            ):
-                self._crown_profile_model = BetaCrownProfile(
-                    self.species_group, self.crown_base_height, self.crown_length
-                )
-        return self._crown_profile_model
+            return BetaCrownProfile(
+                self.species_code, self.crown_base_height, self.crown_length
+            )
 
     @property
     def max_crown_radius(self) -> float:
@@ -276,6 +274,18 @@ class Tree:
         height in meters.
         """
         return self.crown_profile_model.get_radius_at_height(height)
+
+    @property
+    def biomass_allometry_model(self) -> BiomassAllometryModel:
+        if self._biomass_allometry_model_type == "jenkins":
+            return JenkinsBiomassEquations(self.species_code, self.diameter)
+
+    @property
+    def foliage_biomass(self) -> float:
+        """
+        Returns the estimated foliage biomass of the tree
+        """
+        return self.biomass_allometry_model.estimate_foliage_biomass()
 
 
 class CrownProfileModel(ABC):
@@ -324,6 +334,7 @@ class BetaCrownProfile(CrownProfileModel):
         """
         Initializes a BetaCrownProfile instance.
         """
+        self.species_code = species_code
         self.crown_base_height = crown_base_height
         self.crown_length = crown_length
 
@@ -386,7 +397,7 @@ class BetaCrownProfile(CrownProfileModel):
 
         result = np.zeros_like(z)
         result[mask] = (
-            z[mask] ** (self.a - 1) * (1 - z[mask]) ** (self.b - 1) / self.beta
+            self.c * z[mask] ** (self.a - 1) * (1 - z[mask]) ** (self.b - 1) / self.beta
         )
 
         if result.size == 1:
