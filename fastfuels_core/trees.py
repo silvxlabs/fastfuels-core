@@ -9,6 +9,7 @@ from importlib_resources import files
 # Internal imports
 from fastfuels_core.base import ObjectIterableDataFrame
 from fastfuels_core.point_process import run_point_process
+from fastfuels_core.voxelization import VoxelizedTree, voxelize_tree
 
 # External Imports
 from numpy import ndarray
@@ -286,6 +287,11 @@ class Tree:
         Returns the estimated foliage biomass of the tree
         """
         return self.biomass_allometry_model.estimate_foliage_biomass()
+
+    def voxelize(
+        self, horizontal_resolution: float, vertical_resolution: float, **kwargs
+    ) -> VoxelizedTree:
+        return voxelize_tree(self, horizontal_resolution, vertical_resolution, **kwargs)
 
 
 class CrownProfileModel(ABC):
