@@ -2,9 +2,7 @@
 from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
-
-import numpy as np
-from importlib_resources import files
+from importlib.resources import files
 
 # Internal imports
 from fastfuels_core.base import ObjectIterableDataFrame
@@ -12,6 +10,7 @@ from fastfuels_core.point_process import run_point_process
 from fastfuels_core.voxelization import VoxelizedTree, voxelize_tree
 
 # External Imports
+import numpy as np
 from numpy import ndarray
 from scipy.special import beta
 from pandera import DataFrameSchema, Column, Check, Index
@@ -160,8 +159,6 @@ class Tree:
 
     Attributes
     ----------
-    id : int
-        A unique identifier for the tree.
     species_code : int
         An FIA integer species code.
     status_code : int
