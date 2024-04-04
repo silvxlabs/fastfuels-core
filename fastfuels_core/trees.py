@@ -149,6 +149,20 @@ class TreePopulation(ObjectIterableDataFrame):
         index=Index(int, unique=True),
     )
 
+    def _row_to_object(self, row) -> Tree:
+        """
+        Convert a row of the dataframe to an object.
+        """
+        return Tree(
+            species_code=row.SPCD,
+            status_code=row.STATUSCD,
+            diameter=row.DIA,
+            height=row.HT,
+            crown_ratio=row.CR,
+            x=row.X,
+            y=row.Y,
+        )
+
 
 class Tree:
     """
@@ -290,6 +304,18 @@ class Tree:
     ) -> VoxelizedTree:
         return voxelize_tree(self, horizontal_resolution, vertical_resolution, **kwargs)
 
+    @classmethod
+    def from_row(cls, row):
+        return cls(
+            species_code=int(row.SPCD),
+            status_code=int(row.STATUSCD),
+            diameter=row.DIA,
+            height=row.HT,
+            crown_ratio=row.CR,
+            x=row.X,
+            y=row.Y,
+        )
+
 
 class CrownProfileModel(ABC):
     """
@@ -337,11 +363,11 @@ class BetaCrownProfile(CrownProfileModel):
         """
         Initializes a BetaCrownProfile instance.
         """
-        self.species_code = species_code
+        self.species_code = int(species_code)
         self.crown_base_height = crown_base_height
         self.crown_length = crown_length
 
-        species_group = SPCD_PARAMS[str(species_code)]["SPGRP"]
+        species_group = SPCD_PARAMS[str(self.species_code)]["SPGRP"]
         self.a = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_a"]
         self.b = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_b"]
         self.c = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_c"]
