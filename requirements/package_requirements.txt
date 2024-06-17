@@ -1,6 +1,7 @@
 dask
 geopandas
 matplotlib
+nsvb
 numpy<2
 pandas
 pandera

@@ -13,6 +13,7 @@ from fastfuels_core.voxelization import VoxelizedTree, voxelize_tree
 import numpy as np
 from numpy import ndarray
 from scipy.special import beta
+from nsvb.estimators import total_foliage_dry_weight
 from pandera import DataFrameSchema, Column, Check, Index
 
 
@@ -207,7 +208,7 @@ class Tree:
         x=0,
         y=0,
         crown_profile_model_type="beta",
-        biomass_allometry_model_type="jenkins",
+        biomass_allometry_model_type="NSVB",
     ):
         # TODO: Species code needs to be valid
         self.species_code = species_code
@@ -231,9 +232,10 @@ class Tree:
             )
         self._crown_profile_model_type = crown_profile_model_type
 
-        if biomass_allometry_model_type not in ["jenkins"]:
+        available_biomass_allometry_models = ["NSVB", "jenkins"]
+        if biomass_allometry_model_type not in available_biomass_allometry_models:
             raise ValueError(
-                "The biomass allometry model must be one of the following: 'jenkins'"
+                f"Selected biomass allometry model: {biomass_allometry_model_type}. The biomass allometry model must be one of the following: {available_biomass_allometry_models}"
             )
         self._biomass_allometry_model_type = biomass_allometry_model_type
 
@@ -291,6 +293,12 @@ class Tree:
     def biomass_allometry_model(self) -> BiomassAllometryModel:
         if self._biomass_allometry_model_type == "jenkins":
             return JenkinsBiomassEquations(self.species_code, self.diameter)
+        elif self._biomass_allometry_model_type == "NSVB":
+            return NSVBEquations(
+                self.species_code,
+                self.diameter,
+                self.height,
+            )
 
     @property
     def foliage_biomass(self) -> float:
@@ -450,6 +458,55 @@ class BiomassAllometryModel(ABC):
         """
 
 
+class NSVBEquations(BiomassAllometryModel):
+    """
+    This class implements the National Scale Volume and Biomass Estimators
+    modeling system.
+
+    Information on the NSVB system can be found in the following publication:
+    https://www.fs.usda.gov/research/treesearch/66998
+    """
+
+    def __init__(
+        self,
+        species_code: int,
+        diameter: float,
+        height: float,
+        division: str = "",
+        cull: int = 0,
+        decay_code: int = 0,
+        actual_height: float = None,
+    ):
+        if not _is_valid_spcd(species_code):
+            raise ValueError(f"Species code {species_code} is not valid.")
+
+        if not _is_valid_diameter(diameter):
+            raise ValueError(f"Diameter {diameter} must be greater than 0.")
+
+        self.species_code = species_code
+        self.diameter = diameter
+        self.height = height
+        self.division = division
+        self.cull = cull
+        self.decay_code = decay_code
+        self.actual_height = actual_height if actual_height else height
+
+    def estimate_foliage_biomass(self):
+        """
+        Foliage weight is estimated by combining foliage weight coefficients
+        and the appropriate model in Table S9a of the NSVB GTR.
+        """
+        dia_ft = self.diameter / 2.54
+        height_ft = self.height * 3.28084
+        dry_foliage_lb = total_foliage_dry_weight(
+            spcd=self.species_code,
+            dia=dia_ft,
+            ht=height_ft,
+            division=self.division,
+        )
+        return dry_foliage_lb * 0.453592  # Convert to kg
+
+
 class JenkinsBiomassEquations(BiomassAllometryModel):
     """
     This class implements the National-Scale Biomass Estimators developed by
@@ -459,10 +516,10 @@ class JenkinsBiomassEquations(BiomassAllometryModel):
 
     def __init__(self, species_code, diameter):
 
-        if str(species_code) not in SPCD_PARAMS:
+        if not _is_valid_spcd(species_code):
             raise ValueError(f"Species code {species_code} is not valid.")
 
-        if diameter <= 0:
+        if not _is_valid_diameter(diameter):
             raise ValueError(f"Diameter {diameter} must be greater than 0.")
 
         self.species_code = species_code
@@ -525,3 +582,11 @@ class JenkinsBiomassEquations(BiomassAllometryModel):
         foliage_biomass = self._estimate_above_ground_biomass() * ratio
 
         return foliage_biomass
+
+
+def _is_valid_spcd(spcd: int) -> bool:
+    return str(spcd) in SPCD_PARAMS
+
+
+def _is_valid_diameter(diameter: float) -> bool:
+    return diameter > 0
