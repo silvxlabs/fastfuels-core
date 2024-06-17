@@ -6,8 +6,7 @@ from fastfuels_core.trees import (
     Tree,
     BetaCrownProfile,
     JenkinsBiomassEquations,
-    CLASS_PARAMS,
-    SPGRP_PARAMS,
+    NSVBEquations,
     SPCD_PARAMS,
 )
 
@@ -231,5 +230,54 @@ class TestJenkinsBiomassEquations:
             ), f"{species_code} and {diameter} should yield a positive biomass"
 
 
+class TestNSVBEquations:
+    def test_init(self):
+        # Test that the class can be initialized
+        model = NSVBEquations(species_code=122, diameter=24, height=20)
+
+        # Test with a different species code
+        model = NSVBEquations(species_code=896, diameter=100, height=20)
+
+        # Test with an invalid species code
+        with pytest.raises(ValueError):
+            NSVBEquations(species_code=32480910, diameter=100, height=20)
+
+        # Test with an invalid diameter
+        with pytest.raises(ValueError):
+            NSVBEquations(species_code=122, diameter=-100, height=20)
+
+    def test_estimate_foliage_biomass_example_1(self):
+        # Compare to Example 1 of the GTR
+        dia_in = 20
+        dia_cm = dia_in * 2.54
+        ht_ft = 110
+        ht_m = ht_ft * 0.3048
+        division = "240"
+        model = NSVBEquations(
+            species_code=202, diameter=dia_cm, height=ht_m, division=division
+        )
+        foliage_biomass = model.estimate_foliage_biomass()
+
+        foliage_biomass_lb = foliage_biomass * 2.20462
+        assert np.isclose(foliage_biomass_lb, 83.63478892024017)
+
+    def test_estimate_foliage_biomass_example_2(self):
+        # Compare to Example 2 of the GTR
+        spcd = 316
+        dia_in = 11.1
+        dia_cm = dia_in * 2.54
+        ht_ft = 38
+        ht_m = ht_ft * 0.3048
+        division = "M210"
+        model = NSVBEquations(
+            species_code=spcd, diameter=dia_cm, height=ht_m, division=division
+        )
+        foliage_biomass = model.estimate_foliage_biomass()
+
+        foliage_biomass_lb = foliage_biomass * 2.20462
+        assert np.isclose(foliage_biomass_lb, 22.807960563788)
+
+
 def test_tree():
     tree = Tree(species_code=122, status_code=1, diameter=5, height=20, crown_ratio=0.5)
+    assert isinstance(tree.biomass_allometry_model, NSVBEquations)
