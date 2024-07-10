@@ -8,6 +8,7 @@ from importlib.resources import files
 from fastfuels_core.base import ObjectIterableDataFrame
 from fastfuels_core.point_process import run_point_process
 from fastfuels_core.voxelization import VoxelizedTree, voxelize_tree
+from fastfuels_core.treatments import TreatmentProtocol
 
 # External Imports
 import numpy as np
@@ -163,6 +164,30 @@ class TreePopulation(ObjectIterableDataFrame):
             x=row.X,
             y=row.Y,
         )
+
+    def apply_treatment(
+        self, treatment: TreatmentProtocol | list[TreatmentProtocol]
+    ) -> TreePopulation:
+        """
+        Applies one or more preconfigured silvicultural treatments to the tree population.
+
+        Parameters
+        ----------
+        treatment : TreatmentProtocol | list[TreatmentProtocol]
+            A single treatment or a list of treatments to apply.
+
+        Returns
+        -------
+        TreePopulation
+            A new TreePopulation object post treatment.
+        """
+        if isinstance(treatment, list):
+            df = self.data.copy()
+            for t in treatment:
+                df = t.apply(df)
+            return TreePopulation(df)
+        else:
+            return TreePopulation(treatment.apply(self.data))
 
 
 class Tree:
@@ -515,7 +540,6 @@ class JenkinsBiomassEquations(BiomassAllometryModel):
     """
 
     def __init__(self, species_code, diameter):
-
         if not _is_valid_spcd(species_code):
             raise ValueError(f"Species code {species_code} is not valid.")
 

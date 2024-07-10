@@ -5,7 +5,7 @@ nsvb
 numpy<2
 pandas
 pandera
-psycopg2
+psycopg2-binary
 pyvista
 rasterio
 scipy
