@@ -8,6 +8,7 @@ from importlib.resources import files
 from fastfuels_core.base import ObjectIterableDataFrame
 from fastfuels_core.point_process import run_point_process
 from fastfuels_core.voxelization import VoxelizedTree, voxelize_tree
+from fastfuels_core.treatments import TreatmentProtocol
 
 # External Imports
 import numpy as np
@@ -163,6 +164,23 @@ class TreePopulation(ObjectIterableDataFrame):
             x=row.X,
             y=row.Y,
         )
+
+    def apply_treatment(self, treatment: TreatmentProtocol) -> TreePopulation:
+        """
+        Applies a preconfigure silvicultural treatment to the tree population.
+
+        Parameters
+        ----------
+        treatment : TreatmentProtocol
+            Any class object that complies to the treatment protocol class
+
+        Returns
+        -------
+        TreePopulation
+            A new TreePopulation object post treatment.
+        """
+        
+        return TreePopulation(treatment.apply(self.data))
 
 
 class Tree:
