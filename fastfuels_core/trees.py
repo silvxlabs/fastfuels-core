@@ -165,22 +165,29 @@ class TreePopulation(ObjectIterableDataFrame):
             y=row.Y,
         )
 
-    def apply_treatment(self, treatment: TreatmentProtocol) -> TreePopulation:
+    def apply_treatment(
+        self, treatment: TreatmentProtocol | list[TreatmentProtocol]
+    ) -> TreePopulation:
         """
-        Applies a preconfigure silvicultural treatment to the tree population.
+        Applies one or more preconfigured silvicultural treatments to the tree population.
 
         Parameters
         ----------
-        treatment : TreatmentProtocol
-            Any class object that complies to the treatment protocol class
+        treatment : TreatmentProtocol | list[TreatmentProtocol]
+            A single treatment or a list of treatments to apply.
 
         Returns
         -------
         TreePopulation
             A new TreePopulation object post treatment.
         """
-        
-        return TreePopulation(treatment.apply(self.data))
+        if isinstance(treatment, list):
+            df = self.data.copy()
+            for t in treatment:
+                df = t.apply(df)
+            return TreePopulation(df)
+        else:
+            return TreePopulation(treatment.apply(self.data))
 
 
 class Tree:
@@ -533,7 +540,6 @@ class JenkinsBiomassEquations(BiomassAllometryModel):
     """
 
     def __init__(self, species_code, diameter):
-
         if not _is_valid_spcd(species_code):
             raise ValueError(f"Species code {species_code} is not valid.")
 
