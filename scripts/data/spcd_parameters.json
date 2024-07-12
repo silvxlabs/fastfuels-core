@@ -1,0 +1,1976 @@
+{
+    "989": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "990": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "991": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "992": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.479
+    },
+    "993": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.418
+    },
+    "994": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.336
+    },
+    "995": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "996": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.162
+    },
+    "951": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.67171,
+        "PURVES_TRAIT_SCORE": 0.462
+    },
+    "952": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.67171,
+        "PURVES_TRAIT_SCORE": 0.88
+    },
+    "953": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.67171,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "970": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.286
+    },
+    "971": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.717
+    },
+    "972": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.536
+    },
+    "997": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "901": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.512
+    },
+    "902": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "911": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.907
+    },
+    "919": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "920": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.224
+    },
+    "921": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.639
+    },
+    "922": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.523
+    },
+    "923": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.47675
+    },
+    "927": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.254
+    },
+    "931": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.45
+    },
+    "935": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.556
+    },
+    "936": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "950": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.67171,
+        "PURVES_TRAIT_SCORE": 0.431
+    },
+    "768": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.277
+    },
+    "800": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.745
+    },
+    "801": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77351,
+        "PURVES_TRAIT_SCORE": 0.461
+    },
+    "802": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.76989,
+        "PURVES_TRAIT_SCORE": 0.543
+    },
+    "803": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.477
+    },
+    "804": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.76989,
+        "PURVES_TRAIT_SCORE": 0.518
+    },
+    "805": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77351,
+        "PURVES_TRAIT_SCORE": 0.349
+    },
+    "806": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77993,
+        "PURVES_TRAIT_SCORE": 0.576
+    },
+    "807": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77351,
+        "PURVES_TRAIT_SCORE": 0.453
+    },
+    "808": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.76989,
+        "PURVES_TRAIT_SCORE": 0.78
+    },
+    "680": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.571
+    },
+    "681": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.712
+    },
+    "682": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.613
+    },
+    "691": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84108,
+        "PURVES_TRAIT_SCORE": 0.485
+    },
+    "692": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.235
+    },
+    "693": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84108,
+        "PURVES_TRAIT_SCORE": 0.503
+    },
+    "694": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84108,
+        "PURVES_TRAIT_SCORE": 0.47
+    },
+    "701": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.557
+    },
+    "711": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.475
+    },
+    "712": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.426
+    },
+    "721": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.453
+    },
+    "722": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.82
+    },
+    "571": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.861
+    },
+    "580": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.612
+    },
+    "500": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.526
+    },
+    "501": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.593
+    },
+    "502": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.016
+    },
+    "510": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "521": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.526
+    },
+    "531": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.63243,
+        "PURVES_TRAIT_SCORE": 0.626
+    },
+    "730": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "731": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.578
+    },
+    "740": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.69089,
+        "PURVES_TRAIT_SCORE": 0.675
+    },
+    "741": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.69089,
+        "PURVES_TRAIT_SCORE": 0.345
+    },
+    "742": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.69089,
+        "PURVES_TRAIT_SCORE": 0.599
+    },
+    "743": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.69089,
+        "PURVES_TRAIT_SCORE": 0.424
+    },
+    "744": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.69089,
+        "PURVES_TRAIT_SCORE": 0.959
+    },
+    "745": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.37756,
+        "PURVES_TRAIT_SCORE": 0.358
+    },
+    "746": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.69089,
+        "PURVES_TRAIT_SCORE": 0.404
+    },
+    "747": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.37756,
+        "PURVES_TRAIT_SCORE": 0.392
+    },
+    "748": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.37756,
+        "PURVES_TRAIT_SCORE": 0.47675
+    },
+    "749": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.37756,
+        "PURVES_TRAIT_SCORE": 0.383
+    },
+    "752": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.69089,
+        "PURVES_TRAIT_SCORE": 0.47675
+    },
+    "755": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "756": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.635
+    },
+    "757": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.885
+    },
+    "758": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "760": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.758
+    },
+    "761": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.482
+    },
+    "762": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.52
+    },
+    "763": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.803
+    },
+    "765": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "766": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.772
+    },
+    "660": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.35
+    },
+    "661": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.415
+    },
+    "611": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.74856,
+        "PURVES_TRAIT_SCORE": 0.432
+    },
+    "621": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.85175,
+        "PURVES_TRAIT_SCORE": 0.489
+    },
+    "631": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.365
+    },
+    "641": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.383
+    },
+    "650": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.497
+    },
+    "651": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.519
+    },
+    "652": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.792,
+        "PURVES_TRAIT_SCORE": 0.868
+    },
+    "653": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.454
+    },
+    "654": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.97
+    },
+    "655": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.559
+    },
+    "540": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93622,
+        "PURVES_TRAIT_SCORE": 0.531
+    },
+    "541": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93622,
+        "PURVES_TRAIT_SCORE": 0.551
+    },
+    "542": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.466
+    },
+    "543": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93622,
+        "PURVES_TRAIT_SCORE": 0.374
+    },
+    "544": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93622,
+        "PURVES_TRAIT_SCORE": 0.511
+    },
+    "545": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93622,
+        "PURVES_TRAIT_SCORE": 0.073
+    },
+    "546": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93622,
+        "PURVES_TRAIT_SCORE": 0.532
+    },
+    "547": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "548": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93622,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "551": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.669
+    },
+    "552": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.573
+    },
+    "555": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.577
+    },
+    "111": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.92212,
+        "PURVES_TRAIT_SCORE": 0.406
+    },
+    "112": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.34524
+    },
+    "113": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.314
+    },
+    "114": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.038
+    },
+    "115": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 1.01056,
+        "PURVES_TRAIT_SCORE": 0.426
+    },
+    "116": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.43374,
+        "PURVES_TRAIT_SCORE": 0.292
+    },
+    "117": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.55715,
+        "PURVES_TRAIT_SCORE": 0.365
+    },
+    "118": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.34524
+    },
+    "119": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.57387,
+        "PURVES_TRAIT_SCORE": 0.172
+    },
+    "120": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.34524
+    },
+    "128": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 1.01056,
+        "PURVES_TRAIT_SCORE": 0.483
+    },
+    "129": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.72911,
+        "PURVES_TRAIT_SCORE": 0.417
+    },
+    "130": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 1.01056,
+        "PURVES_TRAIT_SCORE": 0.367
+    },
+    "131": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.76331,
+        "PURVES_TRAIT_SCORE": 0.355
+    },
+    "132": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 1.01056,
+        "PURVES_TRAIT_SCORE": 0.427
+    },
+    "133": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.35166,
+        "PURVES_TRAIT_SCORE": 0.538
+    },
+    "134": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.35166,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "135": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.43374,
+        "PURVES_TRAIT_SCORE": 0.34524
+    },
+    "136": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.63086,
+        "PURVES_TRAIT_SCORE": 0.34524
+    },
+    "137": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.34524
+    },
+    "138": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "42": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.202
+    },
+    "43": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.63086,
+        "PURVES_TRAIT_SCORE": 0.959
+    },
+    "50": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.38705263157894737
+    },
+    "51": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.766
+    },
+    "52": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.38705263157894737
+    },
+    "53": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.38705263157894737
+    },
+    "54": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.813
+    },
+    "55": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.38705263157894737
+    },
+    "93": {
+        "CLASS": 1,
+        "SPGRP": 5,
+        "SAPADJ": 0.44215,
+        "PURVES_TRAIT_SCORE": 0.208
+    },
+    "842": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.522
+    },
+    "843": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.516
+    },
+    "844": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.72243,
+        "PURVES_TRAIT_SCORE": 0.5294901960784314
+    },
+    "845": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.5294901960784314
+    },
+    "846": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "10": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.60817,
+        "PURVES_TRAIT_SCORE": 0.3181333333333333
+    },
+    "11": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.60193,
+        "PURVES_TRAIT_SCORE": 0.264
+    },
+    "12": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.60817,
+        "PURVES_TRAIT_SCORE": 0.278
+    },
+    "14": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.60193,
+        "PURVES_TRAIT_SCORE": 0.3181333333333333
+    },
+    "15": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.60193,
+        "PURVES_TRAIT_SCORE": 0.236
+    },
+    "16": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.63086,
+        "PURVES_TRAIT_SCORE": 0.3181333333333333
+    },
+    "17": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.60193,
+        "PURVES_TRAIT_SCORE": 0.292
+    },
+    "18": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.60193,
+        "PURVES_TRAIT_SCORE": 0.177
+    },
+    "19": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.60193,
+        "PURVES_TRAIT_SCORE": 0.181
+    },
+    "20": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.60193,
+        "PURVES_TRAIT_SCORE": 0.181
+    },
+    "21": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.60193,
+        "PURVES_TRAIT_SCORE": 0.193
+    },
+    "22": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.60193,
+        "PURVES_TRAIT_SCORE": 0.286
+    },
+    "41": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.196
+    },
+    "105": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.6432,
+        "PURVES_TRAIT_SCORE": 0.342
+    },
+    "106": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.35166,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "107": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 1.01056,
+        "PURVES_TRAIT_SCORE": 0.34524
+    },
+    "108": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.88314,
+        "PURVES_TRAIT_SCORE": 0.235
+    },
+    "109": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.248
+    },
+    "110": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.76331,
+        "PURVES_TRAIT_SCORE": 0.407
+    },
+    "121": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.92212,
+        "PURVES_TRAIT_SCORE": 0.462
+    },
+    "122": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.43374,
+        "PURVES_TRAIT_SCORE": 0.314
+    },
+    "123": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 1.01056,
+        "PURVES_TRAIT_SCORE": 0.441
+    },
+    "124": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.34524
+    },
+    "125": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.72911,
+        "PURVES_TRAIT_SCORE": 0.287
+    },
+    "126": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 1.01056,
+        "PURVES_TRAIT_SCORE": 0.485
+    },
+    "127": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.409
+    },
+    "57": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.63086,
+        "PURVES_TRAIT_SCORE": 0.288
+    },
+    "58": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.35166,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "59": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.35166,
+        "PURVES_TRAIT_SCORE": 0.74
+    },
+    "60": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.35166,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "61": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.63086,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "62": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.35166,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "63": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.35166,
+        "PURVES_TRAIT_SCORE": 0.167
+    },
+    "64": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.015
+    },
+    "65": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.35166,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "66": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.35166,
+        "PURVES_TRAIT_SCORE": 0.716
+    },
+    "67": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.63086,
+        "PURVES_TRAIT_SCORE": 0.305
+    },
+    "68": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.63086,
+        "PURVES_TRAIT_SCORE": 0.38
+    },
+    "69": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.35166,
+        "PURVES_TRAIT_SCORE": 0.394
+    },
+    "70": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.63086,
+        "PURVES_TRAIT_SCORE": 0.389
+    },
+    "71": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.63086,
+        "PURVES_TRAIT_SCORE": 0.308
+    },
+    "72": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.225
+    },
+    "73": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.79964,
+        "PURVES_TRAIT_SCORE": 0.344
+    },
+    "81": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.5884,
+        "PURVES_TRAIT_SCORE": 0.24
+    },
+    "90": {
+        "CLASS": 1,
+        "SPGRP": 5,
+        "SAPADJ": 0.60817,
+        "PURVES_TRAIT_SCORE": 0.536
+    },
+    "91": {
+        "CLASS": 1,
+        "SPGRP": 5,
+        "SAPADJ": 0.63086,
+        "PURVES_TRAIT_SCORE": 0.282
+    },
+    "92": {
+        "CLASS": 1,
+        "SPGRP": 5,
+        "SAPADJ": 0.44215,
+        "PURVES_TRAIT_SCORE": 0.2965
+    },
+    "94": {
+        "CLASS": 1,
+        "SPGRP": 5,
+        "SAPADJ": 0.60817,
+        "PURVES_TRAIT_SCORE": 0.278
+    },
+    "95": {
+        "CLASS": 1,
+        "SPGRP": 5,
+        "SAPADJ": 0.60817,
+        "PURVES_TRAIT_SCORE": 0.201
+    },
+    "96": {
+        "CLASS": 1,
+        "SPGRP": 5,
+        "SAPADJ": 0.44215,
+        "PURVES_TRAIT_SCORE": 0.227
+    },
+    "97": {
+        "CLASS": 1,
+        "SPGRP": 5,
+        "SAPADJ": 0.60817,
+        "PURVES_TRAIT_SCORE": 0.324
+    },
+    "98": {
+        "CLASS": 1,
+        "SPGRP": 5,
+        "SAPADJ": 0.46288,
+        "PURVES_TRAIT_SCORE": 0.316
+    },
+    "101": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.29
+    },
+    "102": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.32
+    },
+    "103": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.329
+    },
+    "104": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.34524
+    },
+    "809": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77993,
+        "PURVES_TRAIT_SCORE": 0.508
+    },
+    "810": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.235
+    },
+    "811": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77351,
+        "PURVES_TRAIT_SCORE": 0.5294901960784314
+    },
+    "812": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77993,
+        "PURVES_TRAIT_SCORE": 0.639
+    },
+    "813": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.81068,
+        "PURVES_TRAIT_SCORE": 0.651
+    },
+    "814": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.359
+    },
+    "815": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77351,
+        "PURVES_TRAIT_SCORE": 0.379
+    },
+    "816": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.399
+    },
+    "817": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77993,
+        "PURVES_TRAIT_SCORE": 0.581
+    },
+    "818": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77351,
+        "PURVES_TRAIT_SCORE": 0.457
+    },
+    "837": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77993,
+        "PURVES_TRAIT_SCORE": 0.507
+    },
+    "838": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.72243,
+        "PURVES_TRAIT_SCORE": 0.639
+    },
+    "839": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77351,
+        "PURVES_TRAIT_SCORE": 0.533
+    },
+    "840": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.72243,
+        "PURVES_TRAIT_SCORE": 0.422
+    },
+    "841": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.72243,
+        "PURVES_TRAIT_SCORE": 0.01
+    },
+    "973": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.135
+    },
+    "974": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.457
+    },
+    "975": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.603
+    },
+    "976": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "977": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.571
+    },
+    "981": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.605
+    },
+    "819": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.344
+    },
+    "820": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77993,
+        "PURVES_TRAIT_SCORE": 0.634
+    },
+    "821": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77351,
+        "PURVES_TRAIT_SCORE": 0.455
+    },
+    "822": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.72243,
+        "PURVES_TRAIT_SCORE": 0.428
+    },
+    "823": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.76989,
+        "PURVES_TRAIT_SCORE": 0.489
+    },
+    "824": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77993,
+        "PURVES_TRAIT_SCORE": 0.38
+    },
+    "825": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.76989,
+        "PURVES_TRAIT_SCORE": 0.473
+    },
+    "826": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.76989,
+        "PURVES_TRAIT_SCORE": 0.714
+    },
+    "827": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77993,
+        "PURVES_TRAIT_SCORE": 0.59
+    },
+    "828": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77993,
+        "PURVES_TRAIT_SCORE": 0.038
+    },
+    "829": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.777
+    },
+    "830": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77993,
+        "PURVES_TRAIT_SCORE": 0.45
+    },
+    "831": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.77993,
+        "PURVES_TRAIT_SCORE": 0.579
+    },
+    "832": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.72243,
+        "PURVES_TRAIT_SCORE": 0.509
+    },
+    "833": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.81068,
+        "PURVES_TRAIT_SCORE": 0.538
+    },
+    "834": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.81068,
+        "PURVES_TRAIT_SCORE": 0.964
+    },
+    "835": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.72243,
+        "PURVES_TRAIT_SCORE": 0.526
+    },
+    "836": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.72243,
+        "PURVES_TRAIT_SCORE": 0.312
+    },
+    "409": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.74366,
+        "PURVES_TRAIT_SCORE": 0.599
+    },
+    "410": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.74366,
+        "PURVES_TRAIT_SCORE": 0.128
+    },
+    "421": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.457
+    },
+    "422": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "601": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.506
+    },
+    "602": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.8722,
+        "PURVES_TRAIT_SCORE": 0.653
+    },
+    "603": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "604": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "605": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "462": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.599
+    },
+    "463": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "471": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.698
+    },
+    "475": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.222
+    },
+    "481": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.445
+    },
+    "491": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.624
+    },
+    "492": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.981
+    },
+    "423": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "431": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.551
+    },
+    "450": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.721
+    },
+    "451": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.461
+    },
+    "452": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.373
+    },
+    "460": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.507
+    },
+    "461": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.67
+    },
+    "330": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "331": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.446
+    },
+    "332": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.907
+    },
+    "333": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.372
+    },
+    "334": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "341": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.588
+    },
+    "345": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "351": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.74995,
+        "PURVES_TRAIT_SCORE": 0.437
+    },
+    "352": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.446
+    },
+    "355": {
+        "CLASS": 0,
+        "SPGRP": 6,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.566
+    },
+    "356": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.534
+    },
+    "361": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.357
+    },
+    "591": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.462
+    },
+    "600": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.435
+    },
+    "322": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.135
+    },
+    "323": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84103,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "367": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.381
+    },
+    "370": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.499
+    },
+    "371": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.78859,
+        "PURVES_TRAIT_SCORE": 0.592
+    },
+    "372": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.93185,
+        "PURVES_TRAIT_SCORE": 0.571
+    },
+    "373": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.605
+    },
+    "374": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.5418125
+    },
+    "375": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.435
+    },
+    "376": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.275
+    },
+    "378": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.5418125
+    },
+    "379": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.371
+    },
+    "381": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.499
+    },
+    "391": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.719
+    },
+    "400": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.74366,
+        "PURVES_TRAIT_SCORE": 0.561
+    },
+    "401": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.74366,
+        "PURVES_TRAIT_SCORE": 0.955
+    },
+    "402": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.74366,
+        "PURVES_TRAIT_SCORE": 0.577
+    },
+    "403": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.74366,
+        "PURVES_TRAIT_SCORE": 0.564
+    },
+    "404": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.74366,
+        "PURVES_TRAIT_SCORE": 0.715
+    },
+    "405": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.74366,
+        "PURVES_TRAIT_SCORE": 0.486
+    },
+    "406": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.74366,
+        "PURVES_TRAIT_SCORE": 0.5294901960784314
+    },
+    "407": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.74366,
+        "PURVES_TRAIT_SCORE": 0.486
+    },
+    "408": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.74366,
+        "PURVES_TRAIT_SCORE": 0.686
+    },
+    "139": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.34524
+    },
+    "140": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.35166,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "142": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.34524
+    },
+    "143": {
+        "CLASS": 1,
+        "SPGRP": 10,
+        "SAPADJ": 0.35166,
+        "PURVES_TRAIT_SCORE": 0.5049333333333333
+    },
+    "201": {
+        "CLASS": 1,
+        "SPGRP": 2,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.335
+    },
+    "202": {
+        "CLASS": 1,
+        "SPGRP": 2,
+        "SAPADJ": 0.52566,
+        "PURVES_TRAIT_SCORE": 0.335
+    },
+    "211": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.40997,
+        "PURVES_TRAIT_SCORE": 0.355
+    },
+    "212": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.38705263157894737
+    },
+    "221": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.95175,
+        "PURVES_TRAIT_SCORE": 0.361
+    },
+    "222": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.95175,
+        "PURVES_TRAIT_SCORE": 0.623
+    },
+    "231": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.803
+    },
+    "241": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.63086,
+        "PURVES_TRAIT_SCORE": 0.251
+    },
+    "242": {
+        "CLASS": 1,
+        "SPGRP": 1,
+        "SAPADJ": 0.7049,
+        "PURVES_TRAIT_SCORE": 0.334
+    },
+    "251": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.445
+    },
+    "252": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.63086,
+        "PURVES_TRAIT_SCORE": 0.3181333333333333
+    },
+    "260": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.62759,
+        "PURVES_TRAIT_SCORE": 0.426
+    },
+    "261": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.62759,
+        "PURVES_TRAIT_SCORE": 0.464
+    },
+    "262": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.62759,
+        "PURVES_TRAIT_SCORE": 0.3181333333333333
+    },
+    "263": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.67063,
+        "PURVES_TRAIT_SCORE": 0.337
+    },
+    "264": {
+        "CLASS": 1,
+        "SPGRP": 3,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.209
+    },
+    "299": {
+        "CLASS": 1,
+        "SPGRP": 4,
+        "SAPADJ": 0.45789,
+        "PURVES_TRAIT_SCORE": 0.34524
+    },
+    "300": {
+        "CLASS": 0,
+        "SPGRP": 8,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.5302307692307692
+    },
+    "310": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.84103,
+        "PURVES_TRAIT_SCORE": 0.406
+    },
+    "311": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.84103,
+        "PURVES_TRAIT_SCORE": 0.639
+    },
+    "312": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.96395,
+        "PURVES_TRAIT_SCORE": 0.493
+    },
+    "313": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.79248,
+        "PURVES_TRAIT_SCORE": 0.646
+    },
+    "314": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.84103,
+        "PURVES_TRAIT_SCORE": 0.966
+    },
+    "315": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.674
+    },
+    "316": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.7443,
+        "PURVES_TRAIT_SCORE": 0.536
+    },
+    "317": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.7443,
+        "PURVES_TRAIT_SCORE": 0.486
+    },
+    "318": {
+        "CLASS": 0,
+        "SPGRP": 9,
+        "SAPADJ": 0.84103,
+        "PURVES_TRAIT_SCORE": 0.56
+    },
+    "319": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.84031,
+        "PURVES_TRAIT_SCORE": 0.841
+    },
+    "320": {
+        "CLASS": 0,
+        "SPGRP": 7,
+        "SAPADJ": 0.84103,
+        "PURVES_TRAIT_SCORE": 0.6
+    },
+    "321": {
+        "CLASS": 0,
+        "SPGRP": 10,
+        "SAPADJ": 0.65075,
+        "PURVES_TRAIT_SCORE": 0.778
+    }
+}
