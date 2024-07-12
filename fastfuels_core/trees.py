@@ -232,7 +232,7 @@ class Tree:
         crown_ratio: float,
         x=0,
         y=0,
-        crown_profile_model_type="beta",
+        crown_profile_model_type="purves",
         biomass_allometry_model_type="NSVB",
     ):
         # TODO: Species code needs to be valid
@@ -251,9 +251,9 @@ class Tree:
         self.x = x
         self.y = y
 
-        if crown_profile_model_type not in ["beta"]:
+        if crown_profile_model_type not in ["beta", "purves"]:
             raise ValueError(
-                "The crown profile model must be one of the following: 'beta'"
+                "The crown profile model must be one of the following: 'beta' or 'purves'"
             )
         self._crown_profile_model_type = crown_profile_model_type
 
@@ -298,6 +298,10 @@ class Tree:
         if self._crown_profile_model_type == "beta":
             return BetaCrownProfile(
                 self.species_code, self.crown_base_height, self.crown_length
+            )
+        elif self._crown_profile_model_type == "purves":
+            return PurvesCrownProfile(
+                self.species_code, self.diameter, self.height, self.crown_ratio
             )
 
     @property
@@ -468,6 +472,125 @@ class BetaCrownProfile(CrownProfileModel):
             return result  # Return as an array
 
 
+import numpy as np
+
+
+class PurvesCrownProfile(CrownProfileModel):
+    """
+    Purves Crown Profile Model.
+
+    This class computes the crown profile for a given tree based on the Purves et al. (2007) model.
+    It uses species-specific parameters to calculate the crown radius at different heights; parameters
+    can be found in fastfuels_core/data/spcd_parameters.json.
+
+    Parameters
+    ----------
+    species_code : int
+        The species code of the tree.
+    dbh : float
+        Diameter at breast height (cm).
+    height : float
+        Total height of the tree (m).
+    crown_ratio : float
+        Ratio of the crown length to the total height of the tree.
+
+    Attributes
+    ----------
+    height : float
+        Total height of the tree (m).
+    crown_ratio : float
+        Ratio of the crown length to the total height of the tree.
+    crown_base_height : float
+        Height at which the crown starts (m).
+    max_crown_radius : float
+        Maximum radius of the crown (m).
+    shape_parameter : float
+        Shape parameter for the crown profile.
+
+    Methods
+    -------
+    get_radius_at_height(height)
+        Computes the crown radius at a given height.
+    get_max_radius()
+        Returns the maximum crown radius.
+    """
+
+    # See Purves et al. (2007) Table S2 in Supporting Information
+    C0_R0 = 0.503
+    C1_R0 = 3.126
+    C0_R40 = 0.5
+    C1_R40 = 10.0
+    C0_B = 0.196
+    C1_B = 0.511
+
+    def __init__(
+        self, species_code: int, dbh: float, height: float, crown_ratio: float
+    ):
+        """
+        Initializes the PurvesCrownProfile model with the given parameters.
+
+        Parameters
+        ----------
+        species_code : int
+            The species code of the tree.
+        dbh : float
+            Diameter at breast height (cm).
+        height : float
+            Total height of the tree (m).
+        crown_ratio : float
+            Ratio of the crown length to the total height of the tree.
+        """
+        self.height = height
+        self.crown_ratio = crown_ratio
+        self.crown_base_height = height - height * crown_ratio
+
+        trait_score = SPCD_PARAMS[str(species_code)]["PURVES_TRAIT_SCORE"]
+
+        # Compute maximum crown radius
+        r0j = (1 - trait_score) * self.C0_R0 + trait_score * self.C1_R0
+        r40j = (1 - trait_score) * self.C0_R40 + trait_score * self.C1_R40
+        self.max_crown_radius = r0j + (r40j - r0j) * (dbh / 40.0)
+
+        # Compute crown shape parameter
+        self.shape_parameter = (1 - trait_score) * self.C0_B + trait_score * self.C1_B
+
+    def get_radius_at_height(self, height: float | np.ndarray) -> float | np.ndarray:
+        """
+        Computes the crown radius at a given height.
+
+        Parameters
+        ----------
+        height : float or np.ndarray
+            Height(s) at which to compute the crown radius (m).
+
+        Returns
+        -------
+        float or np.ndarray
+            Crown radius (m) at the given height(s). Returns a float if input height is a scalar,
+            otherwise returns a numpy array.
+        """
+        height = np.asarray(height)
+        radius = np.where(
+            height < self.crown_base_height,
+            0.0,
+            self.max_crown_radius
+            * (np.minimum((self.height - height) / self.height, 0.95) / 0.95)
+            ** self.shape_parameter,
+        )
+        return radius if radius.size > 1 else radius.item()
+
+    def get_max_radius(self) -> float | np.ndarray:
+        """
+        Returns the maximum crown radius.
+
+        Returns
+        -------
+        float or np.ndarray
+            Maximum crown radius (m).
+        """
+        return self.get_radius_at_height(self.crown_base_height)
+
+
 class BiomassAllometryModel(ABC):
     """
     Abstract base class representing a tree biomass allometry model.
@@ -614,3 +737,34 @@ def _is_valid_spcd(spcd: int) -> bool:
 
 def _is_valid_diameter(diameter: float) -> bool:
     return diameter > 0
+
+
+if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+
+    # Create subplots for different crown ratios
+    crown_ratios = [0.2, 0.4, 0.6, 0.8]
+    fig, axes = plt.subplots(1, len(crown_ratios), figsize=(20, 10), sharey=True)
+
+    for ax, crown_ratio in zip(axes, crown_ratios):
+        tree_beta = Tree(
+            814, 1, 15.0, 5.0, crown_ratio, 0, 0, crown_profile_model_type="beta"
+        )
+        tree_purves = Tree(
+            814, 1, 15.0, 5.0, crown_ratio, 0, 0, crown_profile_model_type="purves"
+        )
+
+        heights = np.linspace(0, tree_beta.height, 100)
+        beta_p = tree_beta.get_crown_radius_at_height(heights)
+        purves_p = tree_purves.get_crown_radius_at_height(heights)
+
+        ax.plot(beta_p, heights, "-r", label="Beta Crown Profile")
+        ax.plot(purves_p, heights, "-k", label="Purves Crown Profile")
+        ax.set_xlabel("Crown Radius (m)")
+        ax.set_title(f"Crown Ratio = {crown_ratio}")
+        ax.set_aspect("equal")
+        ax.legend()
+
+    axes[0].set_ylabel("Height (m)")
+    plt.gca().set_aspect("equal", adjustable="box")
+    plt.show()
