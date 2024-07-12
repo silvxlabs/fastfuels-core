@@ -472,9 +472,6 @@ class BetaCrownProfile(CrownProfileModel):
             return result  # Return as an array
 
 
-import numpy as np
-
-
 class PurvesCrownProfile(CrownProfileModel):
     """
     Purves Crown Profile Model.
