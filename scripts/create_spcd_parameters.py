@@ -21,7 +21,7 @@ data_dir = "./data"
 purves_fname = "purves_s3.csv"
 ref_species_fname = "REF_SPECIES.csv"
 output_dir = "../fastfuels_core/data"
-output_fname = "spcd_parameters_test.json"
+output_fname = "spcd_parameters.json"
 
 # Initialize colorama
 init(autoreset=True)
