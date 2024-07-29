@@ -1,17 +1,18 @@
 # Core imports
 from __future__ import annotations
-from enum import StrEnum
+from enum import Enum
 from typing import Protocol
 
 # External imports
 import numpy as np
 from pandas import DataFrame
 
-class ThinningDirection(StrEnum):
+
+class ThinningDirection(str, Enum):
     """
     Enumeration of thinning directions. Thinning from below is the same as low
     thinning and thinning from above is the same as crown thinning.
-    
+
     Attributes
     ----------
     BELOW : str
@@ -19,20 +20,23 @@ class ThinningDirection(StrEnum):
     ABOVE : str
         Thinning from above (crown thinning).
     """
-    BELOW = "below"
-    ABOVE = "above"
+
+    BELOW: str = "below"
+    ABOVE: str = "above"
+
 
 class TreatmentProtocol(Protocol):
     """
     Protocol for all treatment implementations.
-    
+
     Methods
     -------
     apply(trees: DataFrame) -> DataFrame
         Apply the treatment to the DataFrame of trees.
     """
-    def apply(self, trees: DataFrame) -> DataFrame:
-        ...
+
+    def apply(self, trees: DataFrame) -> DataFrame: ...
+
 
 class DirectionalThinToDiameterLimit:
     """
@@ -50,7 +54,10 @@ class DirectionalThinToDiameterLimit:
     apply(trees: DataFrame, dia_column_name: str = "DIA") -> DataFrame
         Apply the diameter limit thinning to the DataFrame of trees.
     """
-    def __init__(self, limit: float, direction: ThinningDirection = ThinningDirection.BELOW) -> None:
+
+    def __init__(
+        self, limit: float, direction: ThinningDirection = ThinningDirection.BELOW
+    ) -> None:
         self.limit = limit
         self.direction = direction
 
@@ -88,6 +95,7 @@ class DirectionalThinToDiameterLimit:
 
         return df
 
+
 class DirectionalThinToStandBasalArea:
     """
     Thinning treatment to limit the stand basal area.
@@ -104,7 +112,10 @@ class DirectionalThinToStandBasalArea:
     apply(trees: DataFrame, dia_column_name: str = "DIA") -> DataFrame
         Apply the basal area limit thinning to the DataFrame of trees.
     """
-    def __init__(self, target: float, direction: ThinningDirection = ThinningDirection.BELOW) -> None:
+
+    def __init__(
+        self, target: float, direction: ThinningDirection = ThinningDirection.BELOW
+    ) -> None:
         self.target = target
         self.direction = direction
 
@@ -166,6 +177,7 @@ class ProportionalThinToBasalArea:
     apply(trees: DataFrame, dia_column_name: str = "DIA") -> DataFrame
         Apply the proportional thinning to reach the target basal area.
     """
+
     def __init__(self, target: float) -> None:
         self.target = target
 
@@ -205,7 +217,9 @@ class ProportionalThinToBasalArea:
         df = df[~df["remove"]]
 
         if df["BA"].sum() > self.target:
-            raise ValueError("Resulting basal area is still above the target after proportional thinning.")
+            raise ValueError(
+                "Resulting basal area is still above the target after proportional thinning."
+            )
 
         assert isinstance(df, DataFrame), "Resulting object is not a DataFrame"
 

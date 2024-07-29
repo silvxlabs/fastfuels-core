@@ -236,7 +236,7 @@ class Tree:
         biomass_allometry_model_type="NSVB",
     ):
         # TODO: Species code needs to be valid
-        self.species_code = species_code
+        self.species_code = int(species_code)
 
         # TODO: Status code needs to be valid
         self.status_code = status_code
@@ -258,6 +258,8 @@ class Tree:
         self._crown_profile_model_type = crown_profile_model_type
 
         available_biomass_allometry_models = ["NSVB", "jenkins"]
+        if biomass_allometry_model_type == "NSVB" and self.species_group == 10:
+            biomass_allometry_model_type = "jenkins"
         if biomass_allometry_model_type not in available_biomass_allometry_models:
             raise ValueError(
                 f"Selected biomass allometry model: {biomass_allometry_model_type}. The biomass allometry model must be one of the following: {available_biomass_allometry_models}"
@@ -729,7 +731,7 @@ class JenkinsBiomassEquations(BiomassAllometryModel):
 
 
 def _is_valid_spcd(spcd: int) -> bool:
-    return str(spcd) in SPCD_PARAMS
+    return str(int(spcd)) in SPCD_PARAMS
 
 
 def _is_valid_diameter(diameter: float) -> bool:
