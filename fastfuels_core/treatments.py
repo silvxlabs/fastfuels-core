@@ -1,5 +1,6 @@
 # Core imports
 from __future__ import annotations
+import warnings
 from enum import Enum
 from typing import Protocol
 
@@ -216,9 +217,12 @@ class ProportionalThinToBasalArea:
         df["remove"] = np.random.rand(len(df)) < proportion_to_remove
         df = df[~df["remove"]]
 
-        if df["BA"].sum() > self.target:
-            raise ValueError(
-                "Resulting basal area is still above the target after proportional thinning."
+        result_ba = df["BA"].sum()
+        if result_ba > self.target:
+            warnings.warn(
+                f"Resulting basal area ({result_ba:.4f}) is still above the target ({self.target:.4f}) "
+                f"after proportional thinning. Difference: {result_ba - self.target:.4f}",
+                RuntimeWarning,
             )
 
         assert isinstance(df, DataFrame), "Resulting object is not a DataFrame"
