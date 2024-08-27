@@ -2,6 +2,7 @@
 Point process module for expanding trees to a region of interest (ROI) and
 generating random tree locations based on a specified point process.
 """
+
 # Core imports
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ class InhomogeneousPoissonProcess:
         trees: DataFrame,
         plots: GeoDataFrame,
         intensity_resolution: int = 15,
+        intensity_interpolation_method: str = "linear",
         seed: int = None,
     ) -> GeoDataFrame:
         """
@@ -31,7 +33,12 @@ class InhomogeneousPoissonProcess:
         self._set_seed(seed)
         grid_x, grid_y = self._create_structured_coords_grid(roi, intensity_resolution)
         tree_density_grid = self._interpolate_tree_density_to_grid(
-            trees, plots, grid_x, grid_y, intensity_resolution
+            trees,
+            plots,
+            grid_x,
+            grid_y,
+            intensity_resolution,
+            intensity_interpolation_method,
         )
         plot_id_grid = self._interpolate_plot_id_to_grid(trees, plots, grid_x, grid_y)
         tree_count_grid = self._generate_tree_counts(tree_density_grid)
@@ -65,7 +72,13 @@ class InhomogeneousPoissonProcess:
         return xx, yy
 
     def _interpolate_tree_density_to_grid(
-        self, trees, plots, grid_x, grid_y, cell_resolution
+        self,
+        trees,
+        plots,
+        grid_x,
+        grid_y,
+        cell_resolution,
+        interpolation_method="linear",
     ) -> ndarray:
         """
         Interpolates tree density to a structured grid of cells. Tree density
@@ -75,7 +88,11 @@ class InhomogeneousPoissonProcess:
         plots_with_data_col = self._calculate_all_plots_tree_density(plots, trees)
         data_to_interpolate = plots_with_data_col["TPA"] * (cell_resolution**2)
         interpolated_plot_data = self._interpolate_data_to_grid(
-            plots_with_data_col, data_to_interpolate, grid_x, grid_y, "linear"
+            plots_with_data_col,
+            data_to_interpolate,
+            grid_x,
+            grid_y,
+            interpolation_method,
         )
         return interpolated_plot_data
 
