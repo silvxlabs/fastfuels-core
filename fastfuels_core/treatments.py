@@ -1,5 +1,6 @@
 # Core imports
 from __future__ import annotations
+import warnings
 from enum import Enum
 from typing import Protocol
 
@@ -45,7 +46,7 @@ class DirectionalThinToDiameterLimit:
     Parameters
     ----------
     limit : float
-        Diameter limit for thinning.
+        Diameter limit for thinning, in centimeters (cm).
     direction : ThinningDirection
         Direction of thinning, either 'below' or 'above'. By default, 'below'.
 
@@ -71,6 +72,7 @@ class DirectionalThinToDiameterLimit:
             DataFrame containing tree data.
         dia_column_name : str, optional
             Name of the diameter column in the DataFrame, by default "DIA".
+            The diameter values should be in centimeters (cm).
 
         Returns
         -------
@@ -103,7 +105,7 @@ class DirectionalThinToStandBasalArea:
     Parameters
     ----------
     target : float
-        Target basal area for thinning.
+        Target basal area for thinning, in square meters (m²).
     direction : ThinningDirection
         Direction of thinning, either 'below' or 'above'. By default, 'below'.
 
@@ -129,6 +131,7 @@ class DirectionalThinToStandBasalArea:
             DataFrame containing tree data.
         dia_column_name : str, optional
             Name of the diameter column in the DataFrame, by default "DIA".
+            The diameter values should be in centimeters (cm).
 
         Returns
         -------
@@ -142,7 +145,7 @@ class DirectionalThinToStandBasalArea:
         """
         df = trees.copy()
 
-        # Calculate basal area for each tree
+        # Calculate basal area for each tree in square meters
         df["BA"] = df[dia_column_name] ** 2 * (np.pi / 40_000)
 
         if df["BA"].sum() <= self.target:
@@ -170,7 +173,7 @@ class ProportionalThinToBasalArea:
     Parameters
     ----------
     target : float
-        Target basal area for thinning.
+        Target basal area for thinning, in square meters (m²).
 
     Methods
     -------
@@ -191,20 +194,21 @@ class ProportionalThinToBasalArea:
             DataFrame containing tree data.
         dia_column_name : str, optional
             Name of the diameter column in the DataFrame, by default "DIA".
+            The diameter values should be in centimeters (cm).
 
         Returns
         -------
         DataFrame
             DataFrame after applying the proportional thinning to the target basal area.
 
-        Raises
-        ------
-        ValueError
+        Warns
+        -----
+        RuntimeWarning
             If the resulting basal area is still above the target after thinning.
         """
         df = trees.copy()
 
-        # Calculate basal area for each tree
+        # Calculate basal area for each tree in square meters
         df["BA"] = df[dia_column_name] ** 2 * (np.pi / 40_000)
 
         total_basal_area = df["BA"].sum()
@@ -216,9 +220,12 @@ class ProportionalThinToBasalArea:
         df["remove"] = np.random.rand(len(df)) < proportion_to_remove
         df = df[~df["remove"]]
 
-        if df["BA"].sum() > self.target:
-            raise ValueError(
-                "Resulting basal area is still above the target after proportional thinning."
+        result_ba = df["BA"].sum()
+        if result_ba > self.target:
+            warnings.warn(
+                f"Resulting basal area ({result_ba:.4f} m²) is still above the target ({self.target:.4f} m²) "
+                f"after proportional thinning. Difference: {result_ba - self.target:.4f} m²",
+                RuntimeWarning,
             )
 
         assert isinstance(df, DataFrame), "Resulting object is not a DataFrame"
