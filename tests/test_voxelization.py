@@ -1,4 +1,5 @@
 # Core imports
+import math
 import random
 from pathlib import Path
 
@@ -141,8 +142,8 @@ class TestGetVerticalTreeCoords:
         result = _get_vertical_tree_coords(step, tree_height, crown_base_height)
         assert isinstance(result, np.ndarray)
         assert len(result) == 6
-        assert result[0] == crown_base_height + step / 2
-        assert result[-1] == 5.5
+        assert result[0] == crown_base_height
+        assert result[-1] == tree_height
 
     def test_fractional_height(self):
         step = 1
@@ -150,9 +151,9 @@ class TestGetVerticalTreeCoords:
         crown_base_height = 5
         result = _get_vertical_tree_coords(step, tree_height, crown_base_height)
         assert isinstance(result, np.ndarray)
-        assert len(result) == 6
-        assert result[0] == crown_base_height + step / 2
-        assert result[-1] == 10.5
+        assert len(result) == 7
+        assert result[0] == crown_base_height
+        assert result[-1] == math.ceil(tree_height)
 
     def test_zero_height(self):
         step = 1
@@ -161,7 +162,7 @@ class TestGetVerticalTreeCoords:
         result = _get_vertical_tree_coords(step, tree_height, crown_base_height)
         assert isinstance(result, np.ndarray)
         assert len(result) == 1
-        assert result[0] == 0.5
+        assert result[0] == tree_height
 
     def test_negative_height(self):
         step = 1
@@ -178,8 +179,8 @@ class TestGetVerticalTreeCoords:
         result = _get_vertical_tree_coords(step, tree_height, crown_base_height)
         assert isinstance(result, np.ndarray)
         assert len(result) == 11
-        assert result[0] == crown_base_height + step / 2
-        assert np.allclose(result[-1], 5.25)
+        assert result[0] == crown_base_height
+        assert result[-1] == tree_height
 
     def test_fine_step(self):
         step = 0.1
@@ -188,8 +189,8 @@ class TestGetVerticalTreeCoords:
         result = _get_vertical_tree_coords(step, tree_height, crown_base_height)
         assert isinstance(result, np.ndarray)
         assert len(result) == 52
-        assert result[0] == crown_base_height + step / 2
-        assert np.allclose(result[-1], 10.15)
+        assert result[0] == crown_base_height
+        assert np.allclose(result[-1], tree_height)
 
     def test_zero_step(self):
         step = 0
@@ -197,6 +198,16 @@ class TestGetVerticalTreeCoords:
         crown_base_height = 0
         with pytest.raises(ZeroDivisionError):
             _get_vertical_tree_coords(step, tree_height, crown_base_height)
+
+    def test_fractional_cbh(self):
+        step = 1
+        tree_height = 20.3643
+        crown_base_height = 5.891270987
+        result = _get_vertical_tree_coords(step, tree_height, crown_base_height)
+        assert isinstance(result, np.ndarray)
+        assert len(result) == 16
+        assert result[0] == crown_base_height
+        assert result[-1] == 20.891270987
 
 
 class TestResampleCoordsGridToSubgrid:

@@ -171,10 +171,10 @@ class TestJenkinsBiomassEquations:
         model = JenkinsBiomassEquations(species_code=122, diameter=24)
         assert model._species_group == 4
         assert model._is_softwood == 1
-        assert model._sapling_adjustment == 0.43373999999999996
+        assert np.isclose(model._sapling_adjustment, 0.43373999999999996)
 
         # Test with a different species code
-        model = JenkinsBiomassEquations(species_code=896, diameter=100)
+        model = JenkinsBiomassEquations(species_code=989, diameter=100)
         assert model._species_group == 8
         assert model._is_softwood == 0
         assert model._sapling_adjustment == 0.84031
@@ -236,7 +236,7 @@ class TestNSVBEquations:
         model = NSVBEquations(species_code=122, diameter=24, height=20)
 
         # Test with a different species code
-        model = NSVBEquations(species_code=896, diameter=100, height=20)
+        model = NSVBEquations(species_code=989, diameter=100, height=20)
 
         # Test with an invalid species code
         with pytest.raises(ValueError):
