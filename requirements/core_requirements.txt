@@ -1,12 +1,10 @@
 dask
 geopandas
-matplotlib
 nsvb
-numpy<2
+numpy>=2
 pandas
 pandera
 psycopg2-binary
-pyvista
 rasterio
 scipy
 shapely>=2
