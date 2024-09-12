@@ -1,3 +1,5 @@
+import json
+import urllib.request
 from setuptools import find_packages, setup
 
 
@@ -14,12 +16,12 @@ def get_requirements(fname):
 
 def get_version():
     """Get the version number."""
-    # url = "https://api.github.com/repos/silvxlabs/fastfuels-core/releases/latest"
-    # response = requests.get(url)
-    # response.raise_for_status()
-    # version = response.json()["tag_name"]
-    # return version[1:]  # Remove the leading "v" from the version number
-    return "0.0.0"
+    with urllib.request.urlopen(
+        "https://api.github.com/repos/silvxlabs/fastfuels-core/releases/latest"
+    ) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    version = data["tag_name"]
+    return version[1:]  # Remove the leading "v" from the version number
 
 
 NAME = "fastfuels-core"
@@ -29,7 +31,10 @@ VERSION = get_version()
 LICENSE = "MIT"
 URL = "https://github.com/silvxlabs/fastfuels-core"
 PROJECT_URLS = {"Bug Tracker": f"{URL}/issues"}
-INSTALL_REQUIRES = get_requirements("requirements/package_requirements.txt")
+INSTALL_REQUIRES = get_requirements("requirements/core_requirements.txt")
+EXTRAS_REQUIRE = {
+    "plotting": get_requirements("requirements/plotting_requirements.txt")
+}
 
 setup(
     name=NAME,
@@ -57,5 +62,6 @@ setup(
     package_data={"fastfuels_core": ["data/*"]},
     include_package_data=True,
     install_requires=INSTALL_REQUIRES,
+    extras_require=EXTRAS_REQUIRE,
     python_requires=">=3.9",
 )
