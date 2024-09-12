@@ -4,7 +4,6 @@ Tests for the InhomogeneousPoissonProcess class.
 
 # Core imports
 from pathlib import Path
-from time import time
 
 # Internal imports
 from fastfuels_core.point_process import InhomogeneousPoissonProcess
@@ -37,7 +36,7 @@ class TestGenerateTreeLocations:
         plots_gdf = plots_gdf.to_crs(plots_gdf.estimate_utm_crs())
 
         point_process = InhomogeneousPoissonProcess()
-        trees = point_process.simulate(roi_gdf, trees_df, plots_gdf)
+        point_process.simulate(roi_gdf, trees_df, plots_gdf)
 
 
 class TestGetStructuredCoordsGrid:

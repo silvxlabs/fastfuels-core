@@ -233,10 +233,10 @@ class TestJenkinsBiomassEquations:
 class TestNSVBEquations:
     def test_init(self):
         # Test that the class can be initialized
-        model = NSVBEquations(species_code=122, diameter=24, height=20)
+        NSVBEquations(species_code=122, diameter=24, height=20)
 
         # Test with a different species code
-        model = NSVBEquations(species_code=989, diameter=100, height=20)
+        NSVBEquations(species_code=989, diameter=100, height=20)
 
         # Test with an invalid species code
         with pytest.raises(ValueError):
