@@ -26,6 +26,7 @@ output_fname = "spcd_parameters.json"
 # Initialize colorama
 init(autoreset=True)
 
+
 # Helper function to extract the trait score from the poorly formatted table s3
 # in the Purves et al data supplement.
 def extract_first_value(score):
@@ -35,7 +36,11 @@ def extract_first_value(score):
 
 # Main function
 def main():
-    print(Fore.YELLOW + "\n🔥 FastFuels Core Data Processing Script 🔥\n" + Style.RESET_ALL)
+    print(
+        Fore.YELLOW
+        + "\n🔥 FastFuels Core Data Processing Script 🔥\n"
+        + Style.RESET_ALL
+    )
 
     try:
         # Read source data files

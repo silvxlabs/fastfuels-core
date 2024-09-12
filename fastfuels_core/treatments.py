@@ -36,7 +36,8 @@ class TreatmentProtocol(Protocol):
         Apply the treatment to the DataFrame of trees.
     """
 
-    def apply(self, trees: DataFrame) -> DataFrame: ...
+    def apply(self, trees: DataFrame) -> DataFrame:
+        pass
 
 
 class DirectionalThinToDiameterLimit:
