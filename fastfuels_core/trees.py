@@ -576,6 +576,7 @@ class PurvesCrownProfile(CrownProfileModel):
             * (np.minimum((self.height - height) / self.height, 0.95) / 0.95)
             ** self.shape_parameter,
         )
+        radius = np.nan_to_num(radius, nan=0.0)
         return radius if radius.size > 1 else radius.item()
 
     def get_max_radius(self) -> float | np.ndarray:
