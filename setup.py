@@ -31,11 +31,30 @@ VERSION = get_version()
 LICENSE = "MIT"
 URL = "https://github.com/silvxlabs/fastfuels-core"
 PROJECT_URLS = {"Bug Tracker": f"{URL}/issues"}
-INSTALL_REQUIRES = get_requirements("requirements/core_requirements.txt")
-EXTRAS_REQUIRE = {
-    "plotting": get_requirements("requirements/plotting_requirements.txt")
-}
+INSTALL_REQUIRES = [
+    "dask",
+    "dask-expr",
+    "fastparquet",
+    "geopandas",
+    "nsvb",
+    "numpy>=2",
+    "pandas",
+    "pandera",
+    "rasterio",
+    "scipy",
+    "shapely>=2",
+]
 
+EXTRAS_REQUIRE = {
+    "plotting": [
+        "matplotlib",
+        "pyvista",
+    ],
+    "test": [
+        "pytest",
+        "matplotlib",
+    ],
+}
 setup(
     name=NAME,
     version=VERSION,

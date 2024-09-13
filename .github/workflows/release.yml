@@ -30,8 +30,8 @@ jobs:
         TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
       run: twine upload --repository testpypi dist/*
 
-
   test-on-test-pypi:
+    name: Test on Test PyPi
     needs: upload-to-test-pypi
     runs-on: ubuntu-latest
     strategy:
@@ -44,17 +44,15 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install package from Test PyPI
+      - name: Install package from Test PyPI with test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple fastfuels-core
-      - name: Install test dependencies
-        run: |
-          pip install -r requirements/test_requirements.txt
+          pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple fastfuels-core[test]
       - name: Run pytest
         run: pytest
 
   upload-to-pypi:
+    name: Upload to PyPi
     needs: test-on-test-pypi
     runs-on: ubuntu-latest
     steps:
@@ -77,6 +75,7 @@ jobs:
         twine upload dist/*
 
   test-on-pypi:
+    name: Test on PyPi
     needs: upload-to-pypi
     runs-on: ubuntu-latest
     strategy:
@@ -89,12 +88,9 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install package from PyPI
+      - name: Install package from PyPI with test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install fastfuels-core
-      - name: Install test dependencies
-        run: |
-          pip install -r requirements/test_requirements.txt
+          pip install fastfuels-core[test]
       - name: Run pytest
         run: pytest
