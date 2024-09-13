@@ -33,6 +33,8 @@ URL = "https://github.com/silvxlabs/fastfuels-core"
 PROJECT_URLS = {"Bug Tracker": f"{URL}/issues"}
 INSTALL_REQUIRES = [
     "dask",
+    "dask-expr",
+    "fastparquet",
     "geopandas",
     "nsvb",
     "numpy>=2",
