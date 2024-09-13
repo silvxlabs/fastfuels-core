@@ -4,8 +4,8 @@ import random
 from pathlib import Path
 
 # Internal imports
+from tests.utils import make_random_tree
 from fastfuels_core.trees import Tree
-from utils import make_random_tree
 from fastfuels_core.voxelization import (
     _get_horizontal_tree_coords,
     _get_vertical_tree_coords,

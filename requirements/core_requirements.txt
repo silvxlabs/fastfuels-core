@@ -1,4 +1,6 @@
 dask
+dask-expr
+fastparquet
 geopandas
 nsvb
 numpy>=2
