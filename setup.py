@@ -43,6 +43,7 @@ INSTALL_REQUIRES = [
     "rasterio",
     "scipy",
     "shapely>=2",
+    "xarray",
 ]
 
 EXTRAS_REQUIRE = {
