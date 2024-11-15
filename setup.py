@@ -34,15 +34,18 @@ PROJECT_URLS = {"Bug Tracker": f"{URL}/issues"}
 INSTALL_REQUIRES = [
     "dask",
     "dask-expr",
+    "dask-image",
     "fastparquet",
     "geopandas",
     "nsvb",
+    "numba",
     "numpy>=2",
     "pandas",
     "pandera",
     "rasterio",
     "scipy",
     "shapely>=2",
+    "xarray",
 ]
 
 EXTRAS_REQUIRE = {
