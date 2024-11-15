@@ -55,21 +55,21 @@ class TestPurvesCrownProfile:
 
     #tests individual trees and determines which test to run based on tree height and crown ratio
     def test_tree(self, tree, test_input):
-        if test_input > tree.height:                        #above tree
-            self.test_grah_rad_0(tree, test_input)
+        if test_input > tree.height:                                        #above tree
+            self.test_get_radius_at_height_rad_0(tree, test_input)
         elif test_input < (tree.height - tree.height * tree.crown_ratio):   #below crown
-            self.test_grah_rad_0(tree, test_input)
+            self.test_get_radius_at_height_rad_0(tree, test_input)
         else:
-            self.test_grah_rad_not_0(tree, test_input)
+            self.test_get_radius_at_height_rad_not_0(tree, test_input)
             self.test_get_max_radius(tree, test_input)
 
 
     # test where radius should be 0
-    def test_grah_rad_0(self, model, test_input):
+    def test_get_radius_at_height_rad_0(self, model, test_input):
         assert model.get_radius_at_height(test_input) == 0
 
     # test where radius should not be 0
-    def test_grah_rad_not_0(self, model, test_input):
+    def test_get_radius_at_height_rad_not_0(self, model, test_input):
         assert model.get_radius_at_height(test_input) > 0
 
     # test that max radius is greater than or equal to any given point on tree
