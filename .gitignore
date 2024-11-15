@@ -166,3 +166,7 @@ cython_debug/
 
 # Testing
 /tests/figs/
+
+
+#remove idea files
+.idea/
