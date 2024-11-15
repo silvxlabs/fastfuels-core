@@ -1,10 +1,15 @@
+# Core imports
 import json
-from numpy.typing import NDArray
-import numpy as np
-from numba import vectorize, float64
-from fastfuels_core.trees import TreePopulation
 import importlib.resources
+
+# Internal imports
+from fastfuels_core.trees import TreePopulation
+
+# External imports
+import numpy as np
 from scipy.special import beta
+from numba import vectorize, float64
+from numpy.typing import NDArray
 
 
 def add_crown_profile_params(

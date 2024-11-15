@@ -1,18 +1,23 @@
+# Core imports
+from math import ceil
 from typing import Optional
-from fastfuels_core.trees import TreePopulation
-from xarray import DataArray
-import numpy as np
-from numpy.typing import NDArray
-from numba import njit
 import numpy.random as random
-import dask.array as da
-from dask_image.ndfilters import uniform_filter
+
+# Internal imports
+from fastfuels_core.trees import TreePopulation
 from fastfuels_core.crown_profiles import (
     get_purves_radius,
     get_beta_radius,
     add_crown_profile_params,
 )
-from math import ceil
+
+# External imports
+import numpy as np
+from numba import njit
+import dask.array as da
+from xarray import DataArray
+from numpy.typing import NDArray
+from dask_image.ndfilters import uniform_filter
 
 
 class DiscSampler:
