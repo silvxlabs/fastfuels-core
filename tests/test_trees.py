@@ -4,11 +4,13 @@ from pathlib import Path
 # Internal imports
 from fastfuels_core.trees import (
     Tree,
-    BetaCrownProfile,
+    #BetaCrownProfile,
     JenkinsBiomassEquations,
     NSVBEquations,
     SPCD_PARAMS,
 )
+
+from fastfuels_core.crown_profile_models.beta import BetaCrownProfile
 
 # External imports
 import pytest
