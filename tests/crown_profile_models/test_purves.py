@@ -50,8 +50,8 @@ class TestPurvesCrownProfile:
 
     #tests all trees in the species code list
     def test_all_trees(self, purves_tree_list, test_input):
-        for tree in purves_tree_list:
-            self.test_tree(tree, test_input)
+        vtest_all = np.vectorize(self.test_tree)
+        vtest_all(purves_tree_list, test_input)
 
     #tests individual trees and determines which test to run based on tree height and crown ratio
     def test_tree(self, tree, test_input):
