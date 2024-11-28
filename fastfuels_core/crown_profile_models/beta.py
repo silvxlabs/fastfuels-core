@@ -100,3 +100,78 @@ class BetaCrownProfile(CrownProfileModel):
             return result.item()  # Return as a scalar
         else:
             return result  # Return as an array
+
+def get_beta_radius(z, height, crown_base, a, b, c, beta):
+    """
+    Get radius at an array of z heights using the beta crown profile model.
+
+    Parameters
+    ----------
+    z : NDArray
+        Array of z coordinates of float64 type.
+    height : float
+        Tree height in meters.
+    crown_base : float
+        Crown base in meters.
+    a : float
+        Beta distribution parameter.
+    b : float
+        Beta distribution parameter.
+    c : float
+        Beta distribution parameter.
+    beta : float
+        Beta distribution parameter.
+
+    Returns
+    -------
+    r : NDarray
+        Radius of tree evaluated at z heights.
+    """
+
+    if z < crown_base:
+        return 0.0
+    if z > height:
+        return 0.0
+
+    # Normalize
+    crown_length = height - crown_base
+    z = (z - crown_base) / crown_length
+
+    r = (c * z ** (a - 1) * (1 - z) ** (b - 1)) / beta
+    r = r * crown_length
+    return r
+
+
+def get_beta_max_crown_radius(height, crown_base, a, b, c, beta):
+    """
+    Gets the maximum radius of a tree for the beta crown profile model.
+
+    Parameters
+    ----------
+    height : NDArray
+        Array of tree heights in meters.
+    crown_base : NDArray
+        Array of crown base heights in meters.
+    crown_base : NDArray
+        Crown base heights in meters.
+    a : NDArray
+        Array of beta distribution parameters.
+    b : NDArray
+        Array of beta distribution parameters.
+    c : NDArray
+        Array of beta distribution parameters.
+    beta : NDArray
+        Array of beta distribution parameters.
+
+    Returns
+    -------
+    r_max : NDarray
+        Maximum radius of each tree in meters.
+    """
+
+    # Normalized height of max radius
+    z_max = (a - 1) / (a + b - 2)
+    # Un-normalized height of max radius
+    z_max = crown_base + z_max * (height - crown_base)
+    r_max = get_beta_radius(z_max, height, crown_base, a, b, c, beta)
+    return r_max

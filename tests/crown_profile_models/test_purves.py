@@ -2,9 +2,10 @@
 from pathlib import Path
 
 from dask.dataframe.partitionquantiles import tree_width
-
+import numpy as np
 from tests.utils import make_tree_list
 from fastfuels_core.crown_profile_models.purves import  PurvesCrownProfile
+from fastfuels_core.crown_profile_models.purves import _get_purves_max_crown_radius
 
 # External imports
 import pytest
@@ -23,12 +24,13 @@ def purves_tree_list():
             dbh=t.diameter,
             crown_ratio=t.crown_ratio)
         tree_list.append(tree)
+
     return tree_list
 
 
 #a test sample model we could use
 @pytest.fixture
-def model():
+def _model():
     # Suppose that I have a tree with a height of 10m, dbh of 15cm, and crown ratio of 0.4
     return PurvesCrownProfile(
         species_code = 122, height = 10, dbh = 15, crown_ratio = 0.4
@@ -62,6 +64,15 @@ class TestPurvesCrownProfile:
         else:
             self.test_get_radius_at_height_rad_not_0(tree, test_input)
             self.test_get_max_radius(tree, test_input)
+        #test outside functionality
+        #assert tree.get_max_radius() == get_purves_max_crown_radius(tree.species_code, tree.dbh)
+
+    def test_radius_functions(self, purves_tree_list, test_input):
+
+        for i, t in enumerate(purves_tree_list):
+            #test scalar values
+            assert t.get_max_radius() <= _get_purves_max_crown_radius(t.species_code, t.dbh)
+
 
 
     # test where radius should be 0
