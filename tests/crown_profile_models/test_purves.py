@@ -5,7 +5,6 @@ from dask.dataframe.partitionquantiles import tree_width
 import numpy as np
 from tests.utils import make_tree_list
 from fastfuels_core.crown_profile_models.purves import  PurvesCrownProfile
-from fastfuels_core.crown_profile_models.purves import _get_purves_max_crown_radius
 
 # External imports
 import pytest
@@ -27,6 +26,9 @@ def purves_tree_list():
 
     return tree_list
 
+@pytest.fixture()
+def vector_input():
+    return np.array([0,1,2,3,4,5,6,7,8,9,10,15,20,25,30,35,40,45,50,55,60,61,-1])
 
 #a test sample model we could use
 @pytest.fixture
@@ -64,14 +66,33 @@ class TestPurvesCrownProfile:
         else:
             self.test_get_radius_at_height_rad_not_0(tree, test_input)
             self.test_get_max_radius(tree, test_input)
-        #test outside functionality
-        #assert tree.get_max_radius() == get_purves_max_crown_radius(tree.species_code, tree.dbh)
+
 
     def test_radius_functions(self, purves_tree_list, test_input):
 
         for i, t in enumerate(purves_tree_list):
             #test scalar values
-            assert t.get_max_radius() <= _get_purves_max_crown_radius(t.species_code, t.dbh)
+            assert t.get_max_radius() <= t._get_purves_max_crown_radius(str(t.species_code), t.dbh)
+
+
+    def test_vector_scalar_returns(self, purves_tree_list, test_input, vector_input):
+        """
+        This test proves that when the crown_profile model objects are passed vectors, they return vectors
+        vice versa for scalar
+
+        """
+        for tree in purves_tree_list:
+            scalar_return = tree.get_radius_at_height(test_input)                        #test when we pass scalar we get scalar
+            self.test_result_and_expected(type(scalar_return), type(0.0), test_input)
+            print(type(scalar_return))
+
+            vector_return = tree.get_radius_at_height(vector_input)                      #test when we pass vector we get vector
+            self.test_result_and_expected(type(vector_return), type(np.array(0)), test_input)
+            print(type(vector_return))
+
+    #generic definition to make sure the result equals expected
+    def test_result_and_expected(self, result, expected, test_input):
+        assert result == expected
 
 
 

@@ -2,6 +2,7 @@
 from pathlib import Path
 
 from dask.dataframe.partitionquantiles import tree_width
+from numpy.lib.tests.test_format import scalar
 
 from tests.utils import make_tree_list
 from fastfuels_core.crown_profile_models.beta import  BetaCrownProfile
@@ -41,6 +42,9 @@ def beta_tree_list():
         tree_list.append(tree)
     return tree_list
 
+@pytest.fixture()
+def vector_input():
+    return np.array([0,1,2,3,4,5,6,7,8,9,10,15,20,25,30,35,40,45,50,55,60,61])
 
 #parameters that test edge cases as well as cases within tree
 @pytest.mark.parametrize("test_input", [0,61,-1,1,5,10,11,12,13,14,15,16,17,18,19,20,25,30,35,40,45,50,55,60])
@@ -76,6 +80,26 @@ class TestBetaCrownProfile:
     def test_get_max_radius(self, model, test_input):
         assert model.get_max_radius() >= model.get_radius_at_height(test_input)
 
+    def test_get_normalized_radius_types(self, beta_tree_list, test_input, vector_input):
+        """
+
+        Parameters
+        ----------
+        beta_tree_list
+        test_input
+        vector_input
+
+        Returns
+        -------
+        tests that we get scalars when we pass scalars
+        vectors when we pass vectors
+        """
+        for tree in beta_tree_list:
+            scalar_height = tree._get_normalized_height(test_input)
+            assert type(tree._get_radius_at_normalized_height(scalar_height)) == type(0.0) #check that scalar input returns float
+
+            vector_height = tree._get_normalized_height(vector_input)
+            assert type(tree._get_radius_at_normalized_height(vector_height)) == type(np.array(0)) #check that vector input returns NDArray
 
 
 
