@@ -108,3 +108,27 @@ class TestPurvesCrownProfile:
     def test_get_max_radius(self, model, test_input):
         assert model.get_max_radius() >= model.get_radius_at_height(test_input)
 
+class TestGetMaxRadius:
+    def test_individual_tree(self):
+        purves_model = PurvesCrownProfile(122, 25, 10, 0.7)
+        max_crown_radius = purves_model.get_max_radius()
+        assert isinstance(max_crown_radius, float)
+
+    # TODO: Make me pass
+    def test_tree_vector(self):
+        import pandas as pd
+        species_vector = np.array([122, 122, 124, 125])
+        dbh_vector = np.array([25, 50, 75, 45])
+        height_vector = np.array([10, 15, 20, 25])
+        crown_ratio_vector = np.array([0.7, 0.6, 0.5, 0.4])
+        tree_population_dict = {
+            "species_code": species_vector,
+            "dbh": dbh_vector,
+            "height": height_vector,
+            "crown_ratio": crown_ratio_vector
+        }
+        tree_population_df = pd.DataFrame(tree_population_dict)
+        purves_model = PurvesCrownProfile(species_vector, dbh_vector, height_vector, crown_ratio_vector)
+        max_crown_radius = purves_model.get_max_radius()
+        assert isinstance(max_crown_radius, np.ndarray)
+        assert len(max_crown_radius) == 4
