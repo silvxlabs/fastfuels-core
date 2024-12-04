@@ -88,10 +88,10 @@ class PurvesCrownProfile(CrownProfileModel):
         trait_score = vectorized_trait_score_lookup(species_code)
 
         # Compute maximum crown radius
-        self.max_crown_radius = self._get_purves_max_crown_radius(str(species_code), dbh)
+        self.max_crown_radius = self._get_purves_max_crown_radius(species_code, dbh)
 
         # Compute crown shape parameter
-        self.shape_parameter = self._get_purves_shape_param(str(species_code))
+        self.shape_parameter = self._get_purves_shape_param(species_code)
 
 
 
