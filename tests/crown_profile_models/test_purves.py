@@ -108,27 +108,114 @@ class TestPurvesCrownProfile:
     def test_get_max_radius(self, model, test_input):
         assert model.get_max_radius() >= model.get_radius_at_height(test_input)
 
+
+vector_length = 100_000
+
+
+@pytest.fixture(scope="module")
+def tree_list():
+    return [make_random_tree() for _ in range(vector_length)]
+
+
+@pytest.fixture(scope="module")
+def dbh_vector(tree_list):
+    return np.array([t.diameter for t in tree_list])
+
+
+@pytest.fixture(scope="module")
+def height_vector(tree_list):
+    return np.array([t.height for t in tree_list])
+
+
+@pytest.fixture(scope="module")
+def crown_ratio_vector(tree_list):
+    return np.array([t.crown_ratio for t in tree_list])
+
+
+@pytest.fixture(scope="module")
+def spcd_vector(tree_list):
+    return np.array([t.species_code for t in tree_list])
+
+
 class TestGetMaxRadius:
-    def test_individual_tree(self):
-        purves_model = PurvesCrownProfile(122, 25, 10, 0.7)
+
+    @pytest.mark.parametrize("spcd", LIST_SPCDS)
+    def test_individual_tree(self, spcd):
+        """
+        Tests the individual tree's crown profile using the species code `spcd`. The
+        method generates a random tree based on the species code and evaluates the
+        maximum crown radius using the Purves crown profile model. It verifies that
+        the calculated maximum crown radius meets expected criteria:
+        - The value should be a float (scalar)
+        - The value should be greater than 0
+        - The value should be less than or equal to the maximum possible crown radius for a tree with Canopy Ratio of 1
+        """
+        tree = make_random_tree(species_code=spcd)
+        purves_model = PurvesCrownProfile(
+            species_code=tree.species_code,
+            dbh=tree.diameter,
+            height=tree.height,
+            crown_ratio=tree.crown_ratio,
+        )
         max_crown_radius = purves_model.get_max_radius()
+
+        # Value should be a float (scalar)
         assert isinstance(max_crown_radius, float)
 
-    # TODO: Make me pass
-    def test_tree_vector(self):
-        import pandas as pd
-        species_vector = np.array([122, 122, 124, 125])
-        dbh_vector = np.array([25, 50, 75, 45])
-        height_vector = np.array([10, 15, 20, 25])
-        crown_ratio_vector = np.array([0.7, 0.6, 0.5, 0.4])
-        tree_population_dict = {
-            "species_code": species_vector,
-            "dbh": dbh_vector,
-            "height": height_vector,
-            "crown_ratio": crown_ratio_vector
-        }
-        tree_population_df = pd.DataFrame(tree_population_dict)
-        purves_model = PurvesCrownProfile(species_vector, dbh_vector, height_vector, crown_ratio_vector)
+        # Value should be greater than 0
+        assert max_crown_radius > 0.0
+
+        # Value should be less than or equal to the maximum possible crown radius for a tree with Canopy Ratio of 1
+        assert max_crown_radius <= purves_model._get_purves_max_crown_radius(
+            tree.species_code, tree.diameter
+        )
+
+    @pytest.mark.parametrize("library", ["numpy", "pandas"])
+    def test_tree_vector_numpy(
+        self,
+        library,
+        tree_list,
+        dbh_vector,
+        height_vector,
+        crown_ratio_vector,
+        spcd_vector,
+    ):
+        """
+        Tests the tree vector functionality using the specified library,
+        either "numpy" or "pandas". The test creates a `PurvesCrownProfile`
+        model based on the provided tree attributes and checks the resulting
+        maximum crown radius. The test ensures that the maximum crown radius
+        is calculated correctly and conforms to expected constraints.
+        """
+        if library == "numpy":
+            purves_model = PurvesCrownProfile(
+                spcd_vector, dbh_vector, height_vector, crown_ratio_vector
+            )
+        elif library == "pandas":
+            import pandas as pd
+
+            tree_population_dict = {
+                "species_code": spcd_vector,
+                "dbh": dbh_vector,
+                "height": height_vector,
+                "crown_ratio": crown_ratio_vector,
+            }
+            tree_population_df = pd.DataFrame(tree_population_dict)
+            purves_model = PurvesCrownProfile(
+                tree_population_df["species_code"],
+                tree_population_df["dbh"],
+                tree_population_df["height"],
+                tree_population_df["crown_ratio"],
+            )
+        else:
+            raise ValueError(f"Unknown library: {library}")
+
         max_crown_radius = purves_model.get_max_radius()
+
         assert isinstance(max_crown_radius, np.ndarray)
-        assert len(max_crown_radius) == 4
+        assert len(max_crown_radius) == vector_length
+        assert np.all(max_crown_radius > 0.0)
+        assert np.all(
+            max_crown_radius
+            <= purves_model._get_purves_max_crown_radius(spcd_vector, dbh_vector)
+        )
