@@ -94,8 +94,19 @@ class PurvesCrownProfile(CrownProfileModel):
         self.shape_parameter = self._get_purves_shape_param(species_code)
 
 
-
     def get_radius_at_height(self, height: float | np.ndarray) -> float | np.ndarray:
+        if height.size > 1:
+            radius = np.empty((self.crown_base_height.size,height.size))
+            for h in height:
+                r = self._get_radius_at_height(h)
+                radius = np.append(radius,r)
+                #radius = np.concatenate((radius, r))
+            #radius = np.ndarray(radius_list)
+        else:
+            radius = self._get_radius_at_height(height)
+        return radius
+
+    def _get_radius_at_height(self, height: float | np.ndarray) -> float | np.ndarray:
         """
         Computes the crown radius at a given height.
 
@@ -111,6 +122,7 @@ class PurvesCrownProfile(CrownProfileModel):
             otherwise returns a numpy array.
         """
         height = np.asarray(height)
+
         radius = np.where(
             height < self.crown_base_height,
             0.0,
@@ -119,7 +131,12 @@ class PurvesCrownProfile(CrownProfileModel):
             ** self.shape_parameter,
         )
         radius = np.nan_to_num(radius, nan=0.0)
+
         return radius if radius.size > 1 else radius.item()
+
+
+
+
 
     def get_max_radius(self) -> float | np.ndarray:
         """
