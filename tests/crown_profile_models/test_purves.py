@@ -330,7 +330,7 @@ class TestGetRadiusAtHeight:
         assert np.all(scalar_crown_radius >= 0.0)
         assert np.all(
             scalar_crown_radius
-            <= purves_model._get_purves_max_crown_radius(spcd_vector, dbh_vector)
+            <= np.atleast_2d(purves_model._get_purves_max_crown_radius(spcd_vector, dbh_vector)).T
         )
         # Test vector test input
         vector_crown_radius = purves_model.get_radius_at_height(vector_test_input)
@@ -340,5 +340,5 @@ class TestGetRadiusAtHeight:
         assert np.all(vector_crown_radius >= 0.0)
         assert np.all(
             vector_crown_radius
-            <= purves_model._get_purves_max_crown_radius(spcd_vector, dbh_vector)
+            <= np.atleast_2d(purves_model._get_purves_max_crown_radius(spcd_vector, dbh_vector)).T
         )

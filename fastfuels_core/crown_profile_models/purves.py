@@ -77,35 +77,35 @@ class PurvesCrownProfile(CrownProfileModel):
             Total height of the tree (m).
         crown_ratio : float
             Ratio of the crown length to the total height of the tree.
+
+        Storing all variables as a [x,1] array allows versatile calculations no matter what the data type
         """
-        self.height = height
-        self.crown_ratio = crown_ratio
-        self.crown_base_height = height - height * crown_ratio
-        self.species_code = species_code
-        self.dbh = dbh
+        self.height = np.atleast_2d(height).T
+        self.crown_ratio = np.atleast_2d(crown_ratio).T
+        self.crown_base_height = np.atleast_2d(height - height * crown_ratio).T
+        self.species_code = np.atleast_2d(species_code).T
+        self.dbh = np.atleast_2d(dbh).T
 
         #lookup trait score
         trait_score = vectorized_trait_score_lookup(species_code)
 
         # Compute maximum crown radius
-        self.max_crown_radius = self._get_purves_max_crown_radius(species_code, dbh)
+        self.max_crown_radius = np.atleast_2d(self._get_purves_max_crown_radius(species_code, dbh)).T
 
         # Compute crown shape parameter
-        self.shape_parameter = self._get_purves_shape_param(species_code)
+        self.shape_parameter = np.atleast_2d(self._get_purves_shape_param(species_code)).T
 
 
     def get_radius_at_height(self, height: float | np.ndarray) -> float | np.ndarray:
+        """
         if height.size > 1:
-            radius = np.empty((self.crown_base_height.size,height.size))
-            for h in height:
-                r = self._get_radius_at_height(h)
-                radius = np.append(radius,r)
-                #radius = np.concatenate((radius, r))
-            #radius = np.ndarray(radius_list)
+            height = np.atleast_2d(height).T
+            radius = self._get_radius_at_height(height)
         else:
             radius = self._get_radius_at_height(height)
         return radius
-
+        """
+        return self._get_radius_at_height(height)
     def _get_radius_at_height(self, height: float | np.ndarray) -> float | np.ndarray:
         """
         Computes the crown radius at a given height.
