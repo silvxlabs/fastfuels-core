@@ -21,6 +21,7 @@ C1_R40 = 10.0
 C0_B = 0.196
 C1_B = 0.511
 
+
 class PurvesCrownProfile(CrownProfileModel):
     """
     Purves Crown Profile Model.
@@ -48,7 +49,7 @@ class PurvesCrownProfile(CrownProfileModel):
         Ratio of the crown length to the total height of the tree.
     crown_base_height : float
         Height at which the crown starts (m).
-    max_crown_radius : float
+    purves_max_crown_radius : float
         Maximum radius of the crown (m).
     shape_parameter : float
         Shape parameter for the crown profile.
@@ -80,35 +81,28 @@ class PurvesCrownProfile(CrownProfileModel):
 
         Storing all variables as a [x,1] array allows versatile calculations no matter what the data type
         """
+        # TODO: Document why we want things as a 2D array
         self.height = np.atleast_2d(height).T
         self.crown_ratio = np.atleast_2d(crown_ratio).T
         self.crown_base_height = np.atleast_2d(height - height * crown_ratio).T
         self.species_code = np.atleast_2d(species_code).T
         self.dbh = np.atleast_2d(dbh).T
 
-        #lookup trait score
-        trait_score = vectorized_trait_score_lookup(species_code)
-
         # Compute maximum crown radius
-        self.max_crown_radius = np.atleast_2d(self._get_purves_max_crown_radius(species_code, dbh)).T
+        self.purves_max_crown_radius = np.atleast_2d(
+            self._get_purves_max_crown_radius(species_code, dbh)
+        ).T
 
         # Compute crown shape parameter
-        self.shape_parameter = np.atleast_2d(self._get_purves_shape_param(species_code)).T
-
+        self.shape_parameter = np.atleast_2d(
+            self._get_purves_shape_param(species_code)
+        ).T
 
     def get_radius_at_height(self, height: float | np.ndarray) -> float | np.ndarray:
         """
-        if height.size > 1:
-            height = np.atleast_2d(height).T
-            radius = self._get_radius_at_height(height)
-        else:
-            radius = self._get_radius_at_height(height)
-        return radius
-        """
-        return self._get_radius_at_height(height)
-    def _get_radius_at_height(self, height: float | np.ndarray) -> float | np.ndarray:
-        """
         Computes the crown radius at a given height.
+
+        # TODO: Because we're doing funky stuff with array sizing need to be clearn about expected inputs and outputs.
 
         Parameters
         ----------
@@ -120,23 +114,20 @@ class PurvesCrownProfile(CrownProfileModel):
         float or np.ndarray
             Crown radius (m) at the given height(s). Returns a float if input height is a scalar,
             otherwise returns a numpy array.
+            # TODO: Clarify return data type or shape if array
         """
         height = np.asarray(height)
 
         radius = np.where(
             height < self.crown_base_height,
             0.0,
-            self.max_crown_radius
+            self.purves_max_crown_radius
             * (np.minimum((self.height - height) / self.height, 0.95) / 0.95)
             ** self.shape_parameter,
         )
         radius = np.nan_to_num(radius, nan=0.0)
 
         return radius if radius.size > 1 else radius.item()
-
-
-
-
 
     def get_max_radius(self) -> float | np.ndarray:
         """
@@ -148,7 +139,6 @@ class PurvesCrownProfile(CrownProfileModel):
             Maximum crown radius (m).
         """
         return self.get_radius_at_height(self.crown_base_height)
-
 
     def _get_purves_shape_param(self, species_code: str | NDArray):
         """
@@ -169,7 +159,9 @@ class PurvesCrownProfile(CrownProfileModel):
         shape_parameter = (1.0 - trait_score) * C0_B + trait_score * C1_B
         return shape_parameter
 
-    def _get_purves_radius(self, z, height, crown_base, max_crown_radius, shape_parameter):
+    def _get_purves_radius(
+        self, z, height, crown_base, max_crown_radius, shape_parameter
+    ):
         """
         Get radius at an array of z heights using the Purves crown profile model.
 
@@ -199,7 +191,9 @@ class PurvesCrownProfile(CrownProfileModel):
 
         return max_crown_radius * ((height - z) / height) ** shape_parameter
 
-    def _get_purves_max_crown_radius(self, species_code: str | NDArray, dbh: float | NDArray):
+    def _get_purves_max_crown_radius(
+        self, species_code: str | NDArray, dbh: float | NDArray
+    ):
         """
         Gets the maximum radius of a tree for the Purves crown profile model.
 
@@ -222,8 +216,10 @@ class PurvesCrownProfile(CrownProfileModel):
         max_crown_radius = r0j + (r40j - r0j) * (dbh / 40.0)
         return max_crown_radius
 
-#useful function to look up trait scores. The function is vectorized for convenience.
+
+# useful function to look up trait scores. The function is vectorized for convenience.
 def _trait_score_lookup(species_code: str | NDArray):
     return SPCD_PARAMS[str(species_code)]["PURVES_TRAIT_SCORE"]
+
 
 vectorized_trait_score_lookup = np.vectorize(_trait_score_lookup)
