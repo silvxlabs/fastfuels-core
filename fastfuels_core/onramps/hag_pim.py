@@ -3,7 +3,6 @@ This module contains functions for sampling tree imputation maps based on height
 """
 
 #Internal imports
-from treemap import TreeMapConnection
 
 #Extrernal inports
 import numpy as np
@@ -45,7 +44,7 @@ def onramp(pim_raster,
 
     pim_resampled = resample_raster(pim_raster, desired_res)
 
-    hag_cover = convert to cover(hag_raster, min_hag)
+    hag_cover = convert_to_cover(hag_raster, min_hag, desired_res)
     
     hag_resampled = resample_raster(hag_cover, desired_res)
 
@@ -65,7 +64,7 @@ def check_same_crs(pim_raster, hag_raster):
                 "The plot imputation map and height above ground raster do not have the same CRS."
             )
 
-def check_porjected_crs(pim_raster):
+def check_projected_crs(pim_raster):
     if not pim_raster.rio.crs.is_projected:
         raise ValueError(
                 "The plot imputation map and height above ground raster do not have a projected CRS."
@@ -79,7 +78,6 @@ def check_resolution(pim_raster, hag_raster):
         raise ValueError(
                 f"The resolution of the plot imputation map, {pim_res} is finer than the resolution of the height above ground, {hag_res}."
             )
-
 
 
 def resample_hag(raster, desired_res, min_hag):
@@ -131,15 +129,19 @@ def resample_raster(raster, desired_res):
     new_shape = old_shape*res_scale
     new_shape = (int(new_shape[0]),
                  int(new_shape[1]))
+    if res[0] < desired_res:
+        resample = Resampling.sum
+    else:
+        resample = Resampling.nearest
     raster_resampled = raster.rio.reproject(
         raster.rio.crs,
         transform=new_transform,
         shape=new_shape,
-        resampling=Resampling.sum
+        resampling=resample
     )
     raster_resampled = raster_resampled.fillna(0)
     raster_resampled.rio.write_nodata(0, inplace=True)
-    return resampled_raster
+    return raster_resampled
 
 
 def interpolate_hag(hag_raster, pim_raster):
@@ -159,8 +161,11 @@ def interpolate_pim(pim_raster):
         plot imputation raster with all cells filled with data
         - values were determined using nearest neighbor
     '''
-    return pim_raster.rio.interpolate_na(
+    pim_interp = pim_raster.rio.interpolate_na(
         method='nearest')
+    pim_interp.rio.write_crs(pim_raster.rio.crs, inplace=True)
+    pim_interp.rio.write_nodata(pim_raster.rio.nodata, inplace=True)
+    return pim_interp
 
 def combine_hag_pim(hag_raster, pim_raster, threshold):
     '''
