@@ -15,79 +15,18 @@ from fastfuels_core.onramps.hag_pim import (
     create_gdf
 )
 
-def create_toy_data(bounds,pim_res, hag_res, 
-                    pim_crs, hag_crs, nodata_value):
-
-    x_min, x_max, y_min, y_max = bounds
-   
-    # Create toy tree imputation raster
-    width = int((x_max - x_min) / abs(pim_res[0]))
-    height = int((y_max - y_min) / abs(pim_res[1]))
-    transform = from_origin(x_min, y_max, pim_res[0], -pim_res[1])
-    data = np.arange(0,height).reshape(height, 1)*np.ones((1, width))
-    data[:,::2] = 0
-    toy_pim = xr.DataArray(
-        data,
-        dims=["y", "x"],
-        coords={
-            "x": np.linspace(x_min + pim_res[0]/2, 
-                             x_max - pim_res[0]/2, width),
-            "y": np.linspace(y_min - pim_res[1]/2, 
-                             y_max + pim_res[1]/2, height),
-        },
-        name="toy_pim_data")
-    toy_pim = toy_pim.rio.write_crs(pim_crs)
-    toy_pim = toy_pim.rio.write_transform(transform)
-    toy_pim.rio.write_nodata(nodata_value, inplace=True)
-    
-    # Create toy height above ground raster
-    width = int((x_max - x_min) / hag_res[0])
-    height = int((y_max - y_min) / abs(hag_res[1]))
-    transform = from_origin(x_min, y_max, hag_res[0], abs(hag_res[1]))
-    data = np.zeros((height,width), dtype=int)
-    block_height = height // 3  # Divide into 3 rows of blocks
-    block_width = width // 6   # Divide into 6 columns of blocks
-    block_values = np.arange(1,10)
-    block_idx = 0
-    for i in range(3):  # Three rows of blocks
-        for j in range(6):  # Six columns of blocks    
-            start_row = i * block_height
-            end_row = (i + 1) * block_height
-            start_col = j * block_width
-            end_col = (j + 1) * block_width
-            if (i%2 == 0 and j%2 == 0) or (i%2 != 0 and j%2 != 0):
-                data[start_row:end_row, start_col:end_col] = 0
-            else:
-                data[start_row:end_row, 
-                start_col:end_col] = block_values[block_idx]
-                block_idx += 1
-    toy_hag = xr.DataArray(
-        data,
-        dims=["y", "x"],
-        coords={
-            "x": np.linspace(x_min, 
-                             x_max, width),
-            "y": np.linspace(y_min, 
-                             y_max, height),
-        },
-        name="toy_hag_data")
-    toy_hag = toy_hag.rio.write_crs(hag_crs)
-    toy_hag = toy_hag.rio.write_transform(transform)
-    toy_hag.rio.write_nodata(nodata_value, inplace=True)
-
-    return toy_pim, toy_hag
-
-
-def create_toy_raster(bounds = (-10,0,0,10),
+def create_toy_raster(bounds = (-12,0,0,8),
                       crs="EPSG:5070",
                       nodata_value = 0,
-                      res = (1,-1)):
+                      res = (1,-1),
+                      data = None):
     x_min, x_max, y_min, y_max = bounds
    
     width = int((x_max - x_min) / abs(res[0]))
     height = int((y_max - y_min) / abs(res[1]))
     transform = from_origin(x_min, y_max, abs(res[0]), abs(res[1]))
-    data = np.ones((height, width))
+    if data is None:
+        data = np.ones((height, width))
     toy_raster = xr.DataArray(
         data,
         dims=["y", "x"],
@@ -95,7 +34,7 @@ def create_toy_raster(bounds = (-10,0,0,10),
             "x": np.linspace(x_min + res[0]/2, 
                              x_max - res[0]/2, width),
             "y": np.linspace(y_min - res[1]/2, 
-                             y_max + res[1]/2, height),
+                             y_max + res[1]/2, height)[::-1],
         },
         name="toy_data")
     toy_raster = toy_raster.rio.write_crs(crs)
@@ -104,55 +43,180 @@ def create_toy_raster(bounds = (-10,0,0,10),
     return toy_raster
 
 @pytest.fixture
-def toy_4326():
-    return create_toy_raster(crs='EPSG:4326')
+def hag_4326():
+    data = np.array([
+        [0, 0, 0, 1, 1, 0],
+        [0, 0, 0, 0, 0, 1],
+        [0, 1, 1, 1, 1, 1],
+        [0, 1, 0, 1, 1, 1]
+    ])
+    return create_toy_raster(bounds=(-6,0,0,4),
+                             crs='EPSG:4326',
+                             res = (1,-1),
+                             data = data)
 
 @pytest.fixture
-def toy_5070():
-    return create_toy_raster(crs='EPSG:5070')
+def pim_5070():
+    bounds = (-12,0,0,8)
+    data = np.array([
+        [0,1,0,1,0,1],
+        [0,2,0,2,0,2],
+        [0,3,0,3,0,3],
+        [0,4,0,4,0,4]
+    ])
+    return create_toy_raster(bounds=bounds,
+                             data=data,
+                             res=(2,-2))
 
-def test_check_same_crs_matching(toy_5070):
+@pytest.fixture
+def hag_5070():
+    data = np.arange(24).reshape((4,6))
+    return create_toy_raster(bounds = (-12.5,-0.5,0.5,8.5),
+                             res=(2,-2), 
+                             data=data)
+
+def test_check_same_crs_matching(hag_5070, pim_5070):
     try:
-        check_same_crs(toy_5070, toy_5070)
+        check_same_crs(hag_5070, pim_5070)
     except ValueError:
         pytest.fail("check_same_crs raised ValueError for matching CRS.")
 
-def test_check_same_crs_mismatching(toy_4326, toy_5070):
+def test_check_same_crs_mismatching(hag_4326, hag_5070):
     with pytest.raises(ValueError, match="do not have the same CRS"):
-        check_same_crs(toy_4326, toy_5070)
+        check_same_crs(hag_4326, hag_5070)
 
 
-def test_check_projected_crs_true(toy_5070):
-    try:
-        check_projected_crs(toy_5070)
+def test_check_projected_crs_true(pim_5070):
+    try:   
+        check_projected_crs(pim_5070)
     except ValueError:
-        pytest.fail("check_prpjected_crs raised ValueError for raster with a projected CRS.")
+        pytest.fail("check_projected_crs raised ValueError for raster with a projected CRS.")
 
-def test_check_projected_crs_false(toy_4326):
+def test_check_projected_crs_false(hag_4326):
     with pytest.raises(ValueError, match="do not have a projected CRS"):
-        check_projected_crs(toy_4326)   
+        check_projected_crs(hag_4326)   
 
+def test_check_resolution_true(pim_5070, hag_4326):
+    try:
+        check_resolution(pim_5070, hag_4326, 2)
+    except ValueError:
+        pytest.fail("check_resolution raised ValueError for rasters with correct resolutions.")
+
+def test_check_resolution_false1(pim_5070, hag_4326):
+    with pytest.raises(ValueError, match="is finer than the resolution of the height"):
+        check_resolution(hag_4326, pim_5070, 1)
+
+def test_check_resolution_false2(pim_5070, hag_5070):
+    with pytest.raises(ValueError, match="is finer than the desired resolution"):
+        check_resolution(pim_5070, hag_5070, 100)
     
-'''
-def test_check_resolution(pim_raster, hag_raster):
-    assert
 
-def test_convert_to_cover(raster, min_hag, desired_res):
-    assert
+def test_convert_to_cover(hag_4326):
+    min_value = 0
+    desired_res = 2
+    cover_raster = convert_to_cover(hag_4326, 
+                                    min_value, 
+                                    desired_res)
+    correct_values = np.array([
+        [0.  , 0.  , 0.  , 0.25, 0.25, 0.  ],
+        [0.  , 0.  , 0.  , 0.  , 0.  , 0.25],
+        [0.  , 0.25, 0.25, 0.25, 0.25, 0.25],
+        [0.  , 0.25, 0.  , 0.25, 0.25, 0.25]])
+    assert cover_raster.rio.resolution() == hag_4326.rio.resolution()
+    assert cover_raster.rio.crs == hag_4326.rio.crs
+    assert cover_raster.rio.nodata == hag_4326.rio.nodata
+    assert cover_raster.coords.equals(hag_4326.coords)
+    assert np.all(cover_raster.values == correct_values)
 
-def test_resample_raster(raster, desired_res):
-    assert
+def test_resample_raster_pim(pim_5070):
+    desired_res = 1
+    resampled = resample_raster(pim_5070, desired_res)
+    correct_values = np.array([
+        [0,0,1,1,0,0,1,1,0,0,1,1],
+        [0,0,1,1,0,0,1,1,0,0,1,1],
+        [0,0,2,2,0,0,2,2,0,0,2,2],
+        [0,0,2,2,0,0,2,2,0,0,2,2],
+        [0,0,3,3,0,0,3,3,0,0,3,3],
+        [0,0,3,3,0,0,3,3,0,0,3,3],
+        [0,0,4,4,0,0,4,4,0,0,4,4],
+        [0,0,4,4,0,0,4,4,0,0,4,4]
+    ])
+    assert resampled.rio.resolution() == (desired_res,-desired_res)
+    assert resampled.rio.crs == pim_5070.rio.crs
+    assert resampled.rio.nodata == pim_5070.rio.nodata
+    assert np.all(resampled.values == correct_values)
 
-def test_interpolate_hag(hag_raster, pim_raster):
-    assert
+def test_resample_raster_hag(hag_4326):
+    desired_res = 2
+    correct_values = np.array([
+        [0,1,2],
+        [2,3,4]
+    ])
+    resampled = resample_raster(hag_4326,desired_res)
+    assert resampled.rio.resolution() == (desired_res,-desired_res)
+    assert resampled.rio.crs == hag_4326.rio.crs
+    assert resampled.rio.nodata == hag_4326.rio.nodata
+    assert np.all(resampled.values == correct_values)
 
-def test_interpolate_pim(pim_raster):
-    assert
+def test_interpolate_pim(pim_5070):
+    correct_values = np.array([
+        [1,1,1,1,1,1],
+        [2,2,2,2,2,2],
+        [3,3,3,3,3,3],
+        [4,4,4,4,4,4]
+    ])
+    interpolated = interpolate_pim(pim_5070)
+    assert interpolated.rio.resolution() == pim_5070.rio.resolution()
+    assert interpolated.rio.crs == pim_5070.rio.crs
+    assert interpolated.rio.nodata == pim_5070.rio.nodata
+    assert np.all(interpolated.values == correct_values)
 
-def test_combine_hag_pim(hag_raster, pim_raster, threshold):
-    assert
+def test_interpolate_hag(hag_5070, pim_5070):
+    interpolated = interpolate_hag(hag_5070, pim_5070)
+    assert interpolated.rio.resolution() == pim_5070.rio.resolution()
+    assert interpolated.rio.crs == pim_5070.rio.crs
+    assert interpolated.rio.nodata == pim_5070.rio.nodata
+    assert interpolated.coords.equals(pim_5070.coords)
+    assert np.all(interpolated.values == hag_5070.values)
 
-def test_create_gdf(combined_raster):
-    assert
 
-'''
+def test_combine_hag_pim():
+    bounds = (-3,0,0,2)
+    pim_data = np.arange(6).reshape((2,3))
+    hag_data = np.array([
+        [0, 0.25, 0.5], 
+        [0.5, 0.75, 1]
+    ])
+    correct_25 = np.array([
+        [0, 0, 2],
+        [3, 4, 5]
+    ])
+    correct_50 = np.array([
+        [0, 0, 0],
+        [0, 4, 5]
+    ])
+    correct_75 = np.array([
+        [0, 0, 0],
+        [0, 0, 5]
+    ])
+    pim = create_toy_raster(bounds=bounds,
+                            data=pim_data)
+    hag = create_toy_raster(bounds=bounds,
+                            data=hag_data)
+    combined_25 = combine_hag_pim(hag, pim, 0.25)
+    combined_50 = combine_hag_pim(hag, pim, 0.5)
+    combined_75 = combine_hag_pim(hag, pim, 0.75)
+    assert combined_25.rio.resolution() == pim.rio.resolution()
+    assert combined_25.rio.crs == pim.rio.crs
+    assert combined_25.rio.nodata == pim.rio.nodata
+    assert combined_25.coords.equals(pim.coords)
+    assert np.all(combined_25.values == correct_25)
+    assert np.all(combined_50.values == correct_50)
+    assert np.all(combined_75.values == correct_75)
+
+def test_create_gdf(pim_5070):
+    gdf = create_gdf(pim_5070)
+    assert np.all(gdf.columns == ['Y', 'X', 'PLOT_ID', 'geometry'])
+    assert np.all(gdf.X.unique() == pim_5070['x'].values)
+    assert np.all(gdf.Y.unique() == pim_5070['y'].values)
+    assert np.all(gdf.PLOT_ID.unique() == [0,1,2,3,4])

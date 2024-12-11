@@ -9,10 +9,8 @@ import numpy as np
 import xarray as xr
 import rioxarray as rio
 import geopandas as gpd
-import matplotlib.pyplot as plt
 from rasterio.enums import Resampling
 from rasterio.transform import from_origin
-from scipy.interpolate import griddata, NearestNDInterpolator
 
 def onramp(pim_raster, 
            hag_raster, 
@@ -40,7 +38,7 @@ def onramp(pim_raster,
 
     check_same_crs(pim_raster, hag_raster)
     check_projected_crs(pim_raster)
-    check_resolution(pim_raster, hag_raster)
+    check_resolution(pim_raster, hag_raster, desired_res)
 
     pim_resampled = resample_raster(pim_raster, desired_res)
 
@@ -70,38 +68,18 @@ def check_projected_crs(pim_raster):
                 "The plot imputation map and height above ground raster do not have a projected CRS."
             )
 
-def check_resolution(pim_raster, hag_raster):
+def check_resolution(pim_raster, hag_raster, desired_res):
     pim_res = np.array(pim_raster.rio.resolution())
     hag_res = np.array(hag_raster.rio.resolution())
     
-    if not np.all(abs(pim_res)>abs(hag_res)):
+    if not np.all(abs(pim_res) >= abs(hag_res)):
         raise ValueError(
                 f"The resolution of the plot imputation map, {pim_res} is finer than the resolution of the height above ground, {hag_res}."
             )
-
-
-def resample_hag(raster, desired_res, min_hag):
-    '''
-    Returns: 
-        raster with desired coarser resolution 
-        - raster values now indicate the percent of previous cells 
-        that had a hag value > min_hag 
-    '''
-    hag_res = np.array(raster.rio.resolution())
-    org_shape = (raster.rio.height, raster.rio.width)
-    new_shape = np.round(org_shape*abs(hag_res)/desired_res,0)
-    hag_scale = org_shape/new_shape
-    new_shape = (int(new_shape[0]),int(new_shape[1]))
-    occupied_mask = xr.where(raster > min_hag, 1.0, 0.0) 
-    raster_resampled = occupied_mask.rio.reproject(
-            raster.rio.crs,
-            shape=new_shape,
-            resampling=Resampling.sum,
-        )
-    raster_resampled = raster_resampled.fillna(0)
-    raster_resampled.rio.write_nodata(0, inplace=True)
-    raster_resampled /= (hag_scale[0]*hag_scale[1])
-    return raster_resampled
+    if not abs(pim_res[0]) >= desired_res:
+        raise ValueError(
+                f"The resolution of the plot imputation map, {pim_res} is finer than the desired resolution, {desired_res}."
+            )
 
 def convert_to_cover(raster, min_value, desired_res):
     '''
@@ -119,13 +97,22 @@ def convert_to_cover(raster, min_value, desired_res):
     return cover_raster
 
 def resample_raster(raster, desired_res):
+    '''
+    Returns: 
+        raster with desired resolution 
+        - if desired resolution is finer, the values 
+        are determined by the nearest previous cell
+        - if the desired resolution is more coarse, the 
+        values are determined by summing previous cells 
+    '''
     res = np.array(raster.rio.resolution())
     x_min = raster["x"].min().item() - abs(res[0]/2)
     y_max = raster["y"].max().item() + abs(res[1]/2)
-    new_transform = from_origin(x_min, y_max, desired_res, desired_res)
+    new_transform = from_origin(x_min, y_max, 
+                                desired_res, desired_res)
     res_scale = abs(res)/desired_res
     old_shape = np.array((raster.rio.height,
-                               raster.rio.width))
+                          raster.rio.width))
     new_shape = old_shape*res_scale
     new_shape = (int(new_shape[0]),
                  int(new_shape[1]))
