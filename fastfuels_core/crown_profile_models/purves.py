@@ -80,8 +80,13 @@ class PurvesCrownProfile(CrownProfileModel):
             Ratio of the crown length to the total height of the tree.
 
         Storing all variables as a [x,1] array allows versatile calculations no matter what the data type
+        The calculations do not care if there is one item (scalar) or a large array (vector)
+        By storing in a 2D array ( array[x,1], we are able to perform fast calculations without conditionals or for loop
+
+        We utilize np.atleast_2d().T to ensure scalars and one dimensional arrays are transposed into a 2D array with shape [x,1].
+        This allows the outputs of functions such as get_radius_at_height() to return data in the proper format [tree, data_from_inputs]
         """
-        # TODO: Document why we want things as a 2D array
+
         self.height = np.atleast_2d(height).T
         self.crown_ratio = np.atleast_2d(crown_ratio).T
         self.crown_base_height = np.atleast_2d(height - height * crown_ratio).T
@@ -102,19 +107,26 @@ class PurvesCrownProfile(CrownProfileModel):
         """
         Computes the crown radius at a given height.
 
-        # TODO: Because we're doing funky stuff with array sizing need to be clearn about expected inputs and outputs.
+        We expect inputs to be either a single value (scalar)
+        Or the input should be a numpy array (vector)
+
+        The function is able to perform calculations on both types of inputs
+        and will return the same type as the input
 
         Parameters
         ----------
         height : float or np.ndarray
             Height(s) at which to compute the crown radius (m).
-
+            Input can be a single value (scalar) or a numpy array (vector ndarray)
         Returns
         -------
         float or np.ndarray
-            Crown radius (m) at the given height(s). Returns a float if input height is a scalar,
-            otherwise returns a numpy array.
-            # TODO: Clarify return data type or shape if array
+            Crown radius (m) at the given height(s).
+            Returns a float if input height is a scalar,
+            otherwise returns a numpy array if input height is a vector.
+
+            If height is a vector [x,], and instance variable (ie crown_base_height) is a vector [y,1]
+            Then output vector will be [y,x]
         """
         height = np.asarray(height)
 
