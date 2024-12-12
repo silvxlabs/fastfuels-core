@@ -30,6 +30,8 @@ class BetaCrownProfile(CrownProfileModel):
     ):
         """
         Initializes a BetaCrownProfile instance.
+        We initialize data as np arrays expecting those to be passed in
+        If only a float (scalar) is passed in, then the functions return results as scalars
         """
         self.species_code = np.asarray(species_code)
         self.crown_base_height = np.asarray(crown_base_height)
@@ -186,16 +188,14 @@ class BetaCrownProfile(CrownProfileModel):
         r_max = self.get_beta_radius(z_max, height, crown_base, a, b, c, beta)
         return r_max
 
-# useful function to look up trait scores. The function is vectorized for convenience.
+# useful function to look up species code. The function is vectorized for convenience.
 def _species_code_lookup(species_code: str | NDArray, parameter: str):
     return SPCD_PARAMS[str(species_code)][parameter]
 
-
 vectorized_species_code_lookup = np.vectorize(_species_code_lookup)
 
-# useful function to look up trait scores. The function is vectorized for convenience.
+# useful function to look up species groups. The function is vectorized for convenience.
 def _species_group_lookup(species_group: str | NDArray, beta_canopy: str):
     return SPGRP_PARAMS[str(species_group)][beta_canopy]
-
 
 vectorized_species_group_lookup = np.vectorize(_species_group_lookup)

@@ -92,6 +92,7 @@ class PurvesCrownProfile(CrownProfileModel):
         self.crown_base_height = np.atleast_2d(height - height * crown_ratio).T
         self.species_code = np.atleast_2d(species_code).T
         self.dbh = np.atleast_2d(dbh).T
+        self.trait_score = vectorized_trait_score_lookup(species_code)
 
         # Compute maximum crown radius
         self.purves_max_crown_radius = np.atleast_2d(
