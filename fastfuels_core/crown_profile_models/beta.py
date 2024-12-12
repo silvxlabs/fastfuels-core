@@ -31,9 +31,9 @@ class BetaCrownProfile(CrownProfileModel):
         """
         Initializes a BetaCrownProfile instance.
         """
-        self.species_code = species_code
-        self.crown_base_height = crown_base_height
-        self.crown_length = crown_length
+        self.species_code = np.asarray(species_code)
+        self.crown_base_height = np.asarray(crown_base_height)
+        self.crown_length = np.asarray(crown_length)
 
         #species_group = SPCD_PARAMS[str(self.species_code)]["SPGRP"]
         species_group = vectorized_species_code_lookup(self.species_code, "SPGRP")
@@ -99,10 +99,12 @@ class BetaCrownProfile(CrownProfileModel):
         z = np.asarray(z)
         mask = (z >= 0) & (z <= 1)
 
-        result = np.zeros_like(z)
-        result[mask] = (
-            self.c * z[mask] ** (self.a - 1) * (1 - z[mask]) ** (self.b - 1) / self.beta
+        result = np.where(
+            mask,
+            self.c * z ** (self.a - 1) * (1 - z) ** (self.b - 1) / self.beta,
+            0.0,
         )
+        result = np.nan_to_num(result, nan=0.0)
 
         if result.size == 1:
             return result.item()  # Return as a scalar

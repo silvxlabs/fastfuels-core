@@ -130,7 +130,7 @@ class TestGetMaxRadius:
     ):
         """
         Tests the tree vector functionality using the specified library,
-        either "numpy" or "pandas". The test creates a `PurvesCrownProfile`
+        either "numpy" or "pandas". The test creates a `BetaCrownProfile`
         model based on the provided tree attributes and checks the resulting
         maximum crown radius. The test ensures that the maximum crown radius
         is calculated correctly and conforms to expected constraints.
@@ -247,7 +247,7 @@ class TestGetRadiusAtHeight:
     ):
         """
         Tests the tree vector functionality using the specified library,
-        either "numpy" or "pandas". The test creates a `PurvesCrownProfile`
+        either "numpy" or "pandas". The test creates a `BetaCrownProfile`
         model based on the provided tree attributes and checks the resulting
         maximum crown radius. The test ensures that the maximum crown radius
         is calculated correctly and conforms to expected constraints.
@@ -295,7 +295,7 @@ class TestGetRadiusAtHeight:
         ))
 
         # Now test vector input
-        vector_crown_radius = beta_model.get_radius_at_height(vector_test_input)
+        vector_crown_radius = beta_model.get_radius_at_height(np.atleast_2d(vector_test_input).T)
 
         # Value should be a float (scalar)
         assert isinstance(vector_crown_radius, np.ndarray)
