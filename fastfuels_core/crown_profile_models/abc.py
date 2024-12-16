@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+
 class CrownProfileModel(ABC):
     """
     Abstract base class representing a tree crown profile model.

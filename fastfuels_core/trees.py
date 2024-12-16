@@ -33,7 +33,9 @@ with open(DATA_PATH / "class_parameters.json", "r") as f:
 TREE_SCHEMA_COLS = {
     "TREE_ID": Column(int),
     "SPCD": Column(
-        int, title="Species Code", description="An FIA integer species code"
+        int,
+        title="Species Code",
+        description="An FIA integer species code",
     ),
     "STATUSCD": Column(
         int,
@@ -357,6 +359,7 @@ class Tree:
             x=row.X,
             y=row.Y,
         )
+
 
 class BiomassAllometryModel(ABC):
     """

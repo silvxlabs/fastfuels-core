@@ -14,6 +14,7 @@ with open(DATA_PATH / "spcd_parameters.json", "r") as f:
 with open(DATA_PATH / "class_parameters.json", "r") as f:
     CLASS_PARAMS = json.load(f)
 
+
 class BetaCrownProfile(CrownProfileModel):
     """
     A crown profile model based on a beta distribution.
@@ -37,13 +38,13 @@ class BetaCrownProfile(CrownProfileModel):
         self.crown_base_height = np.asarray(crown_base_height)
         self.crown_length = np.asarray(crown_length)
 
-        #species_group = SPCD_PARAMS[str(self.species_code)]["SPGRP"]
+        # species_group = SPCD_PARAMS[str(self.species_code)]["SPGRP"]
         species_group = vectorized_species_code_lookup(self.species_code, "SPGRP")
-        #self.a = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_a"]
+        # self.a = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_a"]
         self.a = vectorized_species_group_lookup(species_group, "BETA_CANOPY_a")
-        #self.b = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_b"]
+        # self.b = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_b"]
         self.b = vectorized_species_group_lookup(species_group, "BETA_CANOPY_b")
-        #self.c = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_c"]
+        # self.c = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_c"]
         self.c = vectorized_species_group_lookup(species_group, "BETA_CANOPY_c")
         self.beta = beta(self.a, self.b)
 
@@ -61,7 +62,11 @@ class BetaCrownProfile(CrownProfileModel):
         # which the beta distribution is at its max.
         z_max = (self.a - 1) / (self.a + self.b - 2)
         normalized_max_radius = self._get_radius_at_normalized_height(z_max)
-        return normalized_max_radius*self.crown_length if isinstance(normalized_max_radius*self.crown_length, float) else  np.asarray(normalized_max_radius * self.crown_length)
+        return (
+            normalized_max_radius * self.crown_length
+            if isinstance(normalized_max_radius * self.crown_length, float)
+            else np.asarray(normalized_max_radius * self.crown_length)
+        )
 
     def get_radius_at_height(self, height):
         """
@@ -153,7 +158,6 @@ class BetaCrownProfile(CrownProfileModel):
         r = r * crown_length
         return r
 
-
     def get_beta_max_crown_radius(self, height, crown_base, a, b, c, beta):
         """
         Gets the maximum radius of a tree for the beta crown profile model.
@@ -188,14 +192,18 @@ class BetaCrownProfile(CrownProfileModel):
         r_max = self.get_beta_radius(z_max, height, crown_base, a, b, c, beta)
         return r_max
 
+
 # useful function to look up species code. The function is vectorized for convenience.
 def _species_code_lookup(species_code: str | NDArray, parameter: str):
     return SPCD_PARAMS[str(species_code)][parameter]
 
+
 vectorized_species_code_lookup = np.vectorize(_species_code_lookup)
+
 
 # useful function to look up species groups. The function is vectorized for convenience.
 def _species_group_lookup(species_group: str | NDArray, beta_canopy: str):
     return SPGRP_PARAMS[str(species_group)][beta_canopy]
+
 
 vectorized_species_group_lookup = np.vectorize(_species_group_lookup)

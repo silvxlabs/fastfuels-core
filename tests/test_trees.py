@@ -4,7 +4,7 @@ from pathlib import Path
 # Internal imports
 from fastfuels_core.trees import (
     Tree,
-    #BetaCrownProfile,
+    # BetaCrownProfile,
     JenkinsBiomassEquations,
     NSVBEquations,
     SPCD_PARAMS,

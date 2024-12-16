@@ -1,6 +1,7 @@
 # Core imports
 import random
-#from numpy import random as rnd
+
+# from numpy import random as rnd
 
 # Internal imports
 from fastfuels_core.trees import Tree, SPCD_PARAMS
@@ -50,15 +51,17 @@ def make_random_tree(
         biomass_allometry_model_type=biomass_allometry_model,
     )
 
-#generate a randon list of trees out of SPCDS list
-#can specify what crown_profile_model one wishes to use
+
+# generate a randon list of trees out of SPCDS list
+# can specify what crown_profile_model one wishes to use
 def make_tree_list(
     _crown_profile_model=None,
 ):
-    tree_list =[]
-    spc_index = None
+    tree_list = []
     for spc in LIST_SPCDS:
-        tree = make_random_tree(crown_profile_model=_crown_profile_model, species_code=int(spc))
+        tree = make_random_tree(
+            crown_profile_model=_crown_profile_model, species_code=int(spc)
+        )
         tree_list.append(tree)
 
     return tree_list

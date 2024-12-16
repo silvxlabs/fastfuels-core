@@ -1,56 +1,109 @@
 # Core imports
-from pathlib import Path
-
-from dask.dataframe.partitionquantiles import tree_width
-import numpy as np
 from tests.utils import make_tree_list
-from tests.utils import  make_random_tree
-from tests.utils import  LIST_SPCDS
-from fastfuels_core.crown_profile_models.purves import  PurvesCrownProfile
+from tests.utils import make_random_tree
+from tests.utils import LIST_SPCDS
+from fastfuels_core.crown_profile_models.purves import PurvesCrownProfile
 
 # External imports
 import pytest
 import numpy as np
 
 
-#generates a list of all the trees in the species code index
-#the returned list is formatted in the particular way of PurvesCrownProfile models
+# generates a list of all the trees in the species code index
+# the returned list is formatted in the particular way of PurvesCrownProfile models
 @pytest.fixture()
 def purves_tree_list():
     trees = make_tree_list("purves")
-    tree_list =[]
+    tree_list = []
     for t in trees:
         tree = PurvesCrownProfile(
             species_code=t.species_code,
             height=t.height,
             dbh=t.diameter,
-            crown_ratio=t.crown_ratio)
+            crown_ratio=t.crown_ratio,
+        )
         tree_list.append(tree)
 
     return tree_list
 
+
 @pytest.fixture()
 def vector_test_input():
-    return np.array([0,1,2,3,4,5,6,7,8,9,10,15,20,25,30,35,40,45,50,55,60,61,-1])
+    return np.array(
+        [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            15,
+            20,
+            25,
+            30,
+            35,
+            40,
+            45,
+            50,
+            55,
+            60,
+            61,
+            -1,
+        ]
+    )
+
 
 @pytest.fixture()
 def scalar_test_input():
-    input_pool = np.array([0.0,1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,15.0,20.0,25.0,30.0,35.0,40.0,45.0,50.0,55.0,60.0,61.0,-1.0])
+    input_pool = np.array(
+        [
+            0.0,
+            1.0,
+            2.0,
+            3.0,
+            4.0,
+            5.0,
+            6.0,
+            7.0,
+            8.0,
+            9.0,
+            10.0,
+            15.0,
+            20.0,
+            25.0,
+            30.0,
+            35.0,
+            40.0,
+            45.0,
+            50.0,
+            55.0,
+            60.0,
+            61.0,
+            -1.0,
+        ]
+    )
     return input_pool[np.random.randint(input_pool.size)]
 
-#a test sample model we could use
+
+# a test sample model we could use
 @pytest.fixture
 def _model():
     # Suppose that I have a tree with a height of 10m, dbh of 15cm, and crown ratio of 0.4
-    return PurvesCrownProfile(
-        species_code = 122, height = 10, dbh = 15, crown_ratio = 0.4
-        )
+    return PurvesCrownProfile(species_code=122, height=10, dbh=15, crown_ratio=0.4)
+
 
 vector_length = 100_000
+
 
 @pytest.fixture(scope="module")
 def list_scpds():
     return LIST_SPCDS
+
 
 @pytest.fixture(scope="module")
 def tree_list():
@@ -159,6 +212,8 @@ class TestGetMaxRadius:
             max_crown_radius
             <= purves_model._get_purves_max_crown_radius(spcd_vector, dbh_vector)
         )
+
+
 class TestGetRadiusAtHeight:
 
     @pytest.mark.parametrize("spcd", LIST_SPCDS)
@@ -205,9 +260,14 @@ class TestGetRadiusAtHeight:
         assert np.all(vector_crown_radius >= 0.0)
 
         # Value should be less than or equal to the maximum possible crown radius for a tree with Canopy Ratio of 1
-        assert np.all(vector_crown_radius <= np.atleast_2d(purves_model._get_purves_max_crown_radius(
-            tree.species_code, tree.diameter).T
-        ))
+        assert np.all(
+            vector_crown_radius
+            <= np.atleast_2d(
+                purves_model._get_purves_max_crown_radius(
+                    tree.species_code, tree.diameter
+                ).T
+            )
+        )
 
     @pytest.mark.parametrize("library", ["numpy", "pandas"])
     def test_tree_vector_numpy(
@@ -219,7 +279,7 @@ class TestGetRadiusAtHeight:
         crown_ratio_vector,
         spcd_vector,
         scalar_test_input,
-        vector_test_input
+        vector_test_input,
     ):
         """
         Tests the tree vector functionality using the specified library,
@@ -259,7 +319,9 @@ class TestGetRadiusAtHeight:
         assert np.all(scalar_crown_radius >= 0.0)
         assert np.all(
             scalar_crown_radius
-            <= np.atleast_2d(purves_model._get_purves_max_crown_radius(spcd_vector, dbh_vector)).T
+            <= np.atleast_2d(
+                purves_model._get_purves_max_crown_radius(spcd_vector, dbh_vector)
+            ).T
         )
         # Test vector test input
         vector_crown_radius = purves_model.get_radius_at_height(vector_test_input)
@@ -269,5 +331,7 @@ class TestGetRadiusAtHeight:
         assert np.all(vector_crown_radius >= 0.0)
         assert np.all(
             vector_crown_radius
-            <= np.atleast_2d(purves_model._get_purves_max_crown_radius(spcd_vector, dbh_vector)).T
+            <= np.atleast_2d(
+                purves_model._get_purves_max_crown_radius(spcd_vector, dbh_vector)
+            ).T
         )
