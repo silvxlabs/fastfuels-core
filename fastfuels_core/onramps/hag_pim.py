@@ -2,12 +2,10 @@
 This module contains functions for sampling tree imputation maps based on height above ground maps into a TreePopulation
 """
 
-#Internal imports
-
 #Extrernal inports
 import numpy as np
 import xarray as xr
-import rioxarray as rio
+import rioxarray as rio  # noqa: F401
 import geopandas as gpd
 from rasterio.enums import Resampling
 from rasterio.transform import from_origin
