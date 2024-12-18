@@ -2,17 +2,18 @@ import pytest
 import numpy as np
 import xarray as xr
 from rasterio.transform import from_origin
+from rasterio.enums import Resampling
 
 from fastfuels_core.onramps.hag_pim import (
     check_same_crs,
     check_projected_crs,
     check_resolution,
     resample_raster,
-    convert_to_cover,
+    compute_cover_from_hag,
     interpolate_hag,
     interpolate_pim,
     combine_hag_pim,
-    create_gdf
+    create_plots_gdf_from_resampled_pim
 )
 
 def create_toy_raster(bounds = (-12,0,0,8),
@@ -45,10 +46,10 @@ def create_toy_raster(bounds = (-12,0,0,8),
 @pytest.fixture
 def hag_4326():
     data = np.array([
-        [0, 0, 0, 1, 1, 0],
-        [0, 0, 0, 0, 0, 1],
-        [0, 1, 1, 1, 1, 1],
-        [0, 1, 0, 1, 1, 1]
+        [0,  1,  2, 11, 12,  3],
+        [4,  5,  6,  7,  8, 13],
+        [9, 14, 15, 16, 17, 18],
+        [0, 19, 10, 20, 21, 22]
     ])
     return create_toy_raster(bounds=(-6,0,0,4),
                              crs='EPSG:4326',
@@ -111,26 +112,24 @@ def test_check_resolution_false2(pim_5070, hag_5070):
         check_resolution(pim_5070, hag_5070, 100)
     
 
-def test_convert_to_cover(hag_4326):
-    min_value = 0
+def test_compute_cover(hag_4326):
+    min_value = 10
     desired_res = 2
-    cover_raster = convert_to_cover(hag_4326, 
-                                    min_value, 
-                                    desired_res)
+    cover_raster = compute_cover_from_hag(hag_4326, 
+                                          min_value, 
+                                          desired_res)
     correct_values = np.array([
-        [0.  , 0.  , 0.  , 0.25, 0.25, 0.  ],
-        [0.  , 0.  , 0.  , 0.  , 0.  , 0.25],
-        [0.  , 0.25, 0.25, 0.25, 0.25, 0.25],
-        [0.  , 0.25, 0.  , 0.25, 0.25, 0.25]])
-    assert cover_raster.rio.resolution() == hag_4326.rio.resolution()
+        [  0, 0.25, 0.5],
+        [0.5, 0.75,   1]
+    ])
+    assert cover_raster.rio.resolution() == (desired_res, -desired_res)
     assert cover_raster.rio.crs == hag_4326.rio.crs
     assert cover_raster.rio.nodata == hag_4326.rio.nodata
-    assert cover_raster.coords.equals(hag_4326.coords)
     assert np.all(cover_raster.values == correct_values)
 
 def test_resample_raster_pim(pim_5070):
     desired_res = 1
-    resampled = resample_raster(pim_5070, desired_res)
+    resampled = resample_raster(pim_5070, desired_res, Resampling.nearest)
     correct_values = np.array([
         [0,0,1,1,0,0,1,1,0,0,1,1],
         [0,0,1,1,0,0,1,1,0,0,1,1],
@@ -149,10 +148,10 @@ def test_resample_raster_pim(pim_5070):
 def test_resample_raster_hag(hag_4326):
     desired_res = 2
     correct_values = np.array([
-        [0,1,2],
-        [2,3,4]
+        [10, 26, 36],
+        [42, 61, 78]
     ])
-    resampled = resample_raster(hag_4326,desired_res)
+    resampled = resample_raster(hag_4326, desired_res, Resampling.sum)
     assert resampled.rio.resolution() == (desired_res,-desired_res)
     assert resampled.rio.crs == hag_4326.rio.crs
     assert resampled.rio.nodata == hag_4326.rio.nodata
@@ -215,8 +214,10 @@ def test_combine_hag_pim():
     assert np.all(combined_75.values == correct_75)
 
 def test_create_gdf(pim_5070):
-    gdf = create_gdf(pim_5070)
-    assert np.all(gdf.columns == ['Y', 'X', 'PLOT_ID', 'geometry'])
-    assert np.all(gdf.X.unique() == pim_5070['x'].values)
-    assert np.all(gdf.Y.unique() == pim_5070['y'].values)
-    assert np.all(gdf.PLOT_ID.unique() == [0,1,2,3,4])
+    gdf1 = create_plots_gdf_from_resampled_pim(pim_5070)
+    gdf2 = create_plots_gdf_from_resampled_pim(pim_5070,'test_name')
+    assert np.all(gdf1.columns == ['Y', 'X', 'PLOT_ID', 'geometry'])
+    assert np.all(gdf2.columns == ['Y', 'X', 'test_name', 'geometry'])
+    assert np.all(gdf1.X.unique() == pim_5070['x'].values)
+    assert np.all(gdf1.Y.unique() == pim_5070['y'].values)
+    assert np.all(gdf1.PLOT_ID.unique() == [0,1,2,3,4])

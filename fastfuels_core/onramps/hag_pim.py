@@ -12,11 +12,12 @@ import geopandas as gpd
 from rasterio.enums import Resampling
 from rasterio.transform import from_origin
 
-def onramp(pim_raster, 
-           hag_raster, 
-           desired_res=7.5, 
-           min_hag=1,
-           hag_threshold = 0.25):
+def sample_plots_from_hag(
+        pim_raster: xr.DataArray, 
+        hag_raster: xr.DataArray, 
+        desired_res: float=7.5, 
+        min_hag: float=1,
+        hag_threshold: float = 0.25):
     """
     Parameters
     -----------
@@ -40,19 +41,17 @@ def onramp(pim_raster,
     check_projected_crs(pim_raster)
     check_resolution(pim_raster, hag_raster, desired_res)
 
-    pim_resampled = resample_raster(pim_raster, desired_res)
+    pim_resampled = resample_raster(pim_raster, desired_res, Resampling.nearest)
 
-    hag_cover = convert_to_cover(hag_raster, min_hag, desired_res)
-    
-    hag_resampled = resample_raster(hag_cover, desired_res)
+    hag_cover = compute_cover_from_hag(hag_raster, min_hag, desired_res)
 
-    hag_interpolated = interpolate_hag(hag_resampled, pim_resampled)
+    hag_interpolated = interpolate_hag(hag_cover, pim_resampled)
     
     pim_interpolated = interpolate_pim(pim_resampled)
 
     combined_raster = combine_hag_pim(hag_interpolated, pim_interpolated, hag_threshold)
 
-    combined_gdf = create_gdf(combined_raster) 
+    combined_gdf = create_plots_gdf_from_resampled_pim(combined_raster) 
 
     return combined_gdf
 
@@ -81,50 +80,61 @@ def check_resolution(pim_raster, hag_raster, desired_res):
                 f"The resolution of the plot imputation map, {pim_res} is finer than the desired resolution, {desired_res}."
             )
 
-def convert_to_cover(raster, min_value, desired_res):
+def compute_cover_from_hag(raster, min_hag, desired_res):
     '''
+    Parmeters:
+        raster: DataArray
+        min_hag: float
+        desired_res: float
     Returns: 
-        raster with values where the hag value is more than the min_value
-        - values = 1/(# of cells in one cell desired resolution raster)
+        raster with desired resolution where the values represent the 
+        percentage of previous cells with a value above min_hag
     '''
-    cover_raster = xr.where(raster > min_value, 1.0, 0.0) 
-    cover_raster.rio.write_nodata(0, inplace=True)
-    cover_raster.rio.write_crs(raster.rio.crs,
+    # Create cover raster from HAG
+    hag_cover = xr.where(raster > min_hag, 1.0, 0.0) 
+    hag_cover.rio.write_nodata(0, inplace=True)
+    hag_cover.rio.write_crs(raster.rio.crs,
                                inplace=True)
-    res = np.array(raster.rio.resolution())
-    res_scale = desired_res/abs(res)
-    cover_raster /= (res_scale[0]*res_scale[1])
-    return cover_raster
+    # Resample with summing
+    hag_resampled = resample_raster(hag_cover, desired_res, Resampling.sum)
 
-def resample_raster(raster, desired_res):
+    # Scale the values
+    res = np.array(hag_cover.rio.resolution())
+    res_scale = desired_res/abs(res)
+    hag_resampled /= (res_scale[0] * res_scale[1])
+    
+    return hag_resampled
+
+
+def resample_raster(raster, desired_res, resampling_method):
     '''
+    Parameters:
+        raster: DataArray
+        desired_res: float
+        resampling_method: rasterio.enum.Resampling method
     Returns: 
-        raster with desired resolution 
-        - if desired resolution is finer, the values 
-        are determined by the nearest previous cell
-        - if the desired resolution is more coarse, the 
-        values are determined by summing previous cells 
+        raster with desired resolution
+        resampling is completed using the resampling_method provided
     '''
+    # ensure correct edges
     res = np.array(raster.rio.resolution())
     x_min = raster["x"].min().item() - abs(res[0]/2)
     y_max = raster["y"].max().item() + abs(res[1]/2)
     new_transform = from_origin(x_min, y_max, 
                                 desired_res, desired_res)
+    # determine new shape
     res_scale = abs(res)/desired_res
     old_shape = np.array((raster.rio.height,
                           raster.rio.width))
     new_shape = old_shape*res_scale
     new_shape = (int(new_shape[0]),
                  int(new_shape[1]))
-    if res[0] < desired_res:
-        resample = Resampling.sum
-    else:
-        resample = Resampling.nearest
+    # resample raster
     raster_resampled = raster.rio.reproject(
         raster.rio.crs,
         transform=new_transform,
         shape=new_shape,
-        resampling=resample
+        resampling=resampling_method
     )
     raster_resampled = raster_resampled.fillna(0)
     raster_resampled.rio.write_nodata(0, inplace=True)
@@ -133,6 +143,9 @@ def resample_raster(raster, desired_res):
 
 def interpolate_hag(hag_raster, pim_raster):
     '''
+    Parameters:
+        hag_raster: DataArray
+        pim_raster: DataArray
     Returns: 
         hag raster with same coordinates as pim raster
         - values were determined using nearest neighbor from hag input
@@ -144,6 +157,8 @@ def interpolate_hag(hag_raster, pim_raster):
 
 def interpolate_pim(pim_raster):
     '''
+    Parameters:
+        pim_raster: DataArray
     Returns: 
         plot imputation raster with all cells filled with data
         - values were determined using nearest neighbor
@@ -172,12 +187,12 @@ def combine_hag_pim(hag_raster, pim_raster, threshold):
         pim_raster.rio.nodata, inplace=True)
     return combined_raster
 
-def create_gdf(raster):
+def create_plots_gdf_from_resampled_pim(raster, plot_column_name='PLOT_ID'):
     '''
     Returns: 
         Geopandas dataframe from the values in the raster
     '''
-    raster.name = "PLOT_ID"
+    raster.name = plot_column_name
     df = raster.to_dataframe().reset_index()
     df.drop(columns=['spatial_ref'], inplace=True)
     df.rename(columns={'x': 'X', 'y': 'Y'}, inplace=True)
