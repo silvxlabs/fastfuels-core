@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 import urllib.request
 from setuptools import find_packages, setup
@@ -39,7 +40,7 @@ INSTALL_REQUIRES = [
     "geopandas",
     "nsvb",
     "numba",
-    "numpy>=2",
+    "numpy",
     "pandas",
     "pandera",
     "rasterio",
