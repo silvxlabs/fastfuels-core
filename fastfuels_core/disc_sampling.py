@@ -62,17 +62,17 @@ class DiscSampler:
                 trees["SPCD"].to_numpy().astype(str), crown_base_height, crown_length
             )
             # update tree properties
-            trees["A"] = self.beta_model.a
-            trees["B"] = self.beta_model.b
-            trees["C"] = self.beta_model.c
-            trees["BETA"] = self.beta_model.beta
+            a = self.beta_model.a
+            b = self.beta_model.b
+            c = self.beta_model.c
+            beta = self.beta_model.beta
             trees["MAX_RADIUS"] = self.beta_model.get_beta_max_radius(
                 height,
                 crown_base_height,
-                self.beta_model.a,
-                self.beta_model.b,
-                self.beta_model.c,
-                self.beta_model.beta,
+                a,
+                b,
+                c,
+                beta,
             )
         else:  # create purves model
             self.purves_model = PurvesCrownProfile(
@@ -82,8 +82,6 @@ class DiscSampler:
                 trees["CR"].to_numpy().astype(float),
             )
             # update tree properties
-            trees["TRAIT_SCORE"] = self.purves_model.trait_score
-            trees["SHAPE_PARAM"] = self.purves_model.shape_parameter
             trees["MAX_RADIUS"] = self.purves_model._get_purves_max_crown_radius(
                 self.purves_model.species_code, self.purves_model.dbh
             )
