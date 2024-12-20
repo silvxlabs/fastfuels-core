@@ -49,7 +49,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple fastfuels-core[test]
       - name: Run pytest
-        run: pytest
+        run: pytest -ra
 
   upload-to-pypi:
     name: Upload to PyPi
@@ -93,4 +93,4 @@ jobs:
           python -m pip install --upgrade pip
           pip install fastfuels-core[test]
       - name: Run pytest
-        run: pytest
+        run: pytest -ra
