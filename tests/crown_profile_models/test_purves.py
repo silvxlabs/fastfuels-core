@@ -210,7 +210,9 @@ class TestGetMaxRadius:
         assert np.all(max_crown_radius > 0.0)
         assert np.all(
             max_crown_radius
-            <= purves_model._get_purves_max_crown_radius(spcd_vector, dbh_vector)
+            <= np.atleast_2d(
+                purves_model._get_purves_max_crown_radius(spcd_vector, dbh_vector)
+            ).T
         )
 
 
