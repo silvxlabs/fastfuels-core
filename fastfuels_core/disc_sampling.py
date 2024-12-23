@@ -5,11 +5,8 @@ import numpy.random as random
 
 # Internal imports
 from fastfuels_core.trees import TreePopulation
-from fastfuels_core.crown_profiles import (
-    get_purves_radius,
-    get_beta_radius,
-    add_crown_profile_params,
-)
+from fastfuels_core.crown_profile_models.purves import PurvesCrownProfile
+from fastfuels_core.crown_profile_models.beta import BetaCrownProfile
 
 # External imports
 import numpy as np
@@ -44,6 +41,9 @@ class DiscSampler:
         sample_heights=True,
         crown_profile_model="purves",
     ):
+        # Get tree properties as an array for use in Numba
+        trees = trees.dropna()
+        self.trees = TreePopulation(trees)
 
         # What type of crown profile model to use
         if crown_profile_model not in ["beta", "purves"]:
@@ -51,11 +51,40 @@ class DiscSampler:
                 "The crown profile model must be one of the following: 'beta' or 'purves'"
             )
         self.crown_profile_model = crown_profile_model
+        if self.crown_profile_model == "beta":
+            height = trees["HT"].to_numpy()
+            crown_ratio = trees["CR"].to_numpy()
+            crown_length = height * crown_ratio
+            crown_base_height = height - crown_length
 
-        # Get tree properties as an array for use in Numba
-        trees = trees.dropna()
-        self.trees = TreePopulation(trees)
-        self.tree_props = self.get_tree_props(self.trees)
+            # create BetaCrownProfile
+            self.beta_model = BetaCrownProfile(
+                trees["SPCD"].to_numpy().astype(str), crown_base_height, crown_length
+            )
+            # update tree properties
+            a = self.beta_model.a
+            b = self.beta_model.b
+            c = self.beta_model.c
+            beta = self.beta_model.beta
+            trees["MAX_RADIUS"] = self.beta_model.get_beta_max_radius(
+                height,
+                crown_base_height,
+                a,
+                b,
+                c,
+                beta,
+            )
+        else:  # create purves model
+            self.purves_model = PurvesCrownProfile(
+                trees["SPCD"].to_numpy().astype(str),
+                trees["DIA"].to_numpy().astype(float),
+                trees["HT"].to_numpy().astype(float),
+                trees["CR"].to_numpy().astype(float),
+            )
+            # update tree properties
+            trees["MAX_RADIUS"] = self.purves_model._get_purves_max_crown_radius(
+                self.purves_model.species_code, self.purves_model.dbh
+            )
 
         # Tree coordinates
         x = trees["X"].to_numpy()
@@ -177,61 +206,6 @@ class DiscSampler:
         x = yi * dx + x_min
         y = xi * dx + y_min
         return x, y
-
-    def get_tree_props(self, trees: TreePopulation):
-        """
-        Given a tree population, construct arrays with all geometric
-        parameters necessary for evaluatiing the chosen crown profile model.
-
-        Parameters
-        ----------
-        trees : TreePopulation
-            Just a bunch of trees.
-
-        Returns
-        -------
-        tree_props : NDArray
-            An array where each row represents a tree and each column contains
-            a particular geometric parameter of the tree.  Parameters differ between
-            crown profile models.
-
-        """
-
-        # Add crown profile parameters to the tree population
-        self.trees = add_crown_profile_params(self.trees, self.crown_profile_model)
-
-        # Compute the z score of height for this tree compared to other trees in same plot
-        self.trees["Z"] = trees.groupby("PLOT_ID")["HT"].transform(
-            lambda g: (g - g.mean()) / (g.std() + 1e-3)
-        )
-
-        # Construct parameters for use in the beta profile model
-        if self.crown_profile_model == "beta":
-            tree_props = np.column_stack(
-                [
-                    trees["HT"].to_numpy(),
-                    trees["CR"].to_numpy(),
-                    trees["MAX_RADIUS"].to_numpy(),
-                    trees["A"].to_numpy(),
-                    trees["B"].to_numpy(),
-                    trees["C"].to_numpy(),
-                    trees["BETA"].to_numpy(),
-                    trees["Z"].to_numpy(),
-                ]
-            ).astype(np.float64)
-        else:
-            # Construct parameters for use in the Purves profile model
-            tree_props = np.column_stack(
-                [
-                    trees["HT"].to_numpy(),
-                    trees["CR"].to_numpy(),
-                    trees["MAX_RADIUS"].to_numpy(),
-                    trees["SHAPE_PARAM"].to_numpy(),
-                    trees["Z"].to_numpy(),
-                ]
-            ).astype(np.float64)
-
-        return tree_props
 
     def sample(
         self,
@@ -465,10 +439,10 @@ def detect_intersection_purves(
     crown_base1 = height1 - crown_ratio1 * height1
 
     cb_max = max(crown_base0, crown_base1)
-    r0_max = scale * get_purves_radius(
+    r0_max = scale * PurvesCrownProfile._get_purves_radius(
         cb_max, height0, crown_base0, max_radius0, shape0
     )
-    r1_max = scale * get_purves_radius(
+    r1_max = scale * PurvesCrownProfile._get_purves_radius(
         cb_max, height1, crown_base1, max_radius1, shape1
     )
 
@@ -525,8 +499,12 @@ def detect_intersection_beta(
 
     z = z0
     while z <= z1:
-        r0 = scale * get_beta_radius(z, height0, crown_base0, a0, b0, c0, beta0)
-        r1 = scale * get_beta_radius(z, height1, crown_base1, a1, b1, c1, beta1)
+        r0 = scale * BetaCrownProfile.get_beta_radius(
+            z, height0, crown_base0, a0, b0, c0, beta0
+        )
+        r1 = scale * BetaCrownProfile.get_beta_radius(
+            z, height1, crown_base1, a1, b1, c1, beta1
+        )
         if r0 + r1 >= distance:
             return True
         z += dz

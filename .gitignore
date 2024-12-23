@@ -169,6 +169,3 @@ cython_debug/
 
 #remove idea files
 .idea/
-
-# VS Code
-.vscode/
