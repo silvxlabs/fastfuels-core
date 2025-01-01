@@ -44,6 +44,7 @@ INSTALL_REQUIRES = [
     "pandas",
     "pandera",
     "rasterio",
+    "rioxarray",
     "scipy",
     "shapely>=2",
     "xarray",
