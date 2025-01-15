@@ -1,19 +1,11 @@
-import json
-from importlib.resources import files
-import numpy as np
-
+# Internal imports
+from fastfuels_core.trees import REF_SPECIES
 from fastfuels_core.crown_profile_models.abc import CrownProfileModel
-from scipy.special import beta
+
+# External imports
+import numpy as np
+from scipy.special import beta  # TODO: Precompute beta values
 from numpy.typing import NDArray
-
-DATA_PATH = files("fastfuels_core.data")
-with open(DATA_PATH / "spgrp_parameters.json", "r") as f:
-    SPGRP_PARAMS = json.load(f)
-with open(DATA_PATH / "spcd_parameters.json", "r") as f:
-    SPCD_PARAMS = json.load(f)
-with open(DATA_PATH / "class_parameters.json", "r") as f:
-    CLASS_PARAMS = json.load(f)
-
 
 class BetaCrownProfile(CrownProfileModel):
     """
