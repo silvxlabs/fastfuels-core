@@ -31,23 +31,29 @@ class BetaCrownProfile(CrownProfileModel):
     ):
         """
         Initializes a BetaCrownProfile instance.
-        We initialize data as np arrays expecting those to be passed in
-        If only a float (scalar) is passed in, then the functions return results as scalars
+        All instance variables are stored as 2D arrays with shape [n_trees, 1]
+        to enable natural broadcasting with 1D height inputs.
         """
-        self.species_code = np.asarray(species_code)
-        self.crown_base_height = np.asarray(crown_base_height)
-        self.crown_length = np.asarray(crown_length)
+        # Store all tree parameters as 2D arrays [n_trees, 1]
+        self.species_code = np.atleast_2d(species_code).T
+        self.crown_base_height = np.atleast_2d(crown_base_height).T
+        self.crown_length = np.atleast_2d(crown_length).T
 
-        jenkins_species_group = np.array(
-            REF_SPECIES.loc[self.species_code]["JENKINS_SPGRPCD"]
-        )
-        self.a = np.asarray(REF_JENKINS.loc[jenkins_species_group]["BETA_CANOPY_a"])
-        self.b = np.asarray(REF_JENKINS.loc[jenkins_species_group]["BETA_CANOPY_b"])
-        self.c = np.asarray(REF_JENKINS.loc[jenkins_species_group]["BETA_CANOPY_c"])
-
-        self.beta_norm = np.asarray(
-            REF_JENKINS.loc[jenkins_species_group]["BETA_CANOPY_NORM"]
-        )
+        jenkins_species_group = np.atleast_2d(
+            REF_SPECIES.loc[self.species_code.ravel()]["JENKINS_SPGRPCD"]
+        ).T
+        self.a = np.atleast_2d(
+            REF_JENKINS.loc[jenkins_species_group.ravel()]["BETA_CANOPY_a"]
+        ).T
+        self.b = np.atleast_2d(
+            REF_JENKINS.loc[jenkins_species_group.ravel()]["BETA_CANOPY_b"]
+        ).T
+        self.c = np.atleast_2d(
+            REF_JENKINS.loc[jenkins_species_group.ravel()]["BETA_CANOPY_c"]
+        ).T
+        self.beta_norm = np.atleast_2d(
+            REF_JENKINS.loc[jenkins_species_group.ravel()]["BETA_CANOPY_NORM"]
+        ).T
 
     def get_max_radius(self) -> float | np.ndarray:
         """
@@ -89,6 +95,7 @@ class BetaCrownProfile(CrownProfileModel):
         Converts a height (in meters) of the tree crown to a unitless height
         between 0 and 1 representing the proportion of the crown length.
         """
+        height = np.asarray(height)
         return (height - self.crown_base_height) / self.crown_length
 
     def _get_radius_at_normalized_height(self, z):
