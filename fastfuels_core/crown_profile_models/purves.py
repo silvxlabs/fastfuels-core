@@ -92,7 +92,9 @@ class PurvesCrownProfile(CrownProfileModel):
         self.trait_score = np.atleast_2d(self._get_purves_trait_score(species_code)).T
 
         # Compute parameters with 2D arrays
-        self.purves_max_crown_radius = self._get_purves_max_crown_radius()
+        self.purves_max_theoretical_crown_radius = (
+            self._get_purves_max_theoretical_crown_radius()
+        )
         self.shape_parameter = self._get_purves_shape_param()
 
     def get_radius_at_height(self, height: float | np.ndarray) -> float | np.ndarray:
@@ -195,29 +197,19 @@ class PurvesCrownProfile(CrownProfileModel):
 
         return max_crown_radius * ((height - z) / height) ** shape_parameter
 
-    def _get_purves_max_crown_radius(
-        self, species_code: str | NDArray, dbh: float | NDArray
-    ):
+    def _get_purves_max_theoretical_crown_radius(self):
         """
         Gets the maximum radius of a tree for the Purves crown profile model.
 
-        Parameters
-        ----------
-        trait_score : NDArray
-            Trait scores for each tree.
-        dbh : NDArray
-            Diameter at breast height for each tree in cm.
-
         Returns
         -------
-        r_max : NDarray
-            Maximum radius of each tree in meters.
+        NDAarray
+            Maximum possible (theoretical) radius of a tree in the Purves model.
         """
-        trait_score = vectorized_trait_score_lookup(species_code)
+        r0j = (1 - self.trait_score) * C0_R0 + self.trait_score * C1_R0
+        r40j = (1 - self.trait_score) * C0_R40 + self.trait_score * C1_R40
+        max_crown_radius = r0j + (r40j - r0j) * (self.dbh / 40.0)
 
-        r0j = (1 - trait_score) * C0_R0 + trait_score * C1_R0
-        r40j = (1 - trait_score) * C0_R40 + trait_score * C1_R40
-        max_crown_radius = r0j + (r40j - r0j) * (dbh / 40.0)
         return max_crown_radius
 
 
