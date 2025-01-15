@@ -1,3 +1,7 @@
+"""
+tests/crown_profile_models/test_beta.py
+"""
+
 # Core imports
 from tests.utils import make_random_tree
 from tests.utils import LIST_SPCDS
