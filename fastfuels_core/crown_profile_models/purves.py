@@ -129,7 +129,7 @@ class PurvesCrownProfile(CrownProfileModel):
         radius = np.where(
             height_mask,
             0.0,
-            self.purves_max_crown_radius
+            self.purves_max_theoretical_crown_radius
             * (np.minimum((self.height - height) / self.height, 0.95) / 0.95)
             ** self.shape_parameter,
         )
