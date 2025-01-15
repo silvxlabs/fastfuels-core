@@ -46,7 +46,7 @@ class PurvesCrownProfile(CrownProfileModel):
         Ratio of the crown length to the total height of the tree.
     crown_base_height : float
         Height at which the crown starts (m).
-    purves_max_crown_radius : float
+    max_theoretical_crown_radius : float
         Maximum radius of the crown (m).
     shape_parameter : float
         Shape parameter for the crown profile.
@@ -92,7 +92,7 @@ class PurvesCrownProfile(CrownProfileModel):
         self.trait_score = np.atleast_2d(self._get_purves_trait_score(species_code)).T
 
         # Compute parameters with 2D arrays
-        self.purves_max_theoretical_crown_radius = (
+        self.max_theoretical_crown_radius = (
             self._get_purves_max_theoretical_crown_radius()
         )
         self.shape_parameter = self._get_purves_shape_param()
@@ -129,7 +129,7 @@ class PurvesCrownProfile(CrownProfileModel):
         radius = np.where(
             height_mask,
             0.0,
-            self.purves_max_theoretical_crown_radius
+            self.max_theoretical_crown_radius
             * (np.minimum((self.height - height) / self.height, 0.95) / 0.95)
             ** self.shape_parameter,
         )
