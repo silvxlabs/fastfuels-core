@@ -170,38 +170,6 @@ class PurvesCrownProfile(CrownProfileModel):
         shape_parameter = (1.0 - self.trait_score) * C0_B + self.trait_score * C1_B
         return shape_parameter
 
-    def _get_purves_radius(
-        self, z, height, crown_base, max_crown_radius, shape_parameter
-    ):
-        """
-        Get radius at an array of z heights using the Purves crown profile model.
-
-        Parameters
-        ----------
-        z : NDarray
-            Array of z coordinates of float64 type.
-        height : float
-            Tree height in meters.
-        crown_base : float
-            Crown base in meters.
-        max_crown_radius : float
-            Maximum radius of the tree.
-        shape_parameter : float
-            Purves shape parameter.
-
-        Returns
-        -------
-        r : NDarray
-            Radius of tree evaluated at z heights.
-        """
-
-        if z < crown_base:
-            return 0.0
-        if z > height:
-            return 0.0
-
-        return max_crown_radius * ((height - z) / height) ** shape_parameter
-
     def _get_purves_max_theoretical_crown_radius(self):
         """
         Gets the maximum radius of a tree for the Purves crown profile model.
