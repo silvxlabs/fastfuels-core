@@ -148,23 +148,16 @@ class PurvesCrownProfile(CrownProfileModel):
         """
         return self.get_radius_at_height(self.crown_base_height)
 
-    def _get_purves_shape_param(self, species_code: str | NDArray):
+    def _get_purves_shape_param(self):
         """
         Get shape parameters for each tree for the Purves model.
-
-        Parameters
-        ----------
-        trait_score : NDArray
-            Trait scores for each tree.
 
         Returns
         -------
         shape_parameter : NDarray
             Shape parameters for each tree.
         """
-        trait_score = vectorized_trait_score_lookup(species_code)
-
-        shape_parameter = (1.0 - trait_score) * C0_B + trait_score * C1_B
+        shape_parameter = (1.0 - self.trait_score) * C0_B + self.trait_score * C1_B
         return shape_parameter
 
     def _get_purves_radius(
