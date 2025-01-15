@@ -7,6 +7,7 @@ import numpy as np
 from scipy.special import beta  # TODO: Precompute beta values
 from numpy.typing import NDArray
 
+
 class BetaCrownProfile(CrownProfileModel):
     """
     A crown profile model based on a beta distribution.
