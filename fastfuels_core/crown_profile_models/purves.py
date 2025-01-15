@@ -124,8 +124,10 @@ class PurvesCrownProfile(CrownProfileModel):
         """
         height = np.asarray(height)
 
+        height_mask = np.logical_or(height < 0, height > self.height)
+
         radius = np.where(
-            height < self.crown_base_height,
+            height_mask,
             0.0,
             self.purves_max_crown_radius
             * (np.minimum((self.height - height) / self.height, 0.95) / 0.95)
