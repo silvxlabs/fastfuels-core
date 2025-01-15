@@ -59,23 +59,41 @@ class PurvesCrownProfile(CrownProfileModel):
         Returns the maximum crown radius.
     """
 
+    species_code: NDArray[np.int64]
+    dbh: NDArray[np.float64]
+    height: NDArray[np.float64]
+    crown_ratio: NDArray[np.float64]
+    crown_base_height: NDArray[np.float64]
+    trait_score: NDArray[np.float64]
+    max_theoretical_crown_radius: NDArray[np.float64]
+    shape_parameter: NDArray[np.float64]
+
     def __init__(
-        self, species_code: int, dbh: float, height: float, crown_ratio: float
+        self,
+        species_code: int | NDArray[np.int64],
+        dbh: float | NDArray[np.float64],
+        height: float | NDArray[np.float64],
+        crown_ratio: float | NDArray[np.float64],
     ):
         """
         Initializes the PurvesCrownProfile model with the given parameters.
+        All instance variables are stored as 2D arrays with shape [n_trees, 1]
+        to enable natural broadcasting with 1D height inputs.
 
         Parameters
         ----------
-        species_code : int
-            The species code of the tree.
-        dbh : float
+        species_code : int or NDArray[np.int64]
+            The species code(s) of the tree(s).
+        dbh : float or NDArray[np.float64]
             Diameter at breast height (cm).
-        height : float
+        height : float or NDArray[np.float64]
             Total height of the tree (m).
-        crown_ratio : float
+        crown_ratio : float or NDArray[np.float64]
             Ratio of the crown length to the total height of the tree.
 
+
+        Notes
+        -----
         Storing all variables as a [x,1] array allows versatile calculations no matter what the data type
         The calculations do not care if there is one item (scalar) or a large array (vector)
         By storing in a 2D array ( array[x,1], we are able to perform fast calculations without conditionals or for loop
@@ -83,7 +101,7 @@ class PurvesCrownProfile(CrownProfileModel):
         We utilize np.atleast_2d().T to ensure scalars and one dimensional arrays are transposed into a 2D array with shape [x,1].
         This allows the outputs of functions such as get_radius_at_height() to return data in the proper format [tree, data_from_inputs]
         """
-
+        # Store all tree parameters as 2D arrays [n_trees, 1]
         self.height = np.atleast_2d(height).T
         self.crown_ratio = np.atleast_2d(crown_ratio).T
         self.crown_base_height = np.atleast_2d(height - height * crown_ratio).T
