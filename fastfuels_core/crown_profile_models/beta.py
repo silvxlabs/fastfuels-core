@@ -11,18 +11,6 @@ from numpy.typing import NDArray
 
 
 class BetaCrownProfile(CrownProfileModel):
-    """
-    A crown profile model based on a beta distribution.
-    """
-
-    species_code: NDArray[np.int64]
-    crown_base_height: NDArray[np.float64]
-    crown_length: NDArray[np.float64]
-    a: NDArray[np.float64]
-    b: NDArray[np.float64]
-    c: NDArray[np.float64]
-    beta_norm: NDArray[np.float64]
-
     def __init__(
         self,
         species_code: int | NDArray[np.int64],
@@ -65,17 +53,12 @@ class BetaCrownProfile(CrownProfileModel):
         Returns a scalar with scalar input
         Returns a vector with vector input
         """
-        # Find the mode of the beta distribution. This is the value of z at
-        # which the beta distribution is at its max.
         z_max = (self.a - 1) / (self.a + self.b - 2)
         normalized_max_radius = self._get_radius_at_normalized_height(z_max)
-        return (
-            normalized_max_radius * self.crown_length
-            if isinstance(normalized_max_radius * self.crown_length, float)
-            else np.asarray(normalized_max_radius * self.crown_length)
-        )
+        result = normalized_max_radius * self.crown_length
+        return result.item() if result.size == 1 else result
 
-    def get_radius_at_height(self, height):
+    def get_radius_at_height(self, height) -> float | np.ndarray:
         """
         Returns the radius of the crown at a given height using the beta
         distribution crown model described in equation (3) in Ferrarese et
@@ -83,17 +66,30 @@ class BetaCrownProfile(CrownProfileModel):
         height as a proportion of the crown length scaled between 0 and 1. To
         get a crown radius in meters, the result is multiplied by the crown
         length.
+
+        Returns:
+        - scalar for single height/tree
+        - 1D array [n_heights] for single tree with multiple heights
+        - 2D array [n_trees, n_heights] for multiple trees with multiple heights
         """
         normalized_height = self._get_normalized_height(height)
         radius_at_normalized_height = self._get_radius_at_normalized_height(
             normalized_height
         )
-        return radius_at_normalized_height * self.crown_length
+        result = radius_at_normalized_height * self.crown_length
+
+        if result.size == 1:
+            return result.item()  # scalar case
+        elif result.shape[0] == 1:
+            return result.squeeze()  # single tree, multiple heights -> 1D array
+        else:
+            return result  # multiple trees -> 2D array
 
     def _get_normalized_height(self, height):
         """
-        Converts a height (in meters) of the tree crown to a unitless height
-        between 0 and 1 representing the proportion of the crown length.
+        Converts heights to normalized heights.
+        Input height can be scalar or 1D array.
+        Returns scalar or 2D array [n_trees, n_heights] through broadcasting.
         """
         height = np.asarray(height)
         return (height - self.crown_base_height) / self.crown_length
@@ -110,6 +106,8 @@ class BetaCrownProfile(CrownProfileModel):
         application to crown profiles and is described by equation (3) in
         Ferrarese et al. (2015).
 
+        Input z can be scalar or 2D array.
+        Returns scalar or array matching input dimensions.
         """
         z = np.asarray(z)
         mask = (z >= 0) & (z <= 1)
@@ -119,9 +117,4 @@ class BetaCrownProfile(CrownProfileModel):
             ((self.c * z ** (self.a - 1)) * ((1 - z) ** (self.b - 1))) / self.beta_norm,
             0.0,
         )
-        result = np.nan_to_num(result, nan=0.0)
-
-        if result.size == 1:
-            return result.item()  # Return as a scalar
-        else:
-            return result  # Return as an array
+        return np.nan_to_num(result, nan=0.0)
