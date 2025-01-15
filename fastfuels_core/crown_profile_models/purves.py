@@ -1,17 +1,14 @@
-import json
-from importlib.resources import files
-import numpy as np
+# Core imports
+from __future__ import annotations
 
+# Internal imports
+from fastfuels_core.ref_data import REF_SPECIES, REF_JENKINS
 from fastfuels_core.crown_profile_models.abc import CrownProfileModel
+
+# External imports
+import numpy as np
 from numpy.typing import NDArray
 
-DATA_PATH = files("fastfuels_core.data")
-with open(DATA_PATH / "spgrp_parameters.json", "r") as f:
-    SPGRP_PARAMS = json.load(f)
-with open(DATA_PATH / "spcd_parameters.json", "r") as f:
-    SPCD_PARAMS = json.load(f)
-with open(DATA_PATH / "class_parameters.json", "r") as f:
-    CLASS_PARAMS = json.load(f)
 
 # See Purves et al. (2007) Table S2 in Supporting Information
 C0_R0 = 0.503
