@@ -1,5 +1,5 @@
 # Internal imports
-from fastfuels_core.trees import REF_SPECIES
+from fastfuels_core.ref_data import REF_SPECIES, REF_JENKINS
 from fastfuels_core.crown_profile_models.abc import CrownProfileModel
 
 # External imports
@@ -27,18 +27,17 @@ class BetaCrownProfile(CrownProfileModel):
         We initialize data as np arrays expecting those to be passed in
         If only a float (scalar) is passed in, then the functions return results as scalars
         """
-        self.species_code = np.asarray(species_code)
+        self.species_code = np.asarray(species_code, dtype=np.int32)
         self.crown_base_height = np.asarray(crown_base_height)
         self.crown_length = np.asarray(crown_length)
 
-        # species_group = SPCD_PARAMS[str(self.species_code)]["SPGRP"]
-        species_group = vectorized_species_code_lookup(self.species_code, "SPGRP")
-        # self.a = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_a"]
-        self.a = vectorized_species_group_lookup(species_group, "BETA_CANOPY_a")
-        # self.b = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_b"]
-        self.b = vectorized_species_group_lookup(species_group, "BETA_CANOPY_b")
-        # self.c = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_c"]
-        self.c = vectorized_species_group_lookup(species_group, "BETA_CANOPY_c")
+        jenkins_species_group = np.array(
+            REF_SPECIES.loc[self.species_code]["JENKINS_SPGRPCD"], dtype=np.int32
+        )
+        self.a = np.asarray(REF_JENKINS.loc[jenkins_species_group]["BETA_CANOPY_a"])
+        self.b = np.asarray(REF_JENKINS.loc[jenkins_species_group]["BETA_CANOPY_b"])
+        self.c = np.asarray(REF_JENKINS.loc[jenkins_species_group]["BETA_CANOPY_c"])
+
         self.beta = beta(self.a, self.b)
 
     def get_max_radius(self) -> float | np.ndarray:
@@ -184,19 +183,3 @@ class BetaCrownProfile(CrownProfileModel):
         z_max = crown_base + z_max * (height - crown_base)
         r_max = self.get_beta_radius(z_max, height, crown_base, a, b, c, beta)
         return r_max
-
-
-# useful function to look up species code. The function is vectorized for convenience.
-def _species_code_lookup(species_code: str | NDArray, parameter: str):
-    return SPCD_PARAMS[str(species_code)][parameter]
-
-
-vectorized_species_code_lookup = np.vectorize(_species_code_lookup)
-
-
-# useful function to look up species groups. The function is vectorized for convenience.
-def _species_group_lookup(species_group: str | NDArray, beta_canopy: str):
-    return SPGRP_PARAMS[str(species_group)][beta_canopy]
-
-
-vectorized_species_group_lookup = np.vectorize(_species_group_lookup)
