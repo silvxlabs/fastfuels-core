@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 # Internal imports
-from fastfuels_core.ref_data import REF_SPECIES, REF_JENKINS
+from fastfuels_core.ref_data import REF_SPECIES
 from fastfuels_core.crown_profile_models.abc import CrownProfileModel
 
 # External imports
