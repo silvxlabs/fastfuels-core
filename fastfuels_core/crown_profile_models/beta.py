@@ -1,3 +1,6 @@
+# Core imports
+from __future__ import annotations
+
 # Internal imports
 from fastfuels_core.ref_data import REF_SPECIES, REF_JENKINS
 from fastfuels_core.crown_profile_models.abc import CrownProfileModel
@@ -13,26 +16,31 @@ class BetaCrownProfile(CrownProfileModel):
     A crown profile model based on a beta distribution.
     """
 
-    a: float
-    b: float
-    c: float
-    crown_length: float
-    crown_base_height: float
+    species_code: NDArray[np.int64]
+    crown_base_height: NDArray[np.float64]
+    crown_length: NDArray[np.float64]
+    a: NDArray[np.float64]
+    b: NDArray[np.float64]
+    c: NDArray[np.float64]
+    beta_norm: NDArray[np.float64]
 
     def __init__(
-        self, species_code: int, crown_base_height: float, crown_length: float
+        self,
+        species_code: int | NDArray[np.int64],
+        crown_base_height: float | NDArray[np.float64],
+        crown_length: float | NDArray[np.float64],
     ):
         """
         Initializes a BetaCrownProfile instance.
         We initialize data as np arrays expecting those to be passed in
         If only a float (scalar) is passed in, then the functions return results as scalars
         """
-        self.species_code = np.asarray(species_code, dtype=np.int32)
+        self.species_code = np.asarray(species_code)
         self.crown_base_height = np.asarray(crown_base_height)
         self.crown_length = np.asarray(crown_length)
 
         jenkins_species_group = np.array(
-            REF_SPECIES.loc[self.species_code]["JENKINS_SPGRPCD"], dtype=np.int32
+            REF_SPECIES.loc[self.species_code]["JENKINS_SPGRPCD"]
         )
         self.a = np.asarray(REF_JENKINS.loc[jenkins_species_group]["BETA_CANOPY_a"])
         self.b = np.asarray(REF_JENKINS.loc[jenkins_species_group]["BETA_CANOPY_b"])
@@ -133,7 +141,7 @@ class BetaCrownProfile(CrownProfileModel):
 
         Returns
         -------
-        r : NDarray
+        r : NDArray
             Radius of tree evaluated at z heights.
         """
 
@@ -173,7 +181,7 @@ class BetaCrownProfile(CrownProfileModel):
 
         Returns
         -------
-        r_max : NDarray
+        r_max : NDArray
             Maximum radius of each tree in meters.
         """
 
