@@ -112,6 +112,7 @@ class PurvesCrownProfile(CrownProfileModel):
         height : float or np.ndarray
             Height(s) at which to compute the crown radius (m).
             Input can be a single value (scalar) or a numpy array (vector ndarray)
+
         Returns
         -------
         float or np.ndarray
@@ -154,7 +155,7 @@ class PurvesCrownProfile(CrownProfileModel):
 
         Returns
         -------
-        shape_parameter : NDarray
+        NDArray
             Shape parameters for each tree.
         """
         shape_parameter = (1.0 - self.trait_score) * C0_B + self.trait_score * C1_B
@@ -198,7 +199,7 @@ class PurvesCrownProfile(CrownProfileModel):
 
         Returns
         -------
-        NDAarray
+        NDArray
             Maximum possible (theoretical) radius of a tree in the Purves model.
         """
         r0j = (1 - self.trait_score) * C0_R0 + self.trait_score * C1_R0
