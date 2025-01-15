@@ -212,10 +212,9 @@ class PurvesCrownProfile(CrownProfileModel):
 
         return max_crown_radius
 
-
-# useful function to look up trait scores. The function is vectorized for convenience.
-def _trait_score_lookup(species_code: str | NDArray):
-    return SPCD_PARAMS[str(species_code)]["PURVES_TRAIT_SCORE"]
-
-
-vectorized_trait_score_lookup = np.vectorize(_trait_score_lookup)
+    @staticmethod
+    def _get_purves_trait_score(spcd):
+        """
+        Get the trait score for a given species code from the REF_SPECIES table.
+        """
+        return REF_SPECIES.loc[spcd]["PURVES_TRAIT_SCORE"]
