@@ -7,7 +7,6 @@ from fastfuels_core.crown_profile_models.abc import CrownProfileModel
 
 # External imports
 import numpy as np
-from scipy.special import beta  # TODO: Precompute beta values
 from numpy.typing import NDArray
 
 
@@ -46,7 +45,9 @@ class BetaCrownProfile(CrownProfileModel):
         self.b = np.asarray(REF_JENKINS.loc[jenkins_species_group]["BETA_CANOPY_b"])
         self.c = np.asarray(REF_JENKINS.loc[jenkins_species_group]["BETA_CANOPY_c"])
 
-        self.beta = beta(self.a, self.b)
+        self.beta_norm = np.asarray(
+            REF_JENKINS.loc[jenkins_species_group]["BETA_CANOPY_NORM"]
+        )
 
     def get_max_radius(self) -> float | np.ndarray:
         """
@@ -108,7 +109,7 @@ class BetaCrownProfile(CrownProfileModel):
 
         result = np.where(
             mask,
-            self.c * z ** (self.a - 1) * (1 - z) ** (self.b - 1) / self.beta,
+            ((self.c * z ** (self.a - 1)) * ((1 - z) ** (self.b - 1))) / self.beta_norm,
             0.0,
         )
         result = np.nan_to_num(result, nan=0.0)
@@ -187,7 +188,9 @@ class BetaCrownProfile(CrownProfileModel):
 
         # Normalized height of max radius
         z_max = (a - 1) / (a + b - 2)
+
         # Un-normalized height of max radius
         z_max = crown_base + z_max * (height - crown_base)
         r_max = self.get_beta_radius(z_max, height, crown_base, a, b, c, beta)
+
         return r_max
