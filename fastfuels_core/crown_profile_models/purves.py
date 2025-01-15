@@ -138,7 +138,13 @@ class PurvesCrownProfile(CrownProfileModel):
         )
         radius = np.nan_to_num(radius, nan=0.0)
 
-        return radius if radius.size > 1 else radius.item()
+        # Handle return types based on input dimensionality and number of trees
+        if radius.size == 1:
+            return radius.item()  # scalar case
+        elif radius.shape[0] == 1 == 1:
+            return radius.reshape(-1)  # single tree case -> 1D array
+        else:
+            return radius  # multiple trees case -> 2D array
 
     def get_max_radius(self) -> float | np.ndarray:
         """
@@ -149,7 +155,8 @@ class PurvesCrownProfile(CrownProfileModel):
         float or np.ndarray
             Maximum crown radius (m).
         """
-        return self.get_radius_at_height(self.crown_base_height)
+        max_radius = self.get_radius_at_height(self.crown_base_height)
+        return max_radius if isinstance(max_radius, float) else max_radius.reshape(-1)
 
     def _get_purves_shape_param(self):
         """
