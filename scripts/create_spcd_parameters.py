@@ -82,11 +82,14 @@ def main():
         )
         fia_species.drop(columns=["PURVES_TRAIT_SCORE_mean", "CN"], inplace=True)
 
+        # Convert the SPCD and JENKINS_SPGRPCD columns to integers
+        fia_species["SPCD"] = fia_species["SPCD"].astype(int)
+        fia_species["JENKINS_SPGRPCD"] = fia_species["JENKINS_SPGRPCD"].astype(int)
+
         # Write the dataframe to a CSV file
         output_path = Path(os.path.join(output_dir, output_fname))
         output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        fia_species.to_csv(output_path, index=False)
+        fia_species.to_csv(output_path, index=True)
 
         print(
             Fore.GREEN
