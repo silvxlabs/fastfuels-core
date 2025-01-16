@@ -1,52 +1,47 @@
-import json
-from importlib.resources import files
-import numpy as np
+# Core imports
+from __future__ import annotations
 
+# Internal imports
+from fastfuels_core.ref_data import REF_SPECIES, REF_JENKINS
 from fastfuels_core.crown_profile_models.abc import CrownProfileModel
-from scipy.special import beta
-from numpy.typing import NDArray
 
-DATA_PATH = files("fastfuels_core.data")
-with open(DATA_PATH / "spgrp_parameters.json", "r") as f:
-    SPGRP_PARAMS = json.load(f)
-with open(DATA_PATH / "spcd_parameters.json", "r") as f:
-    SPCD_PARAMS = json.load(f)
-with open(DATA_PATH / "class_parameters.json", "r") as f:
-    CLASS_PARAMS = json.load(f)
+# External imports
+import numpy as np
+from numpy.typing import NDArray
 
 
 class BetaCrownProfile(CrownProfileModel):
-    """
-    A crown profile model based on a beta distribution.
-    """
-
-    a: float
-    b: float
-    c: float
-    crown_length: float
-    crown_base_height: float
-
     def __init__(
-        self, species_code: int, crown_base_height: float, crown_length: float
+        self,
+        species_code: int | NDArray[np.int64],
+        crown_base_height: float | NDArray[np.float64],
+        crown_length: float | NDArray[np.float64],
     ):
         """
         Initializes a BetaCrownProfile instance.
-        We initialize data as np arrays expecting those to be passed in
-        If only a float (scalar) is passed in, then the functions return results as scalars
+        All instance variables are stored as 2D arrays with shape [n_trees, 1]
+        to enable natural broadcasting with 1D height inputs.
         """
-        self.species_code = np.asarray(species_code)
-        self.crown_base_height = np.asarray(crown_base_height)
-        self.crown_length = np.asarray(crown_length)
+        # Store all tree parameters as 2D arrays [n_trees, 1]
+        self.species_code = np.atleast_2d(species_code).T
+        self.crown_base_height = np.atleast_2d(crown_base_height).T
+        self.crown_length = np.atleast_2d(crown_length).T
 
-        # species_group = SPCD_PARAMS[str(self.species_code)]["SPGRP"]
-        species_group = vectorized_species_code_lookup(self.species_code, "SPGRP")
-        # self.a = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_a"]
-        self.a = vectorized_species_group_lookup(species_group, "BETA_CANOPY_a")
-        # self.b = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_b"]
-        self.b = vectorized_species_group_lookup(species_group, "BETA_CANOPY_b")
-        # self.c = SPGRP_PARAMS[str(species_group)]["BETA_CANOPY_c"]
-        self.c = vectorized_species_group_lookup(species_group, "BETA_CANOPY_c")
-        self.beta = beta(self.a, self.b)
+        jenkins_species_group = np.atleast_2d(
+            REF_SPECIES.loc[self.species_code.ravel()]["JENKINS_SPGRPCD"]
+        ).T
+        self.a = np.atleast_2d(
+            REF_JENKINS.loc[jenkins_species_group.ravel()]["BETA_CANOPY_a"]
+        ).T
+        self.b = np.atleast_2d(
+            REF_JENKINS.loc[jenkins_species_group.ravel()]["BETA_CANOPY_b"]
+        ).T
+        self.c = np.atleast_2d(
+            REF_JENKINS.loc[jenkins_species_group.ravel()]["BETA_CANOPY_c"]
+        ).T
+        self.beta_norm = np.atleast_2d(
+            REF_JENKINS.loc[jenkins_species_group.ravel()]["BETA_CANOPY_NORM"]
+        ).T
 
     def get_max_radius(self) -> float | np.ndarray:
         """
@@ -58,17 +53,12 @@ class BetaCrownProfile(CrownProfileModel):
         Returns a scalar with scalar input
         Returns a vector with vector input
         """
-        # Find the mode of the beta distribution. This is the value of z at
-        # which the beta distribution is at its max.
         z_max = (self.a - 1) / (self.a + self.b - 2)
         normalized_max_radius = self._get_radius_at_normalized_height(z_max)
-        return (
-            normalized_max_radius * self.crown_length
-            if isinstance(normalized_max_radius * self.crown_length, float)
-            else np.asarray(normalized_max_radius * self.crown_length)
-        )
+        result = normalized_max_radius * self.crown_length
+        return result.item() if result.size == 1 else result
 
-    def get_radius_at_height(self, height):
+    def get_radius_at_height(self, height) -> float | np.ndarray:
         """
         Returns the radius of the crown at a given height using the beta
         distribution crown model described in equation (3) in Ferrarese et
@@ -76,18 +66,32 @@ class BetaCrownProfile(CrownProfileModel):
         height as a proportion of the crown length scaled between 0 and 1. To
         get a crown radius in meters, the result is multiplied by the crown
         length.
+
+        Returns:
+        - scalar for single height/tree
+        - 1D array [n_heights] for single tree with multiple heights
+        - 2D array [n_trees, n_heights] for multiple trees with multiple heights
         """
         normalized_height = self._get_normalized_height(height)
         radius_at_normalized_height = self._get_radius_at_normalized_height(
             normalized_height
         )
-        return radius_at_normalized_height * self.crown_length
+        result = radius_at_normalized_height * self.crown_length
+
+        if result.size == 1:
+            return result.item()  # scalar case
+        elif result.shape[0] == 1:
+            return result.squeeze()  # single tree, multiple heights -> 1D array
+        else:
+            return result  # multiple trees -> 2D array
 
     def _get_normalized_height(self, height):
         """
-        Converts a height (in meters) of the tree crown to a unitless height
-        between 0 and 1 representing the proportion of the crown length.
+        Converts heights to normalized heights.
+        Input height can be scalar or 1D array.
+        Returns scalar or 2D array [n_trees, n_heights] through broadcasting.
         """
+        height = np.asarray(height)
         return (height - self.crown_base_height) / self.crown_length
 
     def _get_radius_at_normalized_height(self, z):
@@ -102,108 +106,15 @@ class BetaCrownProfile(CrownProfileModel):
         application to crown profiles and is described by equation (3) in
         Ferrarese et al. (2015).
 
+        Input z can be scalar or 2D array.
+        Returns scalar or array matching input dimensions.
         """
         z = np.asarray(z)
         mask = (z >= 0) & (z <= 1)
 
         result = np.where(
             mask,
-            self.c * z ** (self.a - 1) * (1 - z) ** (self.b - 1) / self.beta,
+            ((self.c * z ** (self.a - 1)) * ((1 - z) ** (self.b - 1))) / self.beta_norm,
             0.0,
         )
-        result = np.nan_to_num(result, nan=0.0)
-
-        if result.size == 1:
-            return result.item()  # Return as a scalar
-        else:
-            return result  # Return as an array
-
-    def get_beta_radius(self, z, height, crown_base, a, b, c, beta):
-        """
-        Get radius at an array of z heights using the beta crown profile model.
-
-        Parameters
-        ----------
-        z : NDArray
-            Array of z coordinates of float64 type.
-        height : float
-            Tree height in meters.
-        crown_base : float
-            Crown base in meters.
-        a : float
-            Beta distribution parameter.
-        b : float
-            Beta distribution parameter.
-        c : float
-            Beta distribution parameter.
-        beta : float
-            Beta distribution parameter.
-
-        Returns
-        -------
-        r : NDarray
-            Radius of tree evaluated at z heights.
-        """
-
-        if np.all(z < crown_base):
-            return 0.0
-        if np.all(z > height):
-            return 0.0
-
-        # Normalize
-        crown_length = height - crown_base
-        z = (z - crown_base) / crown_length
-
-        r = (c * z ** (a - 1) * (1 - z) ** (b - 1)) / beta
-        r = r * crown_length
-        return r
-
-    def get_beta_max_crown_radius(self, height, crown_base, a, b, c, beta):
-        """
-        Gets the maximum radius of a tree for the beta crown profile model.
-
-        Parameters
-        ----------
-        height : NDArray
-            Array of tree heights in meters.
-        crown_base : NDArray
-            Array of crown base heights in meters.
-        crown_base : NDArray
-            Crown base heights in meters.
-        a : NDArray
-            Array of beta distribution parameters.
-        b : NDArray
-            Array of beta distribution parameters.
-        c : NDArray
-            Array of beta distribution parameters.
-        beta : NDArray
-            Array of beta distribution parameters.
-
-        Returns
-        -------
-        r_max : NDarray
-            Maximum radius of each tree in meters.
-        """
-
-        # Normalized height of max radius
-        z_max = (a - 1) / (a + b - 2)
-        # Un-normalized height of max radius
-        z_max = crown_base + z_max * (height - crown_base)
-        r_max = self.get_beta_radius(z_max, height, crown_base, a, b, c, beta)
-        return r_max
-
-
-# useful function to look up species code. The function is vectorized for convenience.
-def _species_code_lookup(species_code: str | NDArray, parameter: str):
-    return SPCD_PARAMS[str(species_code)][parameter]
-
-
-vectorized_species_code_lookup = np.vectorize(_species_code_lookup)
-
-
-# useful function to look up species groups. The function is vectorized for convenience.
-def _species_group_lookup(species_group: str | NDArray, beta_canopy: str):
-    return SPGRP_PARAMS[str(species_group)][beta_canopy]
-
-
-vectorized_species_group_lookup = np.vectorize(_species_group_lookup)
+        return np.nan_to_num(result, nan=0.0)

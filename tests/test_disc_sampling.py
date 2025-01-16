@@ -5,8 +5,9 @@ from tests.utils import LIST_SPCDS
 
 
 # external inputs
-import numpy as np
 import pytest
+import numpy as np
+import pandas as pd
 
 vector_length = 100_000
 
@@ -63,7 +64,8 @@ def y_vector(tree_list):
 
 class TestDiscSampling:
 
-    def test_create_disc_sampling(
+    @pytest.mark.parametrize("crown_profile_model", ["beta", "purves"])
+    def test_init(
         self,
         tree_list,
         id_vector,
@@ -74,9 +76,8 @@ class TestDiscSampling:
         stscd_vector,
         x_vector,
         y_vector,
+        crown_profile_model,
     ):
-        import pandas as pd
-
         tree_population_dict = {
             "TREE_ID": id_vector,
             "SPCD": spcd_vector,
@@ -89,5 +90,7 @@ class TestDiscSampling:
         }
         tree_population_df = pd.DataFrame(tree_population_dict)
 
-        disc_sampling_object = DiscSampler(tree_population_df)
+        disc_sampling_object = DiscSampler(
+            tree_population_df, crown_profile_model=crown_profile_model
+        )
         print(disc_sampling_object)

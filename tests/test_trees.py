@@ -4,12 +4,10 @@ from pathlib import Path
 # Internal imports
 from fastfuels_core.trees import (
     Tree,
-    # BetaCrownProfile,
     JenkinsBiomassEquations,
     NSVBEquations,
-    SPCD_PARAMS,
+    REF_SPECIES,
 )
-
 from fastfuels_core.crown_profile_models.beta import BetaCrownProfile
 
 # External imports
@@ -93,7 +91,7 @@ class TestBetaCrownProfileModel:
         model = BetaCrownProfile(
             species_code=122, crown_length=10, crown_base_height=10
         )
-        normalized_heights = model._get_normalized_height(heights)
+        normalized_heights = model._get_normalized_height(heights).reshape(-1)
         assert len(normalized_heights) == 100
         assert normalized_heights[0] == 0
         assert normalized_heights[-1] == 1.0
@@ -122,13 +120,13 @@ class TestBetaCrownProfileModel:
 
         # Test with a numpy array of floats, all within the range [0, 1]
         z_values = np.array([0.1, 0.2, 0.3, 0.4, 0.5])
-        radii = model._get_radius_at_normalized_height(z_values)
+        radii = model._get_radius_at_normalized_height(z_values).reshape(-1)
         assert len(radii) == len(z_values)
         assert all(radii > 0)
 
         # Test with a numpy array of floats, some within and some outside the range [0, 1]
         z_values = np.array([-1, 0, 0.5, 1, 2])
-        radii = model._get_radius_at_normalized_height(z_values)
+        radii = model._get_radius_at_normalized_height(z_values).reshape(-1)
         assert len(radii) == len(z_values)
         assert radii[0] == 0.0
         assert radii[1] == 0.0
@@ -172,14 +170,10 @@ class TestJenkinsBiomassEquations:
         # Test that the class can be initialized
         model = JenkinsBiomassEquations(species_code=122, diameter=24)
         assert model._species_group == 4
-        assert model._is_softwood == 1
-        assert np.isclose(model._sapling_adjustment, 0.43373999999999996)
 
         # Test with a different species code
         model = JenkinsBiomassEquations(species_code=989, diameter=100)
         assert model._species_group == 8
-        assert model._is_softwood == 0
-        assert model._sapling_adjustment == 0.84031
 
         # Test with an invalid species code
         with pytest.raises(ValueError):
@@ -190,7 +184,7 @@ class TestJenkinsBiomassEquations:
             JenkinsBiomassEquations(species_code=122, diameter=-100)
 
         # Test initializing all species codes
-        for species_code in SPCD_PARAMS:
+        for species_code in REF_SPECIES.index:
             JenkinsBiomassEquations(species_code=int(species_code), diameter=100)
 
     def test_estimate_above_ground_biomass(self):
@@ -200,7 +194,7 @@ class TestJenkinsBiomassEquations:
         assert biomass > 0, "Biomass should be a positive number"
 
         # Test each species code with a random diameter
-        for species_code in SPCD_PARAMS:
+        for species_code in REF_SPECIES.index:
             diameter = np.random.uniform(0, 100)
             model = JenkinsBiomassEquations(
                 species_code=int(species_code), diameter=diameter
@@ -219,7 +213,7 @@ class TestJenkinsBiomassEquations:
         assert biomass > 0, "Biomass should be a positive number"
 
         # Test each species code with a random diameter
-        for species_code in SPCD_PARAMS:
+        for species_code in REF_SPECIES.index:
             diameter = np.random.uniform(0, 100)
             model = JenkinsBiomassEquations(
                 species_code=int(species_code), diameter=diameter

@@ -1,8 +1,6 @@
 # Core imports
 from __future__ import annotations
-import json
 from abc import ABC, abstractmethod
-from importlib.resources import files
 
 # Internal imports
 from fastfuels_core.base import ObjectIterableDataFrame
@@ -12,22 +10,13 @@ from fastfuels_core.treatments import TreatmentProtocol
 from fastfuels_core.crown_profile_models.abc import CrownProfileModel
 from fastfuels_core.crown_profile_models.purves import PurvesCrownProfile
 from fastfuels_core.crown_profile_models.beta import BetaCrownProfile
+from fastfuels_core.ref_data import REF_SPECIES, REF_JENKINS
 
 # External Imports
 import numpy as np
 from numpy import ndarray
-
 from nsvb.estimators import total_foliage_dry_weight
 from pandera import DataFrameSchema, Column, Check, Index
-
-
-DATA_PATH = files("fastfuels_core.data")
-with open(DATA_PATH / "spgrp_parameters.json", "r") as f:
-    SPGRP_PARAMS = json.load(f)
-with open(DATA_PATH / "spcd_parameters.json", "r") as f:
-    SPCD_PARAMS = json.load(f)
-with open(DATA_PATH / "class_parameters.json", "r") as f:
-    CLASS_PARAMS = json.load(f)
 
 
 TREE_SCHEMA_COLS = {
@@ -235,6 +224,7 @@ class Tree:
         diameter: float,
         height: float,
         crown_ratio: float,
+        jenkins_species_group: int = None,
         x=0,
         y=0,
         crown_profile_model_type="purves",
@@ -256,6 +246,9 @@ class Tree:
         self.x = x
         self.y = y
 
+        # Optional parameters
+        self._jenkins_species_group = jenkins_species_group
+
         if crown_profile_model_type not in ["beta", "purves"]:
             raise ValueError(
                 "The crown profile model must be one of the following: 'beta' or 'purves'"
@@ -263,7 +256,7 @@ class Tree:
         self._crown_profile_model_type = crown_profile_model_type
 
         available_biomass_allometry_models = ["NSVB", "jenkins"]
-        if biomass_allometry_model_type == "NSVB" and self.species_group == 10:
+        if biomass_allometry_model_type == "NSVB" and self.jenkins_species_group == 10:
             biomass_allometry_model_type = "jenkins"
         if biomass_allometry_model_type not in available_biomass_allometry_models:
             raise ValueError(
@@ -286,11 +279,13 @@ class Tree:
         return self.height - self.crown_length
 
     @property
-    def species_group(self) -> int:
+    def jenkins_species_group(self) -> int:
         """
         Returns the species group of the tree based on the species code.
         """
-        return SPCD_PARAMS[str(self.species_code)]["SPGRP"]
+        if self._jenkins_species_group:
+            return self._jenkins_species_group
+        return REF_SPECIES.loc[self.species_code]["JENKINS_SPGRPCD"]
 
     @property
     def is_live(self):
@@ -439,12 +434,15 @@ class JenkinsBiomassEquations(BiomassAllometryModel):
         if not _is_valid_diameter(diameter):
             raise ValueError(f"Diameter {diameter} must be greater than 0.")
 
+        # Assign attributes
         self.species_code = species_code
         self.diameter = diameter
 
-        self._species_group = SPCD_PARAMS[str(species_code)]["SPGRP"]
-        self._is_softwood = SPCD_PARAMS[str(species_code)]["CLASS"]
-        self._sapling_adjustment = SPCD_PARAMS[str(species_code)]["SAPADJ"]
+        # Read data from reference tables
+        self._species_group = REF_SPECIES.loc[species_code]["JENKINS_SPGRPCD"]
+        self._sapling_adjustment = REF_JENKINS.loc[self._species_group][
+            "JENKINS_SAPLING_ADJUSTMENT"
+        ]
 
     def _estimate_above_ground_biomass(self):
         """
@@ -460,9 +458,11 @@ class JenkinsBiomassEquations(BiomassAllometryModel):
         NOTE: This method also applies a sapling adjustment factor (sapadj) for
         trees with dbh <= 12.7cm (5 inches).
         """
-        # Get the parameters for the species group
-        beta_0 = SPGRP_PARAMS[str(self._species_group)]["JENKINS_AGB_b0"]
-        beta_1 = SPGRP_PARAMS[str(self._species_group)]["JENKINS_AGB_b1"]
+        # Read beta parameters from reference table.
+        # NOTE: in the reference table the parameters are named b1 and b2.
+        # BUT in the paper they are named b0 and b1 :(.
+        beta_0 = REF_JENKINS.loc[self._species_group]["JENKINS_TOTAL_B1"]
+        beta_1 = REF_JENKINS.loc[self._species_group]["JENKINS_TOTAL_B2"]
 
         # Estimate the above ground biomass
         biomass = np.exp(beta_0 + (beta_1 * np.log(self.diameter)))
@@ -488,9 +488,11 @@ class JenkinsBiomassEquations(BiomassAllometryModel):
         r is multiplied by the above ground biomass to estimate the
         foliage biomass in kg.
         """
-        # Get the parameters for the hardwood class
-        beta_0 = CLASS_PARAMS[str(self._is_softwood)]["foliage_b0"]
-        beta_1 = CLASS_PARAMS[str(self._is_softwood)]["foliage_b1"]
+        # Read beta parameters from reference table.
+        # NOTE: in the reference table the parameters are named b1 and b2.
+        # BUT in the paper they are named b0 and b1 :(.
+        beta_0 = REF_JENKINS.loc[self._species_group]["JENKINS_FOLIAGE_RATIO_B1"]
+        beta_1 = REF_JENKINS.loc[self._species_group]["JENKINS_FOLIAGE_RATIO_B2"]
 
         # Estimate the foliage component ratio
         ratio = np.exp(beta_0 + (beta_1 / self.diameter))
@@ -502,39 +504,8 @@ class JenkinsBiomassEquations(BiomassAllometryModel):
 
 
 def _is_valid_spcd(spcd: int) -> bool:
-    return str(int(spcd)) in SPCD_PARAMS
+    return spcd in REF_SPECIES.index
 
 
 def _is_valid_diameter(diameter: float) -> bool:
     return diameter > 0
-
-
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-
-    # Create subplots for different crown ratios
-    crown_ratios = [0.2, 0.4, 0.6, 0.8]
-    fig, axes = plt.subplots(1, len(crown_ratios), figsize=(20, 10), sharey=True)
-
-    for ax, crown_ratio in zip(axes, crown_ratios):
-        tree_beta = Tree(
-            814, 1, 15.0, 5.0, crown_ratio, 0, 0, crown_profile_model_type="beta"
-        )
-        tree_purves = Tree(
-            814, 1, 15.0, 5.0, crown_ratio, 0, 0, crown_profile_model_type="purves"
-        )
-
-        heights = np.linspace(0, tree_beta.height, 100)
-        beta_p = tree_beta.get_crown_radius_at_height(heights)
-        purves_p = tree_purves.get_crown_radius_at_height(heights)
-
-        ax.plot(beta_p, heights, "-r", label="Beta Crown Profile")
-        ax.plot(purves_p, heights, "-k", label="Purves Crown Profile")
-        ax.set_xlabel("Crown Radius (m)")
-        ax.set_title(f"Crown Ratio = {crown_ratio}")
-        ax.set_aspect("equal")
-        ax.legend()
-
-    axes[0].set_ylabel("Height (m)")
-    plt.gca().set_aspect("equal", adjustable="box")
-    plt.show()

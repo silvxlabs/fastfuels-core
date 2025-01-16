@@ -51,40 +51,25 @@ class DiscSampler:
                 "The crown profile model must be one of the following: 'beta' or 'purves'"
             )
         self.crown_profile_model = crown_profile_model
-        if self.crown_profile_model == "beta":
-            height = trees["HT"].to_numpy()
-            crown_ratio = trees["CR"].to_numpy()
-            crown_length = height * crown_ratio
-            crown_base_height = height - crown_length
 
-            # create BetaCrownProfile
+        # Compute max crown radius using the beta crown profile model
+        if self.crown_profile_model == "beta":
             self.beta_model = BetaCrownProfile(
-                trees["SPCD"].to_numpy().astype(str), crown_base_height, crown_length
+                species_code=trees["SPCD"],
+                crown_base_height=trees["HT"] - trees["CR"],
+                crown_length=trees["HT"] * trees["CR"],
             )
-            # update tree properties
-            a = self.beta_model.a
-            b = self.beta_model.b
-            c = self.beta_model.c
-            beta = self.beta_model.beta
-            trees["MAX_RADIUS"] = self.beta_model.get_beta_max_radius(
-                height,
-                crown_base_height,
-                a,
-                b,
-                c,
-                beta,
-            )
-        else:  # create purves model
+            trees["MAX_RADIUS"] = self.beta_model.get_max_radius()
+
+        # Compute max crown radius using the beta crown profile model
+        else:
             self.purves_model = PurvesCrownProfile(
-                trees["SPCD"].to_numpy().astype(str),
-                trees["DIA"].to_numpy().astype(float),
-                trees["HT"].to_numpy().astype(float),
-                trees["CR"].to_numpy().astype(float),
+                species_code=trees["SPCD"],
+                dbh=trees["DIA"],
+                height=trees["HT"],
+                crown_ratio=trees["CR"],
             )
-            # update tree properties
-            trees["MAX_RADIUS"] = self.purves_model._get_purves_max_crown_radius(
-                self.purves_model.species_code, self.purves_model.dbh
-            )
+            trees["MAX_RADIUS"] = self.purves_model.get_max_radius()
 
         # Tree coordinates
         x = trees["X"].to_numpy()

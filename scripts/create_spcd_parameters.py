@@ -6,11 +6,10 @@ NOTE: cd into the scripts directory before running this script
 """
 
 # Core imports
+import os
 import re
-import json
 import sys
 from pathlib import Path
-import os
 
 # External imports
 import pandas as pd
@@ -19,9 +18,9 @@ from colorama import Fore, Style, init
 # Configurations
 data_dir = "./data"
 purves_fname = "purves_s3.csv"
-ref_species_fname = "REF_SPECIES.csv"
+ref_species_fname = "REF_SPECIES_original.csv"
 output_dir = "../fastfuels_core/data"
-output_fname = "spcd_parameters.json"
+output_fname = "REF_SPECIES.csv"
 
 # Initialize colorama
 init(autoreset=True)
@@ -58,58 +57,38 @@ def main():
         # Extract the trait score
         purves["first_score"] = purves["score"].apply(extract_first_value)
         purves.drop(columns=["score"], inplace=True)
-        purves.rename(columns={"first_score": "score"}, inplace=True)
+        purves.rename(
+            columns={"first_score": "PURVES_TRAIT_SCORE", "code": "SPCD"}, inplace=True
+        )
 
-        # Merge data
-        fia_species = fia_species.merge(purves, left_on="SPCD", right_on="code")
+        # Merge the Purves trait score with the FIA species data on the SPCD column.
+        # This assigns a NoN trait score to species not found in the Purves data.
+        fia_species = fia_species.merge(
+            purves, how="left", left_on="SPCD", right_on="SPCD"
+        )
 
         # Compute the mean trait score by jenkins species group
         fia_species_grouped = (
-            fia_species.groupby("JENKINS_SPGRPCD")["score"].mean().reset_index()
+            fia_species.groupby("JENKINS_SPGRPCD")["PURVES_TRAIT_SCORE"]
+            .mean()
+            .reset_index()
         )
         fia_species = fia_species.merge(
             fia_species_grouped, on="JENKINS_SPGRPCD", suffixes=("", "_mean")
         )
-        fia_species["score"] = fia_species["score"].fillna(fia_species["score_mean"])
-        fia_species.drop(columns=["score_mean"], inplace=True)
-
-        # Set SPCD as the index
-        fia_species.set_index("SPCD", inplace=True)
-
-        # Transform CLASS column: 0 for hardwoods, 1 for softwoods
-        fia_species["CLASS"] = fia_species["SFTWD_HRDWD"].apply(
-            lambda x: 1 if x == "S" else 0
+        fia_species["PURVES_TRAIT_SCORE"] = fia_species["PURVES_TRAIT_SCORE"].fillna(
+            fia_species["PURVES_TRAIT_SCORE_mean"]
         )
+        fia_species.drop(columns=["PURVES_TRAIT_SCORE_mean", "CN"], inplace=True)
 
-        # Convert SPGRP and SPCD to integers
+        # Convert the SPCD and JENKINS_SPGRPCD columns to integers
+        fia_species["SPCD"] = fia_species["SPCD"].astype(int)
         fia_species["JENKINS_SPGRPCD"] = fia_species["JENKINS_SPGRPCD"].astype(int)
-        fia_species.index = fia_species.index.astype(int)
 
-        # Keep only the necessary columns and rename them
-        fia_species = fia_species.loc[
-            :, ["CLASS", "JENKINS_SPGRPCD", "JENKINS_SAPLING_ADJUSTMENT", "score"]
-        ]
-        fia_species.rename(
-            columns={
-                "JENKINS_SPGRPCD": "SPGRP",
-                "JENKINS_SAPLING_ADJUSTMENT": "SAPADJ",
-                "score": "PURVES_TRAIT_SCORE",
-            },
-            inplace=True,
-        )
-
-        # Convert SPGRP to integer after renaming
-        fia_species["SPGRP"] = fia_species["SPGRP"].astype(int)
-
-        # Convert the DataFrame to a dictionary
-        fia_species_dict = fia_species.to_dict(orient="index")
-
-        # Write the dictionary to a JSON file
+        # Write the dataframe to a CSV file
         output_path = Path(os.path.join(output_dir, output_fname))
         output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(output_path, "w") as json_file:
-            json.dump(fia_species_dict, json_file, indent=4)
+        fia_species.to_csv(output_path, index=True)
 
         print(
             Fore.GREEN
