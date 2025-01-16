@@ -6,11 +6,10 @@ NOTE: cd into the scripts directory before running this script
 """
 
 # Core imports
+import os
 import re
-import json
 import sys
 from pathlib import Path
-import os
 
 # External imports
 import pandas as pd
