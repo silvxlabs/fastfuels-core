@@ -25,7 +25,7 @@ class PurvesCrownProfile(CrownProfileModel):
 
     This class computes the crown profile for a given tree based on the Purves et al. (2007) model.
     It uses species-specific parameters to calculate the crown radius at different heights; parameters
-    can be found in fastfuels_core/data/spcd_parameters.json.
+    can be found in REF_SPECIES.csv.
 
     Parameters
     ----------
