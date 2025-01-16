@@ -1,12 +1,15 @@
+"""
+tests/utils.py
+"""
+
 # Core imports
 import random
 
-# from numpy import random as rnd
-
 # Internal imports
-from fastfuels_core.trees import Tree, SPCD_PARAMS
+from fastfuels_core.trees import Tree
+from fastfuels_core.ref_data import REF_SPECIES
 
-LIST_SPCDS = [k for k in SPCD_PARAMS.keys() if SPCD_PARAMS[k]["SPGRP"] != -1]
+LIST_SPCDS = [k for k in REF_SPECIES.index]
 
 
 def make_random_tree(
