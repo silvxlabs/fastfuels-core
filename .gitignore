@@ -171,3 +171,4 @@ figures/
 # IDE config files
 .idea/
 .vscode/
+*.code-workspace
