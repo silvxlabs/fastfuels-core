@@ -36,6 +36,7 @@ INSTALL_REQUIRES = [
     "dask",
     "dask-expr",
     "dask-image",
+    "duet-tools",
     "fastparquet",
     "geopandas",
     "nsvb",
