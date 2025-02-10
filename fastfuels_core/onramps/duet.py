@@ -8,11 +8,12 @@ from subprocess import Popen, PIPE
 from time import sleep
 
 # External imports
-import numpy as np
-from numpy import ndarray
 import duet_tools as dt
 from duet_tools.inputs import InputFile
 from duet_tools.utils import write_array_to_dat
+import numpy as np
+from numpy import ndarray
+from xarray import DataArray
 
 DATA_PATH = files("fastfuels_core.data")
 
@@ -20,21 +21,24 @@ DATA_PATH = files("fastfuels_core.data")
 def run_duet(
     duet_exe_directory: Path | str,
     duet_exe_name: str,
-    bulk_density_grid: ndarray,
-    species_code_grid: ndarray,
-    fuel_moisture_grid: ndarray,
+    bulk_density_grid: DataArray,
+    species_code_grid: DataArray,
+    fuel_moisture_grid: DataArray,
     wind_direction: float,
     wind_variability: float,
     duration: int,
     random_seed: int = None,
-) -> ndarray:
+) -> None:
     """"""
     if isinstance(duet_exe_directory, str):
         duet_exe_directory = Path(duet_exe_directory)
 
     # write input file
     nz, ny, nx = bulk_density_grid.shape
-    dz, dy, dx = (1, 2, 2)  # how to get this from grid(s)?
+    dz, dy, dx = [
+        int(np.diff(bulk_density_grid.coords[dim]).mean())
+        for dim in bulk_density_grid.dims
+    ]
     duet_in = InputFile.create(
         nx, ny, nz, duration, wind_direction, dx, dy, dz, random_seed, wind_variability
     )
