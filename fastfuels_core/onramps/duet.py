@@ -12,7 +12,7 @@ import duet_tools as duet
 from duet_tools.inputs import InputFile
 from duet_tools.utils import write_array_to_dat
 import numpy as np
-from numpy import ndarray
+from shapely import Polygon
 from xarray import DataArray, Dataset
 
 DATA_PATH = files("fastfuels_core.data")
@@ -132,6 +132,43 @@ def run_and_calibrate_duet(
     return _assemble_dataset(calibrated_duet, canopy_grid)
 
 
+def run_and_calibrate_duet_from_landfire(
+    duet_exe_directory: Path | str,
+    duet_exe_name: str,
+    canopy_grid: DataArray,
+    spcd_grid: DataArray,
+    wind_direction: float,
+    wind_variability: float,
+    duration: int,
+    domain: Polygon,
+    epsg: int,
+    random_seed: int = None,
+    duet_version: str = "v2",
+):
+    """"""
+    duet_run = _run_duet(
+        duet_exe_directory,
+        duet_exe_name,
+        canopy_grid,
+        spcd_grid,
+        wind_direction,
+        wind_variability,
+        duration,
+        random_seed,
+        duet_version,
+    )
+    query = duet.query_landfire(domain, duet_exe_directory, epsg)
+    grass_density = duet.assign_targets_from_sb40(query, "grass", "density")
+    grass_height = duet.assign_targets_from_sb40(query, "grass", "height")
+    litter_density = duet.assign_targets_from_sb40(query, "litter", "density")
+    litter_height = duet.assign_targets_from_sb40(query, "litter", "height")
+    density_targets = duet.set_density(grass=grass_density, litter=litter_density)
+    height_targets = duet.set_height(grass=grass_height, litter=litter_height)
+    fuel_parameter_targets = [density_targets, height_targets]
+    calibrated_duet = duet.calibrate(duet_run, fuel_parameter_targets)
+    return _assemble_dataset(calibrated_duet, canopy_grid)
+
+
 def run_and_calibrate_duet_from_surface_grid(
     duet_exe_directory: Path | str,
     duet_exe_name: str,
@@ -140,7 +177,7 @@ def run_and_calibrate_duet_from_surface_grid(
     wind_direction: float,
     wind_variability: float,
     duration: int,
-    surface_grid: DataArray,  # TODO
+    surface_grid: Dataset,  # TODO
     random_seed: int = None,
     duet_version: str = "v2",
 ) -> Dataset:
@@ -165,7 +202,7 @@ def run_and_calibrate_duet_from_surface_grid(
         Direction of prevailing wind in DUET simulation (degrees)
     wind_variability: float
         Variability in wind direction for the DUET simulation (degrees)
-    surface_grid: DataArray? Dataset?
+    surface_grid: Dataset
         TODO
     random_seed: int = None
         Seed for reproducibility in DUET. If None, will be generated from computer time.
