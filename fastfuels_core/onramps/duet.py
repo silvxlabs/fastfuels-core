@@ -178,6 +178,7 @@ def run_and_calibrate_duet_from_surface_grid(
     wind_variability: float,
     duration: int,
     surface_grid: Dataset,  # TODO
+    calibration_method: str,
     random_seed: int = None,
     duet_version: str = "v2",
 ) -> Dataset:
@@ -203,7 +204,10 @@ def run_and_calibrate_duet_from_surface_grid(
     wind_variability: float
         Variability in wind direction for the DUET simulation (degrees)
     surface_grid: Dataset
-        TODO
+        An Xarray Dataset with dimensios ["parameter","fuel_type","x","y"]
+    calibration_method: str
+        Method by which to summarize surface grid and calibrate DUET.
+        Must be one of ["maxmin", "meansd"].
     random_seed: int = None
         Seed for reproducibility in DUET. If None, will be generated from computer time.
     duet_version: str = "v2"
@@ -224,7 +228,49 @@ def run_and_calibrate_duet_from_surface_grid(
         random_seed,
         duet_version,
     )
-    # TODO
+    grass_loading_grid = surface_grid.sel(
+        parameter="fuel_loading", fuel_type="grass"
+    ).data
+    grass_height_grid = surface_grid.sel(parameter="fuel_depth", fuel_type="grass").data
+    litter_loading_grid = surface_grid.sel(
+        parameter="fuel_loading", fuel_type="litter"
+    ).data
+    litter_height_grid = surface_grid.sel(
+        parameter="fuel_depth", fuel_type="litter"
+    ).data
+
+    if calibration_method == "maxmin":
+        grass_density = duet.assign_targets(
+            "maxmin", max=np.max(grass_loading_grid), min=np.min(grass_loading_grid)
+        )
+        grass_height = duet.assign_targets(
+            "maxmin", max=np.max(grass_height_grid), min=np.min(grass_height_grid)
+        )
+        litter_density = duet.assign_targets(
+            "maxmin", max=np.max(litter_loading_grid), min=np.min(litter_loading_grid)
+        )
+        litter_height = duet.assign_targets(
+            "maxmin", max=np.max(litter_height_grid), min=np.min(litter_height_grid)
+        )
+    if calibration_method == "meansd":
+        grass_density = duet.assign_targets(
+            "meansd", max=np.max(grass_loading_grid), min=np.min(grass_loading_grid)
+        )
+        grass_height = duet.assign_targets(
+            "meansd", max=np.max(grass_height_grid), min=np.min(grass_height_grid)
+        )
+        litter_density = duet.assign_targets(
+            "meansd", mean=np.mean(litter_loading_grid), sd=np.std(litter_loading_grid)
+        )
+        litter_height = duet.assign_targets(
+            "meansd", mean=np.mean(litter_height_grid), sd=np.std(litter_height_grid)
+        )
+
+    density_targets = duet.set_density(grass=grass_density, litter=litter_density)
+    height_targets = duet.set_height(grass=grass_height, litter=litter_height)
+    fuel_parameter_targets = [density_targets, height_targets]
+    calibrated_duet = duet.calibrate(duet_run, fuel_parameter_targets)
+    return _assemble_dataset(calibrated_duet, canopy_grid)
 
 
 # def run_and_calibrate_duet_with_mask(grass_mask, litter_mask) -> ndarray:
