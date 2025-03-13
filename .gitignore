@@ -3,6 +3,9 @@ dev/
 
 .DS_Store
 
+# Executables
+*.exe
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
