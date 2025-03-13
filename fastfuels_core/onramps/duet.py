@@ -1,3 +1,9 @@
+"""
+This commit contains a first draft with lots more flexibility. As of 3/11/25 Anthony and Niko decided that
+the calibration would take place in the FastFuels API repo, and that using SB40 to calibrate would not be
+supported for now.
+"""
+
 from __future__ import annotations
 
 # Core imports
