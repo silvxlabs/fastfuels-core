@@ -4,6 +4,7 @@ dev/
 .DS_Store
 
 # DUET testing files
+create_test_domain.py
 *.exe
 *.dat
 *.in
