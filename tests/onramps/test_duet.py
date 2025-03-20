@@ -153,7 +153,7 @@ def test_run_duet_no_exe(
     spcd_array: xarray.DataArray,
 ):
     with pytest.raises(FileNotFoundError):
-        duet_run = duet.run_duet(
+        duet.run_duet(
             DUET_DIR,
             "duet_wrong_name.exe",
             density_array,
@@ -165,7 +165,7 @@ def test_run_duet_no_exe(
         )
 
     with pytest.raises(FileNotFoundError):
-        duet_run = duet.run_duet(
+        duet.run_duet(
             DUET_DIR.parent,
             "duet_v2.1_FF_mac.exe",
             density_array,
