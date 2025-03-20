@@ -58,8 +58,69 @@ def run_duet(
     -------
     A DuetRun object
     """
-    if isinstance(duet_exe_directory, str):
-        duet_exe_directory = Path(duet_exe_directory)
+    export_to_duet(
+        duet_exe_directory,
+        bulk_density_grid,
+        fuel_moisture_grid,
+        spcd_grid,
+        wind_direction,
+        wind_variability,
+        duration,
+        random_seed,
+    )
+
+    nz, ny, nx = bulk_density_grid.shape
+
+    exit_code = _execute_duet(duet_exe_directory, duet_exe_name)
+    if exit_code != 0:
+        raise (Exception)  # TODO
+    else:
+        nsp = len(
+            np.unique(spcd_grid.values)
+        )  # this should be the number of species + 1
+        duet_run = import_duet(duet_exe_directory, nx, ny, nsp, duet_version)
+    return duet_run
+
+
+def export_to_duet(
+    directory: Path | str,
+    bulk_density_grid: DataArray,
+    fuel_moisture_grid: DataArray,
+    spcd_grid: DataArray,
+    wind_direction: float,
+    wind_variability: float,
+    duration: int,
+    random_seed: int = None,
+):
+    """
+    Runs the specified DUET executable using the supplied treeGrid.
+
+    Parameters
+    ----------
+    directory: Path | str
+        Path to directory where DUET files are written.
+    bulk_density_grid: DataArray
+        Grid of bulk density values with dimensions ["z", "y", "x"].
+    fuel_moisture_grid: DataArray
+        Grid of fuel moisture values with dimensions ["z","y","x"].
+    species_code_grid: DataArray
+        Grid of FIA species codes with dimensions ["z", "y", "x"].
+    fuel_moisture_grid: DataArray
+        Grid of fuel moisture content values with dimensions ["z", "y", "x"].
+    wind_direction: float
+        Direction of prevailing wind in DUET simulation (degrees)
+    wind_variability: float
+        Variability in wind direction for the DUET simulation (degrees)
+    random_seed: int = None
+        Seed for reproducibility in DUET. If None, will be generated from computer time.
+
+    Returns
+    -------
+    None
+        DUET input files (duet.in and trees*.dat) are saved to the directory
+    """
+    if isinstance(directory, str):
+        directory = Path(directory)
 
     # write input file
     nz, ny, nx = bulk_density_grid.shape
@@ -72,34 +133,23 @@ def run_duet(
     duet_in = InputFile.create(
         nx, ny, nz, duration, wind_direction, dx, dy, dz, random_seed, wind_variability
     )
-    duet_in.to_file(duet_exe_directory)
+    duet_in.to_file(directory)
 
     # write fuel grids to .dat files
     write_array_to_dat(
-        bulk_density_grid.data, "treesrhof.dat", duet_exe_directory, reshape=False
+        bulk_density_grid.data, "treesrhof.dat", directory, reshape=False
     )
     write_array_to_dat(
-        fuel_moisture_grid.data, "treesmoist.dat", duet_exe_directory, reshape=False
+        fuel_moisture_grid.data, "treesmoist.dat", directory, reshape=False
     )
     write_array_to_dat(
         spcd_grid.data,
         "treesspcd.dat",
-        duet_exe_directory,
+        directory,
         reshape=False,
         dtype=np.int32,
     )
-
-    print(type(bulk_density_grid))
-
-    exit_code = _execute_duet(duet_exe_directory, duet_exe_name)
-    if exit_code != 0:
-        raise (Exception)  # TODO
-    else:
-        nsp = len(
-            np.unique(spcd_grid.values)
-        )  # this should be the number of species + 1
-        duet_run = import_duet(duet_exe_directory, nx, ny, nsp, duet_version)
-    return duet_run
+    print(f"DUET input files written to {directory}")
 
 
 def _execute_duet(
