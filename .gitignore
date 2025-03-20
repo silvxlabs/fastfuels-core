@@ -3,10 +3,8 @@ dev/
 
 .DS_Store
 
-# Executables
-*.exe
-
 # DUET testing files
+*.exe
 *.dat
 *.in
 *.zip
