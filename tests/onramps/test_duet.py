@@ -120,7 +120,11 @@ def test_export_to_duet(
         assert float(lines[9].strip().split("!")[0]) == 5
 
 
-def test_run_duet(density_array, moisture_array, spcd_array):
+def test_run_duet(
+    density_array: xarray.DataArray,
+    moisture_array: xarray.DataArray,
+    spcd_array: xarray.DataArray,
+):
     duet_run = duet.run_duet(
         DUET_DIR,
         "duet_v2.1_FF_mac.exe",
@@ -135,3 +139,9 @@ def test_run_duet(density_array, moisture_array, spcd_array):
     assert Path(DUET_DIR / "surface_moist_layered.dat").exists()
     assert Path(DUET_DIR / "surface_depth_layered.dat").exists()
     assert isinstance(duet_run, DuetRun)
+
+    nz, ny, nx = density_array.shape
+
+    assert duet_run.density.shape == (2, ny, nx)
+    assert duet_run.moisture.shape == (2, ny, nx)
+    assert duet_run.height.shape == (2, ny, nx)
