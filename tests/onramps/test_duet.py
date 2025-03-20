@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastfuels_core.onramps import duet
 from duet_tools import DuetRun
+from duet_tools.utils import read_dat_to_array
 import numpy as np
 from pathlib import Path
 import pytest
@@ -73,6 +74,52 @@ def moisture_array():
     return xarr
 
 
+def test_export_to_duet(
+    density_array: xarray.DataArray,
+    moisture_array: xarray.DataArray,
+    spcd_array: xarray.DataArray,
+):
+    duet.export_to_duet(
+        DUET_DIR, density_array, moisture_array, spcd_array, 270, 359, 5, 47
+    )
+    assert Path(DUET_DIR / "treesrhof.dat").exists()
+    assert Path(DUET_DIR / "treesmoist.dat").exists()
+    assert Path(DUET_DIR / "treesspcd.dat").exists()
+
+    nz, ny, nx = density_array.shape
+
+    treesrhof = read_dat_to_array(DUET_DIR, "treesrhof.dat", nx, ny, nz=nz)
+    treesmoist = read_dat_to_array(DUET_DIR, "treesmoist.dat", nx, ny, nz=nz)
+    treesspcd = read_dat_to_array(
+        DUET_DIR, "treesspcd.dat", nx, ny, nz=nz, dtype=np.int32
+    )
+
+    density_numpy = density_array.to_numpy()
+    moisture_numpy = moisture_array.to_numpy()
+    spcd_numpy = spcd_array.to_numpy()
+
+    assert np.allclose(treesrhof, density_numpy)
+    assert np.allclose(treesmoist, moisture_numpy)
+    assert np.allclose(treesspcd, spcd_numpy)
+
+    dz, dy, dx = [
+        int(np.diff(density_array.coords[dim]).mean()) for dim in density_array.dims
+    ]
+
+    with open(DUET_DIR / "duet.in") as f:
+        lines = f.readlines()
+        assert int(lines[0].strip().split("!")[0]) == nx
+        assert int(lines[1].strip().split("!")[0]) == ny
+        assert int(lines[2].strip().split("!")[0]) == nz
+        assert float(lines[3].strip().split("!")[0]) == dx
+        assert float(lines[4].strip().split("!")[0]) == dy
+        assert float(lines[5].strip().split("!")[0]) == dz
+        assert float(lines[6].strip().split("!")[0]) == 47
+        assert float(lines[7].strip().split("!")[0]) == 270
+        assert float(lines[8].strip().split("!")[0]) == 359
+        assert float(lines[9].strip().split("!")[0]) == 5
+
+
 def test_run_duet(density_array, moisture_array, spcd_array):
     duet_run = duet.run_duet(
         DUET_DIR,
@@ -84,8 +131,7 @@ def test_run_duet(density_array, moisture_array, spcd_array):
         359,
         5,
     )
-    assert Path(DUET_DIR / "treesrhof.dat").exists()
-    assert Path(DUET_DIR / "treesmoist.dat").exists()
-    assert Path(DUET_DIR / "treesspcd.dat").exists()
     assert Path(DUET_DIR / "surface_rhof_layered.dat").exists()
+    assert Path(DUET_DIR / "surface_moist_layered.dat").exists()
+    assert Path(DUET_DIR / "surface_depth_layered.dat").exists()
     assert isinstance(duet_run, DuetRun)
