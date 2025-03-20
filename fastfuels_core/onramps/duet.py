@@ -71,7 +71,13 @@ def run_duet(
 
     nz, ny, nx = bulk_density_grid.shape
 
-    exit_code = _execute_duet(duet_exe_directory, duet_exe_name)
+    if Path(duet_exe_directory / duet_exe_name).exists():
+        exit_code = _execute_duet(duet_exe_directory, duet_exe_name)
+    else:
+        raise FileNotFoundError(
+            f"DUET executable {duet_exe_name} not found at {duet_exe_directory}"
+        )
+
     if exit_code != 0:
         raise (Exception)  # TODO
     else:

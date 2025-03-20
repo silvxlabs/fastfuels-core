@@ -145,3 +145,33 @@ def test_run_duet(
     assert duet_run.density.shape == (2, ny, nx)
     assert duet_run.moisture.shape == (2, ny, nx)
     assert duet_run.height.shape == (2, ny, nx)
+
+
+def test_run_duet_no_exe(
+    density_array: xarray.DataArray,
+    moisture_array: xarray.DataArray,
+    spcd_array: xarray.DataArray,
+):
+    with pytest.raises(FileNotFoundError):
+        duet_run = duet.run_duet(
+            DUET_DIR,
+            "duet_wrong_name.exe",
+            density_array,
+            moisture_array,
+            spcd_array,
+            270,
+            359,
+            5,
+        )
+
+    with pytest.raises(FileNotFoundError):
+        duet_run = duet.run_duet(
+            DUET_DIR.parent,
+            "duet_v2.1_FF_mac.exe",
+            density_array,
+            moisture_array,
+            spcd_array,
+            270,
+            359,
+            5,
+        )
