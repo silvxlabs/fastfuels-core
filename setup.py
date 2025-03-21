@@ -59,6 +59,7 @@ EXTRAS_REQUIRE = {
     "test": [
         "pytest",
         "matplotlib",
+        "zarr"
     ],
 }
 setup(
