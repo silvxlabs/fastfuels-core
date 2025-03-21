@@ -56,11 +56,7 @@ EXTRAS_REQUIRE = {
         "matplotlib",
         "pyvista",
     ],
-    "test": [
-        "pytest",
-        "matplotlib",
-        "zarr"
-    ],
+    "test": ["pytest", "matplotlib", "zarr"],
 }
 setup(
     name=NAME,

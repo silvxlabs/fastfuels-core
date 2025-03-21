@@ -75,7 +75,9 @@ def spcd_array():
 
 @pytest.fixture
 def moisture_array():
-    array = get_zarr_grid_and_attrs(DUET_DIR / "test_tree_grid.zarr.zip", "fuelMoisture")
+    array = get_zarr_grid_and_attrs(
+        DUET_DIR / "test_tree_grid.zarr.zip", "fuelMoisture"
+    )
     xarr = create_dataarray(array)
     return xarr
 
