@@ -16,8 +16,8 @@ DUET_DIR = Path(__file__).parent / "duet-data"
 pytest.skip("No DUET executable", allow_module_level=True)
 
 
-@pytest.fixture(autouse=True)
-def delete_dat_files() -> None:
+@pytest.fixture(scope="function", autouse=True)
+def delete_dat_files():
     dat_list = [
         "treesrhof.dat",
         "treesmoist.dat",
@@ -34,6 +34,8 @@ def delete_dat_files() -> None:
     for dat in dat_list:
         dat_path = DUET_DIR / dat
         dat_path.unlink(missing_ok=True)
+
+    yield
 
 
 def get_zarr_grid_and_attrs(zarr_path: Path, group: str) -> tuple:
@@ -59,21 +61,21 @@ def create_dataarray(array: np.ndarray) -> xarray.DataArray:
 
 @pytest.fixture
 def density_array():
-    array = get_zarr_grid_and_attrs(DUET_DIR / "test_tree_grid.zarr", "bulkDensity")
+    array = get_zarr_grid_and_attrs(DUET_DIR / "test_tree_grid.zarr.zip", "bulkDensity")
     xarr = create_dataarray(array)
     return xarr
 
 
 @pytest.fixture
 def spcd_array():
-    array = get_zarr_grid_and_attrs(DUET_DIR / "test_tree_grid.zarr", "SPCD")
+    array = get_zarr_grid_and_attrs(DUET_DIR / "test_tree_grid.zarr.zip", "SPCD")
     xarr = create_dataarray(array)
     return xarr
 
 
 @pytest.fixture
 def moisture_array():
-    array = get_zarr_grid_and_attrs(DUET_DIR / "test_tree_grid.zarr", "fuelMoisture")
+    array = get_zarr_grid_and_attrs(DUET_DIR / "test_tree_grid.zarr.zip", "fuelMoisture")
     xarr = create_dataarray(array)
     return xarr
 
