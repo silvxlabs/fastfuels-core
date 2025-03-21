@@ -36,6 +36,7 @@ INSTALL_REQUIRES = [
     "dask",
     "dask-expr",
     "dask-image",
+    "duet-tools",
     "fastparquet",
     "geopandas",
     "nsvb",
@@ -55,10 +56,7 @@ EXTRAS_REQUIRE = {
         "matplotlib",
         "pyvista",
     ],
-    "test": [
-        "pytest",
-        "matplotlib",
-    ],
+    "test": ["pytest", "matplotlib", "zarr"],
 }
 setup(
     name=NAME,
