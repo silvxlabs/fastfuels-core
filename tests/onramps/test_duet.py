@@ -11,6 +11,10 @@ import zarr
 
 DUET_DIR = Path(__file__).parent / "duet-data"
 
+# By default, we skip these tests because they require the DUET executable.
+# If you are working with the DUET onramp and need to run these tests comment the line below.
+pytest.skip("No DUET executable", allow_module_level=True)
+
 
 @pytest.fixture(autouse=True)
 def delete_dat_files() -> None:
