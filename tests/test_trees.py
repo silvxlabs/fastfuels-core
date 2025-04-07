@@ -2,13 +2,16 @@
 from pathlib import Path
 
 # Internal imports
+
 from fastfuels_core.trees import (
     Tree,
     JenkinsBiomassEquations,
     NSVBEquations,
     REF_SPECIES,
+    REF_JENKINS,
 )
 from fastfuels_core.crown_profile_models.beta import BetaCrownProfile
+from tests.utils import make_random_tree
 
 # External imports
 import pytest
@@ -272,6 +275,21 @@ class TestNSVBEquations:
 
         foliage_biomass_lb = foliage_biomass * 2.20462
         assert np.isclose(foliage_biomass_lb, 22.807960563788)
+
+
+@pytest.mark.parametrize("jenkins_species_group", REF_JENKINS.index)
+def test_foliage_sav(jenkins_species_group):
+    """
+    tests that the foliage sav property is available for all jenkins species groups
+    """
+    # Get a random species code from the REF_SPECIES table where JENKINS_SPGRPCD equals the jenkins_species_group parameter
+    spcd_spgrp_table = REF_SPECIES[
+        REF_SPECIES["JENKINS_SPGRPCD"] == jenkins_species_group
+    ].copy()
+    random_spcd = np.random.choice(spcd_spgrp_table.index, 1)[0]
+
+    tree = make_random_tree(species_code=random_spcd)
+    assert tree.foliage_sav > 0
 
 
 def test_tree():

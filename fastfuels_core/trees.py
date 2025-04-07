@@ -338,6 +338,14 @@ class Tree:
         """
         return self.biomass_allometry_model.estimate_foliage_biomass()
 
+    @property
+    def foliage_sav(self) -> float:
+        """
+        Returns the estimated foliage surface area to volume ratio of the tree (m^2/m^3). These estimates are based on
+        the Jenkins species group and come from personal correspondence with the Jolly team at the Missoula Fire Lab.
+        """
+        return REF_JENKINS.loc[self.jenkins_species_group]["FOLIAGE_SAV"]
+
     def voxelize(
         self, horizontal_resolution: float, vertical_resolution: float, **kwargs
     ) -> VoxelizedTree:
