@@ -3,6 +3,13 @@ dev/
 
 .DS_Store
 
+# DUET testing files
+create_test_domain.py
+*.exe
+*.dat
+*.in
+*.zip
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -171,3 +178,4 @@ figures/
 # IDE config files
 .idea/
 .vscode/
+*.code-workspace
