@@ -146,8 +146,9 @@ def _compute_intersection_area(
     exact: bool = False,
 ) -> ndarray:
     """Compute the area of intersection between a circle and each cell of a
-    regular grid. Uses pre-computed cell edge coordinates and squared distances
-    to avoid redundant computations between adjacent cells.
+    regular grid. Pre-computes shared cell edge coordinates and uses squared
+    distances to classify corners, then looks up edge values from 1D arrays
+    using cell indices to avoid allocating full 3D edge/radius arrays.
 
     Parameters
     ----------
@@ -172,9 +173,9 @@ def _compute_intersection_area(
     ny = len(y_pts)
     nz = len(r_at_height)
 
-    # Compute unique cell edge coordinates as 1D arrays.
-    # For x (increasing): edges go left-to-right.
-    # For y (decreasing): edges go top-to-bottom.
+    # Compute unique cell edge coordinates as 1D arrays (n+1 edges for n cells).
+    # For x (increasing): left edge of cell ix = x_edges[ix], right = x_edges[ix+1]
+    # For y (decreasing): top edge of cell iy = y_edges[iy], bottom = y_edges[iy+1]
     x_edges = np.empty(nx + 1)
     x_edges[:-1] = x_pts - half
     x_edges[-1] = x_pts[-1] + half
@@ -184,7 +185,7 @@ def _compute_intersection_area(
     y_edges[-1] = y_pts[-1] - half
 
     # Compute squared distances from the origin to each corner point.
-    # Shape: (ny+1, nx+1) - independent of z.
+    # Shape: (ny+1, nx+1) - independent of z, computed once.
     corner_dist_sq = x_edges[np.newaxis, :] ** 2 + y_edges[:, np.newaxis] ** 2
 
     # Determine which corners are inside the circle for each z-level.
@@ -201,29 +202,67 @@ def _compute_intersection_area(
     bottom_left_in = corners_inside[:, 1:, :nx]
     bottom_right_in = corners_inside[:, 1:, 1:]
 
-    case_index = _encode_corners(
-        top_left_in, top_right_in, bottom_left_in, bottom_right_in
-    )
+    # Classify cells into trivial (all inside / all outside) vs boundary.
+    any_inside = top_left_in | top_right_in | bottom_left_in | bottom_right_in
+    all_inside = top_left_in & top_right_in & bottom_left_in & bottom_right_in
 
-    # Build contiguous (nz, ny, nx) edge and radius arrays for efficient
-    # boolean indexing in _compute_intersection_area_by_case.
-    shape = (nz, ny, nx)
-    left = np.empty(shape)
-    left[:] = x_edges[:nx]
-    right = np.empty(shape)
-    right[:] = x_edges[1:]
-    top = np.empty(shape)
-    top[:] = y_edges[:ny][np.newaxis, :, np.newaxis]
-    bottom = np.empty(shape)
-    bottom[:] = y_edges[1:][np.newaxis, :, np.newaxis]
-    radius = np.empty(shape)
-    radius[:] = r_at_height[:, np.newaxis, np.newaxis]
+    areas = np.zeros((nz, ny, nx))
 
-    area = _compute_intersection_area_by_case(
-        case_index, length, left, right, bottom, top, radius, exact
-    )
+    # Case 0b: circle entirely inside cell (origin cell at index [:, -1, 0])
+    areas[:, -1, 0] = np.pi * r_sq
 
-    return area
+    # Case 15: all corners inside → full cell area
+    areas[all_inside] = length ** 2
+
+    # Boundary cells: at least one corner inside, but not all.
+    # Single np.where call to find all boundary indices at once.
+    boundary = any_inside & ~all_inside
+    z_b, y_b, x_b = np.where(boundary)
+
+    if len(z_b) > 0:
+        # Encode only boundary cells (small 1D arrays) to classify cases.
+        case_b = _encode_corners(
+            top_left_in[z_b, y_b, x_b],
+            top_right_in[z_b, y_b, x_b],
+            bottom_left_in[z_b, y_b, x_b],
+            bottom_right_in[z_b, y_b, x_b],
+        )
+
+        # Case 1: only bottom-left corner inside
+        m = case_b == 1
+        if np.any(m):
+            zi, yi, xi = z_b[m], y_b[m], x_b[m]
+            areas[zi, yi, xi] = _calculate_case_1_area(
+                x_edges[xi], y_edges[yi + 1], r_at_height[zi], exact
+            )
+
+        # Case 3: bottom-left and bottom-right inside
+        m = case_b == 3
+        if np.any(m):
+            zi, yi, xi = z_b[m], y_b[m], x_b[m]
+            areas[zi, yi, xi] = _calculate_case_3_area(
+                x_edges[xi], x_edges[xi + 1], y_edges[yi + 1],
+                r_at_height[zi], length, exact,
+            )
+
+        # Case 9: top-left and bottom-left inside
+        m = case_b == 9
+        if np.any(m):
+            zi, yi, xi = z_b[m], y_b[m], x_b[m]
+            areas[zi, yi, xi] = _calculate_case_9_area(
+                y_edges[yi], y_edges[yi + 1], x_edges[xi],
+                r_at_height[zi], length, exact,
+            )
+
+        # Case 11: top-left, bottom-left, and bottom-right inside
+        m = case_b == 11
+        if np.any(m):
+            zi, yi, xi = z_b[m], y_b[m], x_b[m]
+            areas[zi, yi, xi] = _calculate_case_11_area(
+                y_edges[yi], x_edges[xi + 1], r_at_height[zi], length, exact
+            )
+
+    return areas
 
 
 def _encode_corners(
