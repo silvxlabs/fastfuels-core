@@ -37,40 +37,6 @@ TEST_PATH = Path(__file__).parent
 FIGURES_PATH = TEST_PATH / "figures"
 
 
-def _compute_intersection_area_old(
-    x_center: np.ndarray, y_center: np.ndarray, length: float, radius: np.ndarray, exact=False
-):
-    """Original implementation of _compute_intersection_area using per-cell edge
-    and distance computations. Preserved here as a reference for verifying the
-    optimized implementation produces identical results."""
-    # Calculate location of cell edges using the cell center and length
-    x_right = x_center + length / 2
-    x_left = x_center - length / 2
-    y_top = y_center + length / 2
-    y_bottom = y_center - length / 2
-
-    # Calculate the distance from the origin to each cell's corner points
-    top_left_dist = np.sqrt(x_left**2 + y_top**2)
-    top_right_dist = np.sqrt(x_right**2 + y_top**2)
-    bottom_left_dist = np.sqrt(x_left**2 + y_bottom**2)
-    bottom_right_dist = np.sqrt(x_right**2 + y_bottom**2)
-
-    # Check if each corner of the cell is inside the circle
-    top_left_in = top_left_dist < radius
-    top_right_in = top_right_dist < radius
-    bottom_left_in = bottom_left_dist < radius
-    bottom_right_in = bottom_right_dist < radius
-
-    case_index = _encode_corners(
-        top_left_in, top_right_in, bottom_left_in, bottom_right_in
-    )
-
-    area = _compute_intersection_area_by_case(
-        case_index, length, x_left, x_right, y_bottom, y_top, radius, exact
-    )
-
-    return area
-
 
 class TestGetHorizontalTreeCoords:
     def test_positive_radius(self):
@@ -1494,6 +1460,41 @@ class TestComputeIntersectionArea:
     """Tests that the optimized _compute_intersection_area produces identical
     results to the original per-cell implementation."""
 
+    @staticmethod
+    def _compute_intersection_area_old(
+            x_center: np.ndarray, y_center: np.ndarray, length: float, radius: np.ndarray, exact=False
+    ):
+        """Original implementation of _compute_intersection_area using per-cell edge
+        and distance computations. Preserved here as a reference for verifying the
+        optimized implementation produces identical results."""
+        # Calculate location of cell edges using the cell center and length
+        x_right = x_center + length / 2
+        x_left = x_center - length / 2
+        y_top = y_center + length / 2
+        y_bottom = y_center - length / 2
+
+        # Calculate the distance from the origin to each cell's corner points
+        top_left_dist = np.sqrt(x_left**2 + y_top**2)
+        top_right_dist = np.sqrt(x_right**2 + y_top**2)
+        bottom_left_dist = np.sqrt(x_left**2 + y_bottom**2)
+        bottom_right_dist = np.sqrt(x_right**2 + y_bottom**2)
+
+        # Check if each corner of the cell is inside the circle
+        top_left_in = top_left_dist < radius
+        top_right_in = top_right_dist < radius
+        bottom_left_in = bottom_left_dist < radius
+        bottom_right_in = bottom_right_dist < radius
+
+        case_index = _encode_corners(
+            top_left_in, top_right_in, bottom_left_in, bottom_right_in
+        )
+
+        area = _compute_intersection_area_by_case(
+            case_index, length, x_left, x_right, y_bottom, y_top, radius, exact
+        )
+
+        return area
+
     def test_equivalence_simple(self):
         """Simple case: small grid, multiple radii."""
         x_pts = np.array([0.0, 1.0, 2.0])
@@ -1505,7 +1506,7 @@ class TestComputeIntersectionArea:
         r_grid, y_grid, x_grid = np.meshgrid(
             r_at_height, y_pts, x_pts, indexing="ij"
         )
-        area_old = _compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
+        area_old = self._compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
 
         # New method (pre-computed edges)
         area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr)
@@ -1523,7 +1524,7 @@ class TestComputeIntersectionArea:
         r_grid, y_grid, x_grid = np.meshgrid(
             r_at_height, y_pts, x_pts, indexing="ij"
         )
-        area_old = _compute_intersection_area_old(
+        area_old = self._compute_intersection_area_old(
             x_grid, y_grid, hr, r_grid, exact=True
         )
         area_new = _compute_intersection_area(
@@ -1543,7 +1544,7 @@ class TestComputeIntersectionArea:
         r_grid, y_grid, x_grid = np.meshgrid(
             r_at_height, y_pts, x_pts, indexing="ij"
         )
-        area_old = _compute_intersection_area_old(
+        area_old = self._compute_intersection_area_old(
             x_grid, y_grid, hr, r_grid, exact=True
         )
         area_new = _compute_intersection_area(
@@ -1563,7 +1564,7 @@ class TestComputeIntersectionArea:
         r_grid, y_grid, x_grid = np.meshgrid(
             r_at_height, y_pts, x_pts, indexing="ij"
         )
-        area_old = _compute_intersection_area_old(
+        area_old = self._compute_intersection_area_old(
             x_grid, y_grid, hr, r_grid, exact=True
         )
         area_new = _compute_intersection_area(
@@ -1583,7 +1584,7 @@ class TestComputeIntersectionArea:
         r_grid, y_grid, x_grid = np.meshgrid(
             r_at_height, y_pts, x_pts, indexing="ij"
         )
-        area_old = _compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
+        area_old = self._compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
         area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr)
 
         assert area_old.shape == area_new.shape
@@ -1599,7 +1600,7 @@ class TestComputeIntersectionArea:
         r_grid, y_grid, x_grid = np.meshgrid(
             r_at_height, y_pts, x_pts, indexing="ij"
         )
-        area_old = _compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
+        area_old = self._compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
         area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr)
 
         assert area_old.shape == area_new.shape
@@ -1632,10 +1633,10 @@ class TestPerformanceBenchmark:
             r_at_height, y_pts, x_pts, indexing="ij"
         )
         # Warmup
-        _compute_intersection_area_old(x_grid, y_grid, hr, r_grid, exact=True)
+        TestComputeIntersectionArea._compute_intersection_area_old(x_grid, y_grid, hr, r_grid, exact=True)
         start = time.perf_counter()
         for _ in range(n_iterations):
-            _compute_intersection_area_old(x_grid, y_grid, hr, r_grid, exact=True)
+            TestComputeIntersectionArea._compute_intersection_area_old(x_grid, y_grid, hr, r_grid, exact=True)
         time_old = time.perf_counter() - start
 
         # New method
@@ -1655,7 +1656,7 @@ class TestPerformanceBenchmark:
         )
 
         # Verify results are equivalent
-        area_old = _compute_intersection_area_old(
+        area_old = TestComputeIntersectionArea._compute_intersection_area_old(
             x_grid, y_grid, hr, r_grid, exact=True
         )
         area_new = _compute_intersection_area(
