@@ -110,10 +110,8 @@ def _discretize_crown_profile_quadrant(
     z_pts_subgrid = _resample_coords_grid_to_subgrid(z_pts, vr, vr_subgrid)
     r_at_height_z = tree.get_crown_radius_at_height(z_pts_subgrid)
 
-    # Create a 3D grid of the tree crown and compute the area of intersection
-    # between the tree crown and each cell of the grid along the z-axis
-    r_grid, y_grid, x_grid = np.meshgrid(r_at_height_z, y_pts, x_pts, indexing="ij")
-    area = _compute_intersection_area(x_grid, y_grid, hr, r_grid, full_intersection)
+    # Compute the area of intersection between the tree crown and each cell
+    area = _compute_intersection_area(x_pts, y_pts, r_at_height_z, hr, full_intersection)
 
     # Convert the area of intersection to a volume fraction by summing the area
     # along the z-axis and dividing by the cell volume
@@ -141,35 +139,130 @@ def _resample_coords_grid_to_subgrid(
 
 
 def _compute_intersection_area(
-    x_center: ndarray, y_center: ndarray, length: float, radius: ndarray, exact=False
-):
-    # Calculate location of cell edges using the cell center and length
-    x_right = x_center + length / 2
-    x_left = x_center - length / 2
-    y_top = y_center + length / 2
-    y_bottom = y_center - length / 2
+    x_pts: ndarray,
+    y_pts: ndarray,
+    r_at_height: ndarray,
+    length: float,
+    exact: bool = False,
+) -> ndarray:
+    """Compute the area of intersection between a circle and each cell of a
+    regular grid. Pre-computes shared cell edge coordinates and uses squared
+    distances to classify corners, then looks up edge values from 1D arrays
+    using cell indices to avoid allocating full 3D edge/radius arrays.
 
-    # Calculate the distance from the origin to each cell's corner points
-    top_left_dist = np.sqrt(x_left**2 + y_top**2)
-    top_right_dist = np.sqrt(x_right**2 + y_top**2)
-    bottom_left_dist = np.sqrt(x_left**2 + y_bottom**2)
-    bottom_right_dist = np.sqrt(x_right**2 + y_bottom**2)
+    Parameters
+    ----------
+    x_pts : ndarray, shape (nx,)
+        1D array of cell center x-coordinates (increasing).
+    y_pts : ndarray, shape (ny,)
+        1D array of cell center y-coordinates (decreasing).
+    r_at_height : ndarray, shape (nz,)
+        1D array of crown radius at each z-level.
+    length : float
+        Cell side length (horizontal resolution).
+    exact : bool
+        If True, include circular segment areas for exact computation.
 
-    # Check if each corner of the cell is inside the circle
-    top_left_in = top_left_dist < radius
-    top_right_in = top_right_dist < radius
-    bottom_left_in = bottom_left_dist < radius
-    bottom_right_in = bottom_right_dist < radius
+    Returns
+    -------
+    ndarray, shape (nz, ny, nx)
+        Area of intersection between the circle and each cell.
+    """
+    half = length / 2.0
+    nx = len(x_pts)
+    ny = len(y_pts)
+    nz = len(r_at_height)
 
-    case_index = _encode_corners(
-        top_left_in, top_right_in, bottom_left_in, bottom_right_in
-    )
+    # Compute unique cell edge coordinates as 1D arrays (n+1 edges for n cells).
+    # For x (increasing): left edge of cell ix = x_edges[ix], right = x_edges[ix+1]
+    # For y (decreasing): top edge of cell iy = y_edges[iy], bottom = y_edges[iy+1]
+    x_edges = np.empty(nx + 1)
+    x_edges[:-1] = x_pts - half
+    x_edges[-1] = x_pts[-1] + half
 
-    area = _compute_intersection_area_by_case(
-        case_index, length, x_left, x_right, y_bottom, y_top, radius, exact
-    )
+    y_edges = np.empty(ny + 1)
+    y_edges[:-1] = y_pts + half
+    y_edges[-1] = y_pts[-1] - half
 
-    return area
+    # Compute squared distances from the origin to each corner point.
+    # Shape: (ny+1, nx+1) - independent of z, computed once.
+    corner_dist_sq = x_edges[np.newaxis, :] ** 2 + y_edges[:, np.newaxis] ** 2
+
+    # Determine which corners are inside the circle for each z-level.
+    # Uses squared comparison to avoid sqrt entirely.
+    # Shape: (nz, ny+1, nx+1)
+    r_sq = r_at_height ** 2
+    corners_inside = corner_dist_sq[np.newaxis, :, :] < r_sq[:, np.newaxis, np.newaxis]
+
+    # Extract per-cell corner status by slicing (views, not copies).
+    # Cell (iy, ix) corners: top-left=(iy,ix), top-right=(iy,ix+1),
+    #                         bottom-left=(iy+1,ix), bottom-right=(iy+1,ix+1)
+    top_left_in = corners_inside[:, :ny, :nx]
+    top_right_in = corners_inside[:, :ny, 1:]
+    bottom_left_in = corners_inside[:, 1:, :nx]
+    bottom_right_in = corners_inside[:, 1:, 1:]
+
+    # Classify cells into trivial (all inside / all outside) vs boundary.
+    any_inside = top_left_in | top_right_in | bottom_left_in | bottom_right_in
+    all_inside = top_left_in & top_right_in & bottom_left_in & bottom_right_in
+
+    areas = np.zeros((nz, ny, nx))
+
+    # Case 0b: circle entirely inside cell (origin cell at index [:, -1, 0])
+    areas[:, -1, 0] = np.pi * r_sq
+
+    # Case 15: all corners inside → full cell area
+    areas[all_inside] = length ** 2
+
+    # Boundary cells: at least one corner inside, but not all.
+    # Single np.where call to find all boundary indices at once.
+    boundary = any_inside & ~all_inside
+    z_b, y_b, x_b = np.where(boundary)
+
+    if len(z_b) > 0:
+        # Encode only boundary cells (small 1D arrays) to classify cases.
+        case_b = _encode_corners(
+            top_left_in[z_b, y_b, x_b],
+            top_right_in[z_b, y_b, x_b],
+            bottom_left_in[z_b, y_b, x_b],
+            bottom_right_in[z_b, y_b, x_b],
+        )
+
+        # Case 1: only bottom-left corner inside
+        m = case_b == 1
+        if np.any(m):
+            zi, yi, xi = z_b[m], y_b[m], x_b[m]
+            areas[zi, yi, xi] = _calculate_case_1_area(
+                x_edges[xi], y_edges[yi + 1], r_at_height[zi], exact
+            )
+
+        # Case 3: bottom-left and bottom-right inside
+        m = case_b == 3
+        if np.any(m):
+            zi, yi, xi = z_b[m], y_b[m], x_b[m]
+            areas[zi, yi, xi] = _calculate_case_3_area(
+                x_edges[xi], x_edges[xi + 1], y_edges[yi + 1],
+                r_at_height[zi], length, exact,
+            )
+
+        # Case 9: top-left and bottom-left inside
+        m = case_b == 9
+        if np.any(m):
+            zi, yi, xi = z_b[m], y_b[m], x_b[m]
+            areas[zi, yi, xi] = _calculate_case_9_area(
+                y_edges[yi], y_edges[yi + 1], x_edges[xi],
+                r_at_height[zi], length, exact,
+            )
+
+        # Case 11: top-left, bottom-left, and bottom-right inside
+        m = case_b == 11
+        if np.any(m):
+            zi, yi, xi = z_b[m], y_b[m], x_b[m]
+            areas[zi, yi, xi] = _calculate_case_11_area(
+                y_edges[yi], x_edges[xi + 1], r_at_height[zi], length, exact
+            )
+
+    return areas
 
 
 def _encode_corners(
