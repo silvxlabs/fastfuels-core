@@ -431,7 +431,7 @@ class TestCalculateCase1Area:
                     "--",
                     lw=2,
                     c="r",
-                    label="intersection"
+                    label="intersection",
                 )
                 ax[row, col].set_xlim(-radius[i] / 8, radius[i] + radius[i] / 8)
                 ax[row, col].set_ylim(-radius[i] / 8, radius[i] + radius[i] / 8)
@@ -512,7 +512,7 @@ class TestCalculateCase3Area:
                     "--",
                     lw=2,
                     c="r",
-                    label="intersection"
+                    label="intersection",
                 )
                 ax[row, col].set_xlim(-length / 2 - 0.01, length / 2 + 0.01)
                 ax[row, col].set_ylim(length / 2, 3 * length / 2)
@@ -565,7 +565,7 @@ class TestCalculateCase3Area:
                     "--",
                     lw=2,
                     c="r",
-                    label="intersection"
+                    label="intersection",
                 )
                 ax[row, col].set_xlim(left[0], right[0])
                 ax[row, col].set_ylim(bottom[0], top[0])
@@ -646,7 +646,7 @@ class TestCalculateCase9Area:
                     "--",
                     lw=2,
                     c="r",
-                    label="intersection"
+                    label="intersection",
                 )
                 ax[row, col].set_xlim(length / 2 - 0.01, 3 * length / 2 + 0.01)
                 ax[row, col].set_ylim(-length / 2 - 0.01, length / 2 + 0.01)
@@ -699,7 +699,7 @@ class TestCalculateCase9Area:
                     "--",
                     lw=2,
                     c="r",
-                    label="intersection"
+                    label="intersection",
                 )
                 ax[row, col].set_xlim(left[0], right[0])
                 ax[row, col].set_ylim(bottom[0], top[0])
@@ -776,7 +776,7 @@ class TestCalculateCase11Area:
                     "--",
                     lw=2,
                     c="r",
-                    label="intersection"
+                    label="intersection",
                 )
                 ax[row, col].set_xlim(left[0], right[0])
                 ax[row, col].set_ylim(bottom[0], top[0])
