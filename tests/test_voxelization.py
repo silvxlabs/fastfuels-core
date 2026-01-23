@@ -16,6 +16,7 @@ from fastfuels_core.voxelization import (
     _calculate_case_9_area,
     _calculate_case_11_area,
     _encode_corners,
+    _compute_intersection_area,
     _compute_intersection_area_by_case,
     _sum_area_along_axis,
     discretize_crown_profile,
@@ -34,6 +35,41 @@ from shapely.geometry import Polygon, Point
 
 TEST_PATH = Path(__file__).parent
 FIGURES_PATH = TEST_PATH / "figures"
+
+
+def _compute_intersection_area_old(
+    x_center: np.ndarray, y_center: np.ndarray, length: float, radius: np.ndarray, exact=False
+):
+    """Original implementation of _compute_intersection_area using per-cell edge
+    and distance computations. Preserved here as a reference for verifying the
+    optimized implementation produces identical results."""
+    # Calculate location of cell edges using the cell center and length
+    x_right = x_center + length / 2
+    x_left = x_center - length / 2
+    y_top = y_center + length / 2
+    y_bottom = y_center - length / 2
+
+    # Calculate the distance from the origin to each cell's corner points
+    top_left_dist = np.sqrt(x_left**2 + y_top**2)
+    top_right_dist = np.sqrt(x_right**2 + y_top**2)
+    bottom_left_dist = np.sqrt(x_left**2 + y_bottom**2)
+    bottom_right_dist = np.sqrt(x_right**2 + y_bottom**2)
+
+    # Check if each corner of the cell is inside the circle
+    top_left_in = top_left_dist < radius
+    top_right_in = top_right_dist < radius
+    bottom_left_in = bottom_left_dist < radius
+    bottom_right_in = bottom_right_dist < radius
+
+    case_index = _encode_corners(
+        top_left_in, top_right_in, bottom_left_in, bottom_right_in
+    )
+
+    area = _compute_intersection_area_by_case(
+        case_index, length, x_left, x_right, y_bottom, y_top, radius, exact
+    )
+
+    return area
 
 
 class TestGetHorizontalTreeCoords:
@@ -1452,3 +1488,177 @@ class TestVoxelizedTree:
             biomass_array = voxelized_tree.distribute_biomass()
             distributed_biomass = np.sum(biomass_array)
             assert np.allclose(distributed_biomass, tree.foliage_biomass)
+
+
+class TestComputeIntersectionArea:
+    """Tests that the optimized _compute_intersection_area produces identical
+    results to the original per-cell implementation."""
+
+    def test_equivalence_simple(self):
+        """Simple case: small grid, multiple radii."""
+        x_pts = np.array([0.0, 1.0, 2.0])
+        y_pts = np.array([2.0, 1.0, 0.0])
+        r_at_height = np.array([1.5, 2.0, 2.5])
+        hr = 1.0
+
+        # Old method (meshgrid approach)
+        r_grid, y_grid, x_grid = np.meshgrid(
+            r_at_height, y_pts, x_pts, indexing="ij"
+        )
+        area_old = _compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
+
+        # New method (pre-computed edges)
+        area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr)
+
+        assert area_old.shape == area_new.shape
+        assert np.allclose(area_old, area_new)
+
+    def test_equivalence_exact(self):
+        """Equivalence with exact circular segment computation."""
+        x_pts = np.array([0.0, 1.0, 2.0, 3.0])
+        y_pts = np.array([3.0, 2.0, 1.0, 0.0])
+        r_at_height = np.array([2.0, 3.0, 3.5, 4.0, 5.0])
+        hr = 1.0
+
+        r_grid, y_grid, x_grid = np.meshgrid(
+            r_at_height, y_pts, x_pts, indexing="ij"
+        )
+        area_old = _compute_intersection_area_old(
+            x_grid, y_grid, hr, r_grid, exact=True
+        )
+        area_new = _compute_intersection_area(
+            x_pts, y_pts, r_at_height, hr, exact=True
+        )
+
+        assert area_old.shape == area_new.shape
+        assert np.allclose(area_old, area_new)
+
+    def test_equivalence_fractional_resolution(self):
+        """Equivalence with hr=0.5 matching realistic usage."""
+        hr = 0.5
+        x_pts = np.arange(0, 5.5, hr)
+        y_pts = np.flip(x_pts)
+        r_at_height = np.linspace(0.5, 4.0, 50)
+
+        r_grid, y_grid, x_grid = np.meshgrid(
+            r_at_height, y_pts, x_pts, indexing="ij"
+        )
+        area_old = _compute_intersection_area_old(
+            x_grid, y_grid, hr, r_grid, exact=True
+        )
+        area_new = _compute_intersection_area(
+            x_pts, y_pts, r_at_height, hr, exact=True
+        )
+
+        assert area_old.shape == area_new.shape
+        assert np.allclose(area_old, area_new)
+
+    def test_equivalence_fine_resolution(self):
+        """Equivalence with hr=0.1 for high-resolution grids."""
+        hr = 0.1
+        x_pts = np.arange(0, 3.1, hr)
+        y_pts = np.flip(x_pts)
+        r_at_height = np.linspace(0.1, 2.5, 100)
+
+        r_grid, y_grid, x_grid = np.meshgrid(
+            r_at_height, y_pts, x_pts, indexing="ij"
+        )
+        area_old = _compute_intersection_area_old(
+            x_grid, y_grid, hr, r_grid, exact=True
+        )
+        area_new = _compute_intersection_area(
+            x_pts, y_pts, r_at_height, hr, exact=True
+        )
+
+        assert area_old.shape == area_new.shape
+        assert np.allclose(area_old, area_new)
+
+    def test_equivalence_zero_radius(self):
+        """Equivalence when some radii are zero."""
+        x_pts = np.array([0.0, 1.0, 2.0])
+        y_pts = np.array([2.0, 1.0, 0.0])
+        r_at_height = np.array([0.0, 1.0, 0.0, 2.0])
+        hr = 1.0
+
+        r_grid, y_grid, x_grid = np.meshgrid(
+            r_at_height, y_pts, x_pts, indexing="ij"
+        )
+        area_old = _compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
+        area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr)
+
+        assert area_old.shape == area_new.shape
+        assert np.allclose(area_old, area_new)
+
+    def test_equivalence_single_cell(self):
+        """Equivalence with a single cell grid."""
+        x_pts = np.array([0.0])
+        y_pts = np.array([0.0])
+        r_at_height = np.array([0.25, 0.5, 0.75])
+        hr = 1.0
+
+        r_grid, y_grid, x_grid = np.meshgrid(
+            r_at_height, y_pts, x_pts, indexing="ij"
+        )
+        area_old = _compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
+        area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr)
+
+        assert area_old.shape == area_new.shape
+        assert np.allclose(area_old, area_new)
+
+    def test_equivalence_random_trees(self):
+        """Integration: full discretize_crown_profile pipeline with random trees."""
+        resolutions = ((0.5, 0.5), (1.0, 1.0), (2.0, 1.0))
+        for _ in range(100):
+            tree = make_random_tree()
+            hr, vr = random.choice(resolutions)
+            grid = discretize_crown_profile(tree, hr, vr)
+            assert np.sum(grid) > 0
+
+
+class TestPerformanceBenchmark:
+    """Performance comparison between old and new implementations."""
+
+    def test_benchmark_large_grid(self):
+        import time
+
+        hr = 0.5
+        x_pts = np.arange(0, 10.5, hr)
+        y_pts = np.flip(x_pts)
+        r_at_height = np.linspace(0.5, 9.0, 300)
+        n_iterations = 1000
+
+        # Old method
+        r_grid, y_grid, x_grid = np.meshgrid(
+            r_at_height, y_pts, x_pts, indexing="ij"
+        )
+        # Warmup
+        _compute_intersection_area_old(x_grid, y_grid, hr, r_grid, exact=True)
+        start = time.perf_counter()
+        for _ in range(n_iterations):
+            _compute_intersection_area_old(x_grid, y_grid, hr, r_grid, exact=True)
+        time_old = time.perf_counter() - start
+
+        # New method
+        # Warmup
+        _compute_intersection_area(x_pts, y_pts, r_at_height, hr, exact=True)
+        start = time.perf_counter()
+        for _ in range(n_iterations):
+            _compute_intersection_area(x_pts, y_pts, r_at_height, hr, exact=True)
+        time_new = time.perf_counter() - start
+
+        speedup = time_old / time_new
+        print(
+            f"\nBenchmark (hr=0.5, nx=ny=21, nz=300, {n_iterations} iterations):"
+            f"\n  Old: {time_old:.4f}s"
+            f"\n  New: {time_new:.4f}s"
+            f"\n  Speedup: {speedup:.2f}x"
+        )
+
+        # Verify results are equivalent
+        area_old = _compute_intersection_area_old(
+            x_grid, y_grid, hr, r_grid, exact=True
+        )
+        area_new = _compute_intersection_area(
+            x_pts, y_pts, r_at_height, hr, exact=True
+        )
+        assert np.allclose(area_old, area_new)
