@@ -303,6 +303,8 @@ class InhomogeneousPoissonProcess:
         # Apply the sampling function to each plot
         sampled_trees = trees.groupby("PLOT_ID").apply(sample_trees_for_plot)
 
+        if "PLOT_ID" not in sampled_trees.columns:
+            sampled_trees = sampled_trees.reset_index(level=0)
         return sampled_trees.reset_index(drop=True)
 
     @staticmethod
