@@ -171,3 +171,6 @@ figures/
 # IDE config files
 .idea/
 .vscode/
+
+# Auto-generated version file
+fastfuels_core/_version.py
