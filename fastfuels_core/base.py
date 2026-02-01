@@ -2,7 +2,7 @@
 import geopandas as gpd
 from pandas import DataFrame
 from geopandas import GeoDataFrame
-from pandera import DataFrameSchema
+from pandera.pandas import DataFrameSchema
 
 
 class ObjectIterableDataFrame:
