@@ -16,7 +16,7 @@ from fastfuels_core.ref_data import REF_SPECIES, REF_JENKINS
 import numpy as np
 from numpy import ndarray
 from nsvb.estimators import total_foliage_dry_weight
-from pandera import DataFrameSchema, Column, Check, Index
+from pandera.pandas import DataFrameSchema, Column, Check, Index
 
 
 TREE_SCHEMA_COLS = {
