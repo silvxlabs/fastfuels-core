@@ -1,6 +1,6 @@
 # Core imports
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 # Internal imports
 if TYPE_CHECKING:
@@ -11,13 +11,17 @@ import numpy as np
 from numpy import ndarray
 from scipy.ndimage import distance_transform_edt
 
+# Type definitions
+CenteringMode = Literal["cell", "vertex"]
+
 
 class VoxelizedTree:
-    def __init__(self, tree: "Tree", grid: ndarray, hr, vr):
+    def __init__(self, tree: "Tree", grid: ndarray, hr, vr, centering: CenteringMode = "cell"):
         self.tree = tree
         self.grid = grid
         self.hr = hr
         self.vr = vr
+        self.centering = centering
 
     def distribute_biomass(self):
         volume = np.sum(self.grid) * self.hr * self.hr * self.vr
@@ -30,11 +34,12 @@ def voxelize_tree(
     tree: "Tree",
     horizontal_resolution: float,
     vertical_resolution: float,
+    centering: CenteringMode = "cell",
     **kwargs,
 ) -> VoxelizedTree:
 
     crown_profile_mask = discretize_crown_profile(
-        tree, horizontal_resolution, vertical_resolution
+        tree, horizontal_resolution, vertical_resolution, centering=centering
     )
 
     alpha = kwargs.get("alpha", 0.5)
@@ -46,15 +51,15 @@ def voxelize_tree(
         crown_profile_mask, alpha, beta, rho, seed
     )
     return VoxelizedTree(
-        tree, sampled_crown_mask, horizontal_resolution, vertical_resolution
+        tree, sampled_crown_mask, horizontal_resolution, vertical_resolution, centering
     )
 
 
 def discretize_crown_profile(
-    tree: "Tree", hr: float, vr: float, full_intersection=True
+    tree: "Tree", hr: float, vr: float, full_intersection=True, centering: CenteringMode = "cell"
 ) -> ndarray:
     # Get the horizontal and vertical coordinates of the tree crown
-    horizontal_coords = _get_horizontal_tree_coords(hr, tree.max_crown_radius)
+    horizontal_coords = _get_horizontal_tree_coords(hr, tree.max_crown_radius, centering=centering)
     z_pts = _get_vertical_tree_coords(vr, tree.height, tree.crown_base_height)
 
     # Slice the horizontal coordinates to get the first quadrant of the xy plane
@@ -72,7 +77,7 @@ def discretize_crown_profile(
     q3_grid = np.flip(q2_grid, axis=1)
     q4_grid = np.flip(q3_grid, axis=2)
 
-    return _align_quadrants(q1_grid, q2_grid, q3_grid, q4_grid)
+    return _align_quadrants(q1_grid, q2_grid, q3_grid, q4_grid, centering=centering)
 
 
 def _get_vertical_tree_coords(step, tree_height, crown_base_height):
@@ -84,16 +89,35 @@ def _get_vertical_tree_coords(step, tree_height, crown_base_height):
     return grid
 
 
-def _get_horizontal_tree_coords(step, radius, pos=0.0):
+def _get_horizontal_tree_coords(step, radius, pos=0.0, centering: CenteringMode = "cell"):
     """
-    Discretizes a stem position and crown radius into a 1D array of coordinates
-    centered at pos, with a spacing step. The grid has an odd number of cells.
-    The grid is rounded out to include one cell beyond the crown radius.
+    Discretizes a stem position and crown radius into a 1D array of coordinates.
+
+    Parameters
+    ----------
+    step : float
+        Grid cell size (resolution)
+    radius : float
+        Crown radius to cover
+    pos : float
+        Position of tree stem (default 0.0)
+    centering : {"cell", "vertex"}
+        - "cell": Grid has odd number of cells, stem at center of middle cell
+        - "vertex": Grid has even number of cells, stem at vertex between cells
     """
     cells_per_side = int(np.floor(np.abs(radius / step))) + 1
-    lower_bound = pos - cells_per_side * step
-    upper_bound = pos + cells_per_side * step
-    grid = np.linspace(lower_bound, upper_bound, 2 * cells_per_side + 1)
+
+    if centering == "cell":
+        # Odd grid: stem at cell center
+        lower_bound = pos - cells_per_side * step
+        upper_bound = pos + cells_per_side * step
+        grid = np.linspace(lower_bound, upper_bound, 2 * cells_per_side + 1)
+    else:  # vertex
+        # Even grid: stem at vertex (cell centers offset by half-step)
+        lower_bound = pos - (cells_per_side - 0.5) * step
+        upper_bound = pos + (cells_per_side - 0.5) * step
+        grid = np.linspace(lower_bound, upper_bound, 2 * cells_per_side)
+
     return grid
 
 
@@ -492,25 +516,41 @@ def _sum_area_along_axis(area: ndarray, axis: int, cells_per_axis: int) -> ndarr
         raise ValueError("Invalid axis index.")
 
 
-def _align_quadrants(q1, q2, q3, q4):
+def _align_quadrants(q1, q2, q3, q4, centering: CenteringMode = "cell"):
     """
-    Align four quadrants into a single grid. This function assumes that the
-    four quadrants share the same origin and that the quadrants are aligned
-    along the x and y axes.
+    Align four quadrants into a single grid.
+
+    For cell-centered: quadrants share the center cell (overlap by 1)
+    For vertex-centered: quadrants meet at center vertex (no overlap)
     """
-    # Create a grid to hold the four quadrants
-    num_x = q1.shape[2] + q2.shape[2] - 1
-    num_y = q1.shape[1] + q3.shape[1] - 1
     num_z = q1.shape[0]
-    grid = np.zeros((num_z, num_y, num_x))
 
-    mid_x = num_x // 2
-    mid_y = num_y // 2
+    if centering == "cell":
+        # Overlap at center cell
+        num_x = q1.shape[2] + q2.shape[2] - 1
+        num_y = q1.shape[1] + q3.shape[1] - 1
+        grid = np.zeros((num_z, num_y, num_x))
 
-    grid[:, : mid_y + 1, : mid_x + 1] = q1
-    grid[:, : mid_y + 1, mid_x:] = q2
-    grid[:, mid_y:, mid_x:] = q3
-    grid[:, mid_y:, : mid_x + 1] = q4
+        mid_x = num_x // 2
+        mid_y = num_y // 2
+
+        grid[:, : mid_y + 1, : mid_x + 1] = q1
+        grid[:, : mid_y + 1, mid_x:] = q2
+        grid[:, mid_y:, mid_x:] = q3
+        grid[:, mid_y:, : mid_x + 1] = q4
+    else:  # vertex
+        # No overlap: quadrants meet at vertex
+        num_x = q1.shape[2] + q2.shape[2]
+        num_y = q1.shape[1] + q3.shape[1]
+        grid = np.zeros((num_z, num_y, num_x))
+
+        mid_x = q1.shape[2]
+        mid_y = q1.shape[1]
+
+        grid[:, :mid_y, :mid_x] = q1
+        grid[:, :mid_y, mid_x:] = q2
+        grid[:, mid_y:, mid_x:] = q3
+        grid[:, mid_y:, :mid_x] = q4
 
     return grid
 

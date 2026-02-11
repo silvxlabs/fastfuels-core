@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 # Internal imports
 from fastfuels_core.base import ObjectIterableDataFrame
 from fastfuels_core.point_process import run_point_process
-from fastfuels_core.voxelization import VoxelizedTree, voxelize_tree
+from fastfuels_core.voxelization import VoxelizedTree, voxelize_tree, CenteringMode
 from fastfuels_core.treatments import TreatmentProtocol
 from fastfuels_core.crown_profile_models.abc import CrownProfileModel
 from fastfuels_core.crown_profile_models.purves import PurvesCrownProfile
@@ -347,9 +347,10 @@ class Tree:
         return REF_JENKINS.loc[self.jenkins_species_group]["FOLIAGE_SAV"]
 
     def voxelize(
-        self, horizontal_resolution: float, vertical_resolution: float, **kwargs
+        self, horizontal_resolution: float, vertical_resolution: float,
+        centering: CenteringMode = "cell", **kwargs
     ) -> VoxelizedTree:
-        return voxelize_tree(self, horizontal_resolution, vertical_resolution, **kwargs)
+        return voxelize_tree(self, horizontal_resolution, vertical_resolution, centering=centering, **kwargs)
 
     @classmethod
     def from_row(cls, row):

@@ -19,6 +19,7 @@ from fastfuels_core.voxelization import (
     _compute_intersection_area,
     _compute_intersection_area_by_case,
     _sum_area_along_axis,
+    _align_quadrants,
     discretize_crown_profile,
     _compute_horizontal_probability,
     _compute_vertical_probability,
@@ -35,7 +36,6 @@ from shapely.geometry import Polygon, Point
 
 TEST_PATH = Path(__file__).parent
 FIGURES_PATH = TEST_PATH / "figures"
-
 
 
 class TestGetHorizontalTreeCoords:
@@ -134,6 +134,141 @@ class TestGetHorizontalTreeCoords:
         assert result[6] == 2
         assert result[-1] == 8
         assert result[-1] - step == radius + pos
+
+    # Centering mode tests
+    def test_cell_centered_default_backward_compatible(self):
+        """Default should produce identical results to original implementation."""
+        step = 1
+        radius = 5
+        result = _get_horizontal_tree_coords(step, radius)
+        assert len(result) == 13  # 2*6 + 1 = 13
+        assert result[0] == -6
+        assert result[6] == 0
+        assert result[-1] == 6
+
+    def test_cell_centered_explicit_matches_default(self):
+        """Explicit centering='cell' should match default behavior."""
+        step = 1
+        radius = 5
+        default_result = _get_horizontal_tree_coords(step, radius)
+        explicit_result = _get_horizontal_tree_coords(step, radius, centering="cell")
+        assert np.array_equal(default_result, explicit_result)
+
+    def test_vertex_centered_basic(self):
+        """Vertex centering produces even-sized grid with no cell at origin."""
+        step = 1
+        radius = 5
+        result = _get_horizontal_tree_coords(step, radius, centering="vertex")
+        assert len(result) % 2 == 0  # even
+        assert 0.0 not in result  # no cell center at origin
+        mid = len(result) // 2
+        assert result[mid - 1] < 0 < result[mid]  # origin between middle cells
+
+    def test_vertex_centered_symmetry(self):
+        """Vertex-centered grid should be perfectly symmetric about origin."""
+        step = 1
+        radius = 5
+        result = _get_horizontal_tree_coords(step, radius, centering="vertex")
+        for i in range(len(result) // 2):
+            assert np.isclose(result[i], -result[-(i + 1)])
+
+    def test_vertex_centered_cell_spacing(self):
+        """Vertex-centered cells should have correct spacing."""
+        step = 1
+        radius = 5
+        result = _get_horizontal_tree_coords(step, radius, centering="vertex")
+        for i in range(len(result) - 1):
+            assert np.isclose(result[i + 1] - result[i], step)
+
+    def test_vertex_centered_covers_crown(self):
+        """Vertex-centered grid should cover at least the crown radius."""
+        step = 1
+        radius = 5
+        result = _get_horizontal_tree_coords(step, radius, centering="vertex")
+        # Grid should extend at least to cover the crown
+        assert result[-1] + step / 2 >= radius  # rightmost cell edge covers radius
+        assert result[0] - step / 2 <= -radius  # leftmost cell edge covers -radius
+
+    def test_vertex_centered_zero_radius(self):
+        """Vertex centering with zero radius."""
+        step = 1
+        radius = 0
+        result = _get_horizontal_tree_coords(step, radius, centering="vertex")
+        assert len(result) % 2 == 0
+        assert len(result) == 2  # minimum even grid
+
+    def test_vertex_centered_small_radius(self):
+        """Vertex centering with radius smaller than step."""
+        step = 1
+        radius = 0.1
+        result = _get_horizontal_tree_coords(step, radius, centering="vertex")
+        assert len(result) % 2 == 0
+        assert 0.0 not in result
+
+    def test_vertex_centered_fractional_step(self):
+        """Vertex centering with fractional step size."""
+        step = 0.5
+        radius = 5
+        result = _get_horizontal_tree_coords(step, radius, centering="vertex")
+        assert len(result) % 2 == 0
+        for i in range(len(result) - 1):
+            assert np.isclose(result[i + 1] - result[i], step)
+
+    def test_vertex_centered_fine_step(self):
+        """Vertex centering with fine step size."""
+        step = 0.1
+        radius = 5
+        result = _get_horizontal_tree_coords(step, radius, centering="vertex")
+        assert len(result) % 2 == 0
+        assert 0.0 not in result
+
+    def test_vertex_centered_non_zero_pos(self):
+        """Vertex centering with non-zero stem position."""
+        step = 1
+        radius = 5
+        pos = 2
+        result = _get_horizontal_tree_coords(step, radius, pos, centering="vertex")
+        assert len(result) % 2 == 0
+        assert pos not in result
+        mid = len(result) // 2
+        assert result[mid - 1] < pos < result[mid]
+
+    def test_vertex_centered_negative_pos(self):
+        """Vertex centering with negative stem position."""
+        step = 1
+        radius = 5
+        pos = -3
+        result = _get_horizontal_tree_coords(step, radius, pos, centering="vertex")
+        assert len(result) % 2 == 0
+        assert pos not in result
+
+    def test_vertex_centered_negative_radius(self):
+        """Vertex centering handles negative radius (absolute value)."""
+        step = 1
+        radius = -5
+        result = _get_horizontal_tree_coords(step, radius, centering="vertex")
+        assert len(result) % 2 == 0
+
+    def test_vertex_centered_large_radius(self):
+        """Vertex centering with large radius."""
+        step = 1
+        radius = 100
+        result = _get_horizontal_tree_coords(step, radius, centering="vertex")
+        assert len(result) % 2 == 0
+        assert result[-1] + step / 2 >= radius
+
+    def test_both_modes_various_params(self):
+        """Both modes work correctly across various parameter combinations."""
+        for step in [0.1, 0.5, 1.0, 2.0]:
+            for radius in [0.5, 1.0, 5.0, 10.0]:
+                cell_result = _get_horizontal_tree_coords(
+                    step, radius, centering="cell"
+                )
+                vertex_result = _get_horizontal_tree_coords(
+                    step, radius, centering="vertex"
+                )
+                assert len(cell_result) % 2 == 1  # cell always odd
+                assert len(vertex_result) % 2 == 0  # vertex always even
 
 
 class TestGetVerticalTreeCoords:
@@ -990,6 +1125,80 @@ class TestSumAreaAlongAxis:
         assert np.allclose(summed, np.ones([2, 10, 10]) * 10)
 
 
+class TestAlignQuadrants:
+    """Tests for _align_quadrants with centering modes."""
+
+    def test_cell_centered_default_backward_compatible(self):
+        """Default should match original behavior (cell-centered)."""
+        q = np.ones((2, 3, 3))
+        # Original: 3 + 3 - 1 = 5
+        result = _align_quadrants(q, q, q, q)
+        assert result.shape == (2, 5, 5)
+
+    def test_cell_centered_explicit_matches_default(self):
+        """Explicit cell centering matches default."""
+        q = np.ones((2, 3, 3))
+        default_result = _align_quadrants(q, q, q, q)
+        explicit_result = _align_quadrants(q, q, q, q, centering="cell")
+        assert np.array_equal(default_result, explicit_result)
+
+    def test_vertex_centered_no_overlap(self):
+        """Vertex centering: quadrants meet without overlap."""
+        q = np.ones((2, 3, 3))
+        # Vertex: 3 + 3 = 6 (no overlap)
+        result = _align_quadrants(q, q, q, q, centering="vertex")
+        assert result.shape == (2, 6, 6)
+
+    def test_vertex_centered_correct_placement(self):
+        """Verify quadrants are placed correctly in vertex mode."""
+        # Create distinct quadrants for verification
+        q1 = np.full((1, 2, 2), 1)
+        q2 = np.full((1, 2, 2), 2)
+        q3 = np.full((1, 2, 2), 3)
+        q4 = np.full((1, 2, 2), 4)
+
+        result = _align_quadrants(q1, q2, q3, q4, centering="vertex")
+        assert result.shape == (1, 4, 4)
+
+        # Verify quadrant placement
+        assert np.all(result[:, :2, :2] == 1)  # q1 top-left
+        assert np.all(result[:, :2, 2:] == 2)  # q2 top-right
+        assert np.all(result[:, 2:, 2:] == 3)  # q3 bottom-right
+        assert np.all(result[:, 2:, :2] == 4)  # q4 bottom-left
+
+    def test_cell_centered_overlapping_values(self):
+        """Cell centering: center row/column comes from quadrant overlap."""
+        # Create quadrants with unique values at corners for verification
+        q1 = np.full((1, 3, 3), 1)
+        q2 = np.full((1, 3, 3), 2)
+        q3 = np.full((1, 3, 3), 3)
+        q4 = np.full((1, 3, 3), 4)
+        result = _align_quadrants(q1, q2, q3, q4, centering="cell")
+        # Result is 5x5, quadrants share the center row/column
+        # q1 fills [:, :3, :3], q2 fills [:, :3, 2:], q3 fills [:, 2:, 2:], q4 fills [:, 2:, :3]
+        # Non-overlapping corners should have their quadrant values
+        assert result[0, 0, 0] == 1  # pure q1
+        assert result[0, 0, 4] == 2  # pure q2
+        assert result[0, 4, 4] == 3  # pure q3
+        assert result[0, 4, 0] == 4  # pure q4
+
+    def test_vertex_centered_even_output_always(self):
+        """Vertex centering always produces even dimensions."""
+        for size in [2, 3, 4, 5]:
+            q = np.ones((1, size, size))
+            result = _align_quadrants(q, q, q, q, centering="vertex")
+            assert result.shape[1] % 2 == 0
+            assert result.shape[2] % 2 == 0
+
+    def test_cell_centered_odd_output_always(self):
+        """Cell centering always produces odd dimensions."""
+        for size in [2, 3, 4, 5]:
+            q = np.ones((1, size, size))
+            result = _align_quadrants(q, q, q, q, centering="cell")
+            assert result.shape[1] % 2 == 1
+            assert result.shape[2] % 2 == 1
+
+
 class TestDiscretizeCrownProfile:
     def test_known_tree_fine_resolution(self):
         test_tree = Tree(122, 1, 24, 20.66443, 0.5)
@@ -1013,6 +1222,364 @@ class TestDiscretizeCrownProfile:
             res_tuple = random.choice(resolutions)
             grid = discretize_crown_profile(tree, *res_tuple)
             assert np.sum(grid) > 0
+
+    # Centering mode tests
+    def test_default_matches_original_behavior(self):
+        """Default should produce identical results to original implementation."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        grid_default = discretize_crown_profile(test_tree, 1, 1)
+        grid_cell = discretize_crown_profile(test_tree, 1, 1, centering="cell")
+        assert np.array_equal(grid_default, grid_cell)
+
+    def test_cell_centered_odd_dimensions(self):
+        """Cell-centered grids have odd x and y dimensions."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        grid = discretize_crown_profile(test_tree, 1, 1, centering="cell")
+        assert grid.shape[1] % 2 == 1
+        assert grid.shape[2] % 2 == 1
+
+    def test_vertex_centered_even_dimensions(self):
+        """Vertex-centered grids have even x and y dimensions."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        grid = discretize_crown_profile(test_tree, 1, 1, centering="vertex")
+        assert grid.shape[1] % 2 == 0
+        assert grid.shape[2] % 2 == 0
+
+    def test_cell_centered_symmetric(self):
+        """Cell-centered grid should be symmetric about center."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        grid = discretize_crown_profile(test_tree, 1, 1, centering="cell")
+        assert np.allclose(grid, np.flip(np.flip(grid, axis=1), axis=2))
+
+    def test_vertex_centered_symmetric(self):
+        """Vertex-centered grid should be symmetric about center vertex."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        grid = discretize_crown_profile(test_tree, 1, 1, centering="vertex")
+        assert np.allclose(grid, np.flip(np.flip(grid, axis=1), axis=2))
+
+    def test_centering_modes_preserve_approximate_volume(self):
+        """Both centering modes should produce similar total volume."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        hr, vr = 0.5, 0.5
+
+        grid_cell = discretize_crown_profile(test_tree, hr, vr, centering="cell")
+        grid_vertex = discretize_crown_profile(test_tree, hr, vr, centering="vertex")
+
+        volume_cell = np.sum(grid_cell) * hr * hr * vr
+        volume_vertex = np.sum(grid_vertex) * hr * hr * vr
+
+        assert np.isclose(volume_cell, volume_vertex, atol=1e-3)
+
+    def test_vertex_centered_fine_resolution(self):
+        """Vertex-centered works at fine resolution."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        grid = discretize_crown_profile(test_tree, 0.5, 0.5, centering="vertex")
+        assert grid.shape[1] % 2 == 0
+        assert grid.shape[2] % 2 == 0
+        assert np.sum(grid) > 0
+
+    def test_vertex_centered_coarse_resolution(self):
+        """Vertex-centered works at coarse resolution."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        grid = discretize_crown_profile(test_tree, 2, 1, centering="vertex")
+        assert grid.shape[1] % 2 == 0
+        assert grid.shape[2] % 2 == 0
+        assert np.sum(grid) > 0
+
+    def test_random_trees_cell_centered(self):
+        """Random trees work with cell centering."""
+        resolutions = ((0.5, 0.5), (1.0, 1.0), (2.0, 1.0))
+        for _ in range(100):
+            tree = make_random_tree()
+            res_tuple = random.choice(resolutions)
+            grid = discretize_crown_profile(tree, *res_tuple, centering="cell")
+            assert np.sum(grid) > 0
+            assert grid.shape[1] % 2 == 1
+            assert grid.shape[2] % 2 == 1
+
+    def test_random_trees_vertex_centered(self):
+        """Random trees work with vertex centering."""
+        resolutions = ((0.5, 0.5), (1.0, 1.0), (2.0, 1.0))
+        for _ in range(100):
+            tree = make_random_tree()
+            res_tuple = random.choice(resolutions)
+            grid = discretize_crown_profile(tree, *res_tuple, centering="vertex")
+            assert np.sum(grid) > 0
+            assert grid.shape[1] % 2 == 0
+            assert grid.shape[2] % 2 == 0
+
+    def test_very_small_tree_vertex_centered(self):
+        """Very small tree (small crown) with vertex centering."""
+        test_tree = Tree(122, 1, 5, 3.0, 0.1)
+        grid = discretize_crown_profile(test_tree, 1, 1, centering="vertex")
+        assert grid.shape[1] % 2 == 0
+        assert grid.shape[2] % 2 == 0
+
+    def test_large_tree_vertex_centered(self):
+        """Large tree with vertex centering."""
+        test_tree = Tree(122, 1, 100, 50.0, 0.8)
+        grid = discretize_crown_profile(test_tree, 1, 1, centering="vertex")
+        assert grid.shape[1] % 2 == 0
+        assert grid.shape[2] % 2 == 0
+        assert np.sum(grid) > 0
+
+
+class TestCenteringVisualization:
+    """Visualization tests comparing cell-centered vs vertex-centered grids."""
+
+    save_fig = True
+    show_fig = False
+
+    def test_visualize_horizontal_coords(self):
+        """Visualize the difference in horizontal coordinate grids."""
+        step = 1.0
+        radius = 3.0
+
+        cell_coords = _get_horizontal_tree_coords(step, radius, centering="cell")
+        vertex_coords = _get_horizontal_tree_coords(step, radius, centering="vertex")
+
+        fig, axes = plt.subplots(2, 1, figsize=(10, 6))
+
+        # Cell-centered plot
+        ax = axes[0]
+        ax.set_title(f"Cell-Centered (n={len(cell_coords)}, odd)")
+        for i, x in enumerate(cell_coords):
+            # Draw cell boundaries
+            ax.axvline(x - step / 2, color="lightgray", linestyle="-", linewidth=0.5)
+            ax.axvline(x + step / 2, color="lightgray", linestyle="-", linewidth=0.5)
+            # Draw cell center
+            ax.plot(x, 0, "bs", markersize=8, label="Cell center" if i == 0 else "")
+        ax.axvline(0, color="red", linestyle="--", linewidth=2, label="Stem position")
+        ax.axvline(
+            -radius, color="green", linestyle=":", linewidth=1.5, label="Crown radius"
+        )
+        ax.axvline(radius, color="green", linestyle=":", linewidth=1.5)
+        ax.set_xlim(-radius - 2 * step, radius + 2 * step)
+        ax.set_ylim(-0.5, 0.5)
+        ax.set_xlabel("x coordinate (m)")
+        ax.legend(loc="upper right")
+        ax.set_yticks([])
+
+        # Vertex-centered plot
+        ax = axes[1]
+        ax.set_title(f"Vertex-Centered (n={len(vertex_coords)}, even)")
+        for i, x in enumerate(vertex_coords):
+            ax.axvline(x - step / 2, color="lightgray", linestyle="-", linewidth=0.5)
+            ax.axvline(x + step / 2, color="lightgray", linestyle="-", linewidth=0.5)
+            ax.plot(x, 0, "bs", markersize=8, label="Cell center" if i == 0 else "")
+        ax.axvline(0, color="red", linestyle="--", linewidth=2, label="Stem at vertex")
+        ax.axvline(
+            -radius, color="green", linestyle=":", linewidth=1.5, label="Crown radius"
+        )
+        ax.axvline(radius, color="green", linestyle=":", linewidth=1.5)
+        ax.set_xlim(-radius - 2 * step, radius + 2 * step)
+        ax.set_ylim(-0.5, 0.5)
+        ax.set_xlabel("x coordinate (m)")
+        ax.legend(loc="upper right")
+        ax.set_yticks([])
+
+        plt.tight_layout()
+        if self.save_fig:
+            plt.savefig(FIGURES_PATH / "test_centering_horizontal_coords.png", dpi=150)
+        if self.show_fig:
+            plt.show()
+        plt.close()
+
+        # Assertions
+        assert len(cell_coords) % 2 == 1
+        assert len(vertex_coords) % 2 == 0
+        assert 0.0 in cell_coords
+        assert 0.0 not in vertex_coords
+
+    def test_visualize_crown_profile_slice(self):
+        """Visualize a horizontal slice of voxelized crown for both centering modes."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        hr, vr = 1.0, 1.0
+
+        grid_cell = discretize_crown_profile(test_tree, hr, vr, centering="cell")
+        grid_vertex = discretize_crown_profile(test_tree, hr, vr, centering="vertex")
+
+        # Get the actual coordinates for each grid
+        cell_coords = _get_horizontal_tree_coords(
+            hr, test_tree.max_crown_radius, centering="cell"
+        )
+        vertex_coords = _get_horizontal_tree_coords(
+            hr, test_tree.max_crown_radius, centering="vertex"
+        )
+
+        # Get a middle z-slice where crown is widest
+        z_mid_cell = grid_cell.shape[0] // 2
+        z_mid_vertex = grid_vertex.shape[0] // 2
+
+        slice_cell = grid_cell[z_mid_cell, :, :]
+        slice_vertex = grid_vertex[z_mid_vertex, :, :]
+
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+        # Cell-centered - use actual spatial coordinates
+        ax = axes[0]
+        # Calculate extent: [left, right, bottom, top] based on cell edges
+        extent_cell = [
+            cell_coords[0] - hr / 2,
+            cell_coords[-1] + hr / 2,
+            cell_coords[0] - hr / 2,
+            cell_coords[-1] + hr / 2,
+        ]
+        im = ax.imshow(
+            slice_cell, cmap="YlOrRd", origin="lower", aspect="equal", extent=extent_cell
+        )
+        ax.set_title(f"Cell-Centered\nGrid: {slice_cell.shape[0]}x{slice_cell.shape[1]} (odd)")
+        ax.set_xlabel("x (m)")
+        ax.set_ylabel("y (m)")
+        # Draw grid lines at cell boundaries
+        for coord in cell_coords:
+            ax.axhline(coord - hr / 2, color="gray", linewidth=0.3, alpha=0.5)
+            ax.axhline(coord + hr / 2, color="gray", linewidth=0.3, alpha=0.5)
+            ax.axvline(coord - hr / 2, color="gray", linewidth=0.3, alpha=0.5)
+            ax.axvline(coord + hr / 2, color="gray", linewidth=0.3, alpha=0.5)
+        # Mark stem at origin (should be at center of center cell)
+        ax.plot(0, 0, "k+", markersize=20, markeredgewidth=3, label="Stem position")
+        # Draw crown circle at this z-height
+        z_height = test_tree.crown_base_height + z_mid_cell * vr
+        crown_r = test_tree.get_crown_radius_at_height(z_height)
+        circle = plt.Circle(
+            (0, 0),
+            crown_r,
+            fill=False,
+            color="blue",
+            linewidth=2,
+            linestyle="--",
+            label=f"Crown radius ({crown_r:.1f}m)",
+        )
+        ax.add_patch(circle)
+        ax.legend(loc="upper right")
+        plt.colorbar(im, ax=ax, label="Volume fraction")
+
+        # Vertex-centered - use actual spatial coordinates
+        ax = axes[1]
+        extent_vertex = [
+            vertex_coords[0] - hr / 2,
+            vertex_coords[-1] + hr / 2,
+            vertex_coords[0] - hr / 2,
+            vertex_coords[-1] + hr / 2,
+        ]
+        im = ax.imshow(
+            slice_vertex,
+            cmap="YlOrRd",
+            origin="lower",
+            aspect="equal",
+            extent=extent_vertex,
+        )
+        ax.set_title(
+            f"Vertex-Centered\nGrid: {slice_vertex.shape[0]}x{slice_vertex.shape[1]} (even)"
+        )
+        ax.set_xlabel("x (m)")
+        ax.set_ylabel("y (m)")
+        # Draw grid lines at cell boundaries
+        for coord in vertex_coords:
+            ax.axhline(coord - hr / 2, color="gray", linewidth=0.3, alpha=0.5)
+            ax.axhline(coord + hr / 2, color="gray", linewidth=0.3, alpha=0.5)
+            ax.axvline(coord - hr / 2, color="gray", linewidth=0.3, alpha=0.5)
+            ax.axvline(coord + hr / 2, color="gray", linewidth=0.3, alpha=0.5)
+        # Mark stem at origin (should be at vertex between 4 cells)
+        ax.plot(0, 0, "k+", markersize=20, markeredgewidth=3, label="Stem position")
+        # Draw crown circle at this z-height
+        circle = plt.Circle(
+            (0, 0),
+            crown_r,
+            fill=False,
+            color="blue",
+            linewidth=2,
+            linestyle="--",
+            label=f"Crown radius ({crown_r:.1f}m)",
+        )
+        ax.add_patch(circle)
+        ax.legend(loc="upper right")
+        plt.colorbar(im, ax=ax, label="Volume fraction")
+
+        plt.suptitle(
+            f"Crown Profile Slice at z-index={z_mid_cell} "
+            f"(height={z_height:.1f}m, tree height={test_tree.height:.1f}m)"
+        )
+        plt.tight_layout()
+        if self.save_fig:
+            plt.savefig(FIGURES_PATH / "test_centering_crown_slice.png", dpi=150)
+        if self.show_fig:
+            plt.show()
+        plt.close()
+
+        # Assertions
+        assert slice_cell.shape[0] % 2 == 1
+        assert slice_cell.shape[1] % 2 == 1
+        assert slice_vertex.shape[0] % 2 == 0
+        assert slice_vertex.shape[1] % 2 == 0
+
+    def test_visualize_grid_overlay(self):
+        """Visualize crown profile with grid overlay showing cell boundaries."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        hr = 1.0
+
+        cell_coords = _get_horizontal_tree_coords(
+            hr, test_tree.max_crown_radius, centering="cell"
+        )
+        vertex_coords = _get_horizontal_tree_coords(
+            hr, test_tree.max_crown_radius, centering="vertex"
+        )
+
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+        for ax, coords, title, centering in [
+            (axes[0], cell_coords, "Cell-Centered", "cell"),
+            (axes[1], vertex_coords, "Vertex-Centered", "vertex"),
+        ]:
+            # Draw grid cells
+            for x in coords:
+                for y in coords:
+                    rect = plt.Rectangle(
+                        (x - hr / 2, y - hr / 2),
+                        hr,
+                        hr,
+                        fill=False,
+                        edgecolor="lightgray",
+                        linewidth=0.5,
+                    )
+                    ax.add_patch(rect)
+                    # Mark cell centers
+                    ax.plot(x, y, "b.", markersize=3)
+
+            # Draw crown circle
+            crown_radius = test_tree.max_crown_radius
+            circle = plt.Circle(
+                (0, 0),
+                crown_radius,
+                fill=False,
+                color="green",
+                linewidth=2,
+                label="Crown radius",
+            )
+            ax.add_patch(circle)
+
+            # Mark stem position
+            ax.plot(0, 0, "r+", markersize=15, markeredgewidth=2, label="Stem position")
+
+            ax.set_xlim(-crown_radius - hr, crown_radius + hr)
+            ax.set_ylim(-crown_radius - hr, crown_radius + hr)
+            ax.set_aspect("equal")
+            ax.set_title(f"{title}\nGrid: {len(coords)}x{len(coords)}")
+            ax.set_xlabel("x (m)")
+            ax.set_ylabel("y (m)")
+            ax.legend(loc="upper right")
+
+        plt.tight_layout()
+        if self.save_fig:
+            plt.savefig(FIGURES_PATH / "test_centering_grid_overlay.png", dpi=150)
+        if self.show_fig:
+            plt.show()
+        plt.close()
+
+        # Assertions
+        assert len(cell_coords) % 2 == 1
+        assert len(vertex_coords) % 2 == 0
 
 
 class TestComputeHorizontalProbability:
@@ -1455,6 +2022,64 @@ class TestVoxelizedTree:
             distributed_biomass = np.sum(biomass_array)
             assert np.allclose(distributed_biomass, tree.foliage_biomass)
 
+    # Centering mode tests
+    def test_default_centering_is_cell(self):
+        """Default centering is 'cell' for backward compatibility."""
+        tree = make_random_tree(status_code=1)
+        voxelized_tree = voxelize_tree(tree, 1, 1)
+        assert voxelized_tree.centering == "cell"
+
+    def test_centering_attribute_cell(self):
+        """VoxelizedTree stores centering='cell'."""
+        tree = make_random_tree(status_code=1)
+        voxelized_tree = voxelize_tree(tree, 1, 1, centering="cell")
+        assert voxelized_tree.centering == "cell"
+
+    def test_centering_attribute_vertex(self):
+        """VoxelizedTree stores centering='vertex'."""
+        tree = make_random_tree(status_code=1)
+        voxelized_tree = voxelize_tree(tree, 1, 1, centering="vertex")
+        assert voxelized_tree.centering == "vertex"
+
+    def test_voxelize_tree_cell_odd_dimensions(self):
+        """voxelize_tree with cell centering produces odd dimensions."""
+        tree = make_random_tree(status_code=1)
+        vt = voxelize_tree(tree, 1, 1, centering="cell")
+        assert vt.grid.shape[1] % 2 == 1
+        assert vt.grid.shape[2] % 2 == 1
+
+    def test_voxelize_tree_vertex_even_dimensions(self):
+        """voxelize_tree with vertex centering produces even dimensions."""
+        tree = make_random_tree(status_code=1)
+        vt = voxelize_tree(tree, 1, 1, centering="vertex")
+        assert vt.grid.shape[1] % 2 == 0
+        assert vt.grid.shape[2] % 2 == 0
+
+    def test_distribute_biomass_cell_centered(self):
+        """distribute_biomass works with cell centering."""
+        for _ in range(100):
+            tree = make_random_tree(status_code=1)
+            vt = voxelize_tree(tree, 1, 1, centering="cell")
+            biomass_array = vt.distribute_biomass()
+            distributed_biomass = np.sum(biomass_array)
+            assert np.allclose(distributed_biomass, tree.foliage_biomass)
+
+    def test_distribute_biomass_vertex_centered(self):
+        """distribute_biomass works with vertex centering."""
+        for _ in range(100):
+            tree = make_random_tree(status_code=1)
+            vt = voxelize_tree(tree, 1, 1, centering="vertex")
+            biomass_array = vt.distribute_biomass()
+            distributed_biomass = np.sum(biomass_array)
+            assert np.allclose(distributed_biomass, tree.foliage_biomass)
+
+    def test_voxelize_tree_kwargs_with_centering(self):
+        """Other kwargs (alpha, beta, etc.) work with centering parameter."""
+        tree = make_random_tree(status_code=1)
+        vt = voxelize_tree(tree, 1, 1, centering="vertex", alpha=0.3, beta=0.7, seed=42)
+        assert vt.centering == "vertex"
+        assert vt.grid.shape[1] % 2 == 0
+
 
 class TestComputeIntersectionArea:
     """Tests that the optimized _compute_intersection_area produces identical
@@ -1462,7 +2087,11 @@ class TestComputeIntersectionArea:
 
     @staticmethod
     def _compute_intersection_area_old(
-            x_center: np.ndarray, y_center: np.ndarray, length: float, radius: np.ndarray, exact=False
+        x_center: np.ndarray,
+        y_center: np.ndarray,
+        length: float,
+        radius: np.ndarray,
+        exact=False,
     ):
         """Original implementation of _compute_intersection_area using per-cell edge
         and distance computations. Preserved here as a reference for verifying the
@@ -1503,9 +2132,7 @@ class TestComputeIntersectionArea:
         hr = 1.0
 
         # Old method (meshgrid approach)
-        r_grid, y_grid, x_grid = np.meshgrid(
-            r_at_height, y_pts, x_pts, indexing="ij"
-        )
+        r_grid, y_grid, x_grid = np.meshgrid(r_at_height, y_pts, x_pts, indexing="ij")
         area_old = self._compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
 
         # New method (pre-computed edges)
@@ -1521,15 +2148,11 @@ class TestComputeIntersectionArea:
         r_at_height = np.array([2.0, 3.0, 3.5, 4.0, 5.0])
         hr = 1.0
 
-        r_grid, y_grid, x_grid = np.meshgrid(
-            r_at_height, y_pts, x_pts, indexing="ij"
-        )
+        r_grid, y_grid, x_grid = np.meshgrid(r_at_height, y_pts, x_pts, indexing="ij")
         area_old = self._compute_intersection_area_old(
             x_grid, y_grid, hr, r_grid, exact=True
         )
-        area_new = _compute_intersection_area(
-            x_pts, y_pts, r_at_height, hr, exact=True
-        )
+        area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr, exact=True)
 
         assert area_old.shape == area_new.shape
         assert np.allclose(area_old, area_new)
@@ -1541,15 +2164,11 @@ class TestComputeIntersectionArea:
         y_pts = np.flip(x_pts)
         r_at_height = np.linspace(0.5, 4.0, 50)
 
-        r_grid, y_grid, x_grid = np.meshgrid(
-            r_at_height, y_pts, x_pts, indexing="ij"
-        )
+        r_grid, y_grid, x_grid = np.meshgrid(r_at_height, y_pts, x_pts, indexing="ij")
         area_old = self._compute_intersection_area_old(
             x_grid, y_grid, hr, r_grid, exact=True
         )
-        area_new = _compute_intersection_area(
-            x_pts, y_pts, r_at_height, hr, exact=True
-        )
+        area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr, exact=True)
 
         assert area_old.shape == area_new.shape
         assert np.allclose(area_old, area_new)
@@ -1561,15 +2180,11 @@ class TestComputeIntersectionArea:
         y_pts = np.flip(x_pts)
         r_at_height = np.linspace(0.1, 2.5, 100)
 
-        r_grid, y_grid, x_grid = np.meshgrid(
-            r_at_height, y_pts, x_pts, indexing="ij"
-        )
+        r_grid, y_grid, x_grid = np.meshgrid(r_at_height, y_pts, x_pts, indexing="ij")
         area_old = self._compute_intersection_area_old(
             x_grid, y_grid, hr, r_grid, exact=True
         )
-        area_new = _compute_intersection_area(
-            x_pts, y_pts, r_at_height, hr, exact=True
-        )
+        area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr, exact=True)
 
         assert area_old.shape == area_new.shape
         assert np.allclose(area_old, area_new)
@@ -1581,9 +2196,7 @@ class TestComputeIntersectionArea:
         r_at_height = np.array([0.0, 1.0, 0.0, 2.0])
         hr = 1.0
 
-        r_grid, y_grid, x_grid = np.meshgrid(
-            r_at_height, y_pts, x_pts, indexing="ij"
-        )
+        r_grid, y_grid, x_grid = np.meshgrid(r_at_height, y_pts, x_pts, indexing="ij")
         area_old = self._compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
         area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr)
 
@@ -1597,9 +2210,7 @@ class TestComputeIntersectionArea:
         r_at_height = np.array([0.25, 0.5, 0.75])
         hr = 1.0
 
-        r_grid, y_grid, x_grid = np.meshgrid(
-            r_at_height, y_pts, x_pts, indexing="ij"
-        )
+        r_grid, y_grid, x_grid = np.meshgrid(r_at_height, y_pts, x_pts, indexing="ij")
         area_old = self._compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
         area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr)
 
@@ -1629,14 +2240,16 @@ class TestPerformanceBenchmark:
         n_iterations = 1000
 
         # Old method
-        r_grid, y_grid, x_grid = np.meshgrid(
-            r_at_height, y_pts, x_pts, indexing="ij"
-        )
+        r_grid, y_grid, x_grid = np.meshgrid(r_at_height, y_pts, x_pts, indexing="ij")
         # Warmup
-        TestComputeIntersectionArea._compute_intersection_area_old(x_grid, y_grid, hr, r_grid, exact=True)
+        TestComputeIntersectionArea._compute_intersection_area_old(
+            x_grid, y_grid, hr, r_grid, exact=True
+        )
         start = time.perf_counter()
         for _ in range(n_iterations):
-            TestComputeIntersectionArea._compute_intersection_area_old(x_grid, y_grid, hr, r_grid, exact=True)
+            TestComputeIntersectionArea._compute_intersection_area_old(
+                x_grid, y_grid, hr, r_grid, exact=True
+            )
         time_old = time.perf_counter() - start
 
         # New method
@@ -1659,7 +2272,47 @@ class TestPerformanceBenchmark:
         area_old = TestComputeIntersectionArea._compute_intersection_area_old(
             x_grid, y_grid, hr, r_grid, exact=True
         )
-        area_new = _compute_intersection_area(
-            x_pts, y_pts, r_at_height, hr, exact=True
-        )
+        area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr, exact=True)
         assert np.allclose(area_old, area_new)
+
+
+class TestTreeVoxelizeMethod:
+    """Tests for Tree.voxelize() method with centering parameter."""
+
+    def test_default_centering(self):
+        """Default centering is 'cell'."""
+        tree = Tree(122, 1, 24, 20.66443, 0.5)
+        vt = tree.voxelize(1.0, 1.0)
+        assert vt.centering == "cell"
+
+    def test_cell_centering_explicit(self):
+        """Explicit cell centering."""
+        tree = Tree(122, 1, 24, 20.66443, 0.5)
+        vt = tree.voxelize(1.0, 1.0, centering="cell")
+        assert vt.centering == "cell"
+        assert vt.grid.shape[1] % 2 == 1
+
+    def test_vertex_centering(self):
+        """Vertex centering via Tree.voxelize()."""
+        tree = Tree(122, 1, 24, 20.66443, 0.5)
+        vt = tree.voxelize(1.0, 1.0, centering="vertex")
+        assert vt.centering == "vertex"
+        assert vt.grid.shape[1] % 2 == 0
+
+    def test_kwargs_pass_through(self):
+        """Other kwargs pass through correctly."""
+        tree = Tree(122, 1, 24, 20.66443, 0.5)
+        vt = tree.voxelize(1.0, 1.0, centering="vertex", alpha=0.3, seed=42)
+        assert vt.centering == "vertex"
+
+    def test_various_resolutions(self):
+        """Tree.voxelize works at various resolutions with both modes."""
+        tree = Tree(122, 1, 24, 20.66443, 0.5)
+        for hr, vr in [(0.5, 0.5), (1.0, 1.0), (2.0, 1.0)]:
+            for centering in ["cell", "vertex"]:
+                vt = tree.voxelize(hr, vr, centering=centering)
+                assert vt.centering == centering
+                if centering == "cell":
+                    assert vt.grid.shape[1] % 2 == 1
+                else:
+                    assert vt.grid.shape[1] % 2 == 0
