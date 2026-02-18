@@ -33,7 +33,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import pytest
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point
 
 TEST_PATH = Path(__file__).parent
 TEST_DATA_PATH = TEST_PATH / "data"
@@ -818,8 +818,12 @@ class TestExpandToRoi:
         roi, trees, plots = real_data
         tree_sample = TreeSample(trees)
         ddf = tree_sample.expand_to_roi(
-            "inhomogeneous_poisson", roi, lazy=True,
-            plots=plots, seed=42, chunk_size=200
+            "inhomogeneous_poisson",
+            roi,
+            lazy=True,
+            plots=plots,
+            seed=42,
+            chunk_size=200,
         )
         out_path = tmp_path / "lazy_output.parquet"
         ddf.to_parquet(str(out_path))
@@ -858,8 +862,12 @@ class TestExpandToRoi:
         roi, trees, plots = real_data
         tree_sample = TreeSample(trees)
         ddf = tree_sample.expand_to_roi(
-            "inhomogeneous_poisson", roi, lazy=True,
-            plots=plots, seed=42, chunk_size=200
+            "inhomogeneous_poisson",
+            roi,
+            lazy=True,
+            plots=plots,
+            seed=42,
+            chunk_size=200,
         )
         assert ddf.npartitions > 1
 
@@ -868,12 +876,15 @@ class TestExpandToRoi:
         roi, trees, plots = real_data
         tree_sample = TreeSample(trees)
         eager = tree_sample.expand_to_roi(
-            "inhomogeneous_poisson", roi,
-            plots=plots, seed=42, chunk_size=200
+            "inhomogeneous_poisson", roi, plots=plots, seed=42, chunk_size=200
         )
         lazy = tree_sample.expand_to_roi(
-            "inhomogeneous_poisson", roi, lazy=True,
-            plots=plots, seed=42, chunk_size=200
+            "inhomogeneous_poisson",
+            roi,
+            lazy=True,
+            plots=plots,
+            seed=42,
+            chunk_size=200,
         )
         pd.testing.assert_frame_equal(
             eager.data.reset_index(drop=True),

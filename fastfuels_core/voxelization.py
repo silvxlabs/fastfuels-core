@@ -111,7 +111,9 @@ def _discretize_crown_profile_quadrant(
     r_at_height_z = tree.get_crown_radius_at_height(z_pts_subgrid)
 
     # Compute the area of intersection between the tree crown and each cell
-    area = _compute_intersection_area(x_pts, y_pts, r_at_height_z, hr, full_intersection)
+    area = _compute_intersection_area(
+        x_pts, y_pts, r_at_height_z, hr, full_intersection
+    )
 
     # Convert the area of intersection to a volume fraction by summing the area
     # along the z-axis and dividing by the cell volume
@@ -191,7 +193,7 @@ def _compute_intersection_area(
     # Determine which corners are inside the circle for each z-level.
     # Uses squared comparison to avoid sqrt entirely.
     # Shape: (nz, ny+1, nx+1)
-    r_sq = r_at_height ** 2
+    r_sq = r_at_height**2
     corners_inside = corner_dist_sq[np.newaxis, :, :] < r_sq[:, np.newaxis, np.newaxis]
 
     # Extract per-cell corner status by slicing (views, not copies).
@@ -212,7 +214,7 @@ def _compute_intersection_area(
     areas[:, -1, 0] = np.pi * r_sq
 
     # Case 15: all corners inside → full cell area
-    areas[all_inside] = length ** 2
+    areas[all_inside] = length**2
 
     # Boundary cells: at least one corner inside, but not all.
     # Single np.where call to find all boundary indices at once.
@@ -241,8 +243,12 @@ def _compute_intersection_area(
         if np.any(m):
             zi, yi, xi = z_b[m], y_b[m], x_b[m]
             areas[zi, yi, xi] = _calculate_case_3_area(
-                x_edges[xi], x_edges[xi + 1], y_edges[yi + 1],
-                r_at_height[zi], length, exact,
+                x_edges[xi],
+                x_edges[xi + 1],
+                y_edges[yi + 1],
+                r_at_height[zi],
+                length,
+                exact,
             )
 
         # Case 9: top-left and bottom-left inside
@@ -250,8 +256,12 @@ def _compute_intersection_area(
         if np.any(m):
             zi, yi, xi = z_b[m], y_b[m], x_b[m]
             areas[zi, yi, xi] = _calculate_case_9_area(
-                y_edges[yi], y_edges[yi + 1], x_edges[xi],
-                r_at_height[zi], length, exact,
+                y_edges[yi],
+                y_edges[yi + 1],
+                x_edges[xi],
+                r_at_height[zi],
+                length,
+                exact,
             )
 
         # Case 11: top-left, bottom-left, and bottom-right inside
