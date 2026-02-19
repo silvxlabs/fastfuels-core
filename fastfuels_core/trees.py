@@ -347,10 +347,19 @@ class Tree:
         return REF_JENKINS.loc[self.jenkins_species_group]["FOLIAGE_SAV"]
 
     def voxelize(
-        self, horizontal_resolution: float, vertical_resolution: float,
-        centering: CenteringMode = "cell", **kwargs
+        self,
+        horizontal_resolution: float,
+        vertical_resolution: float,
+        centering: CenteringMode = "cell",
+        **kwargs,
     ) -> VoxelizedTree:
-        return voxelize_tree(self, horizontal_resolution, vertical_resolution, centering=centering, **kwargs)
+        return voxelize_tree(
+            self,
+            horizontal_resolution,
+            vertical_resolution,
+            centering=centering,
+            **kwargs,
+        )
 
     @classmethod
     def from_row(cls, row):
