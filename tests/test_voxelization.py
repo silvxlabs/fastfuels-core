@@ -1327,7 +1327,7 @@ class TestDiscretizeCrownProfile:
 class TestCenteringVisualization:
     """Visualization tests comparing cell-centered vs vertex-centered grids."""
 
-    save_fig = True
+    save_fig = False
     show_fig = False
 
     def test_visualize_horizontal_coords(self):
@@ -1426,9 +1426,15 @@ class TestCenteringVisualization:
             cell_coords[-1] + hr / 2,
         ]
         im = ax.imshow(
-            slice_cell, cmap="YlOrRd", origin="lower", aspect="equal", extent=extent_cell
+            slice_cell,
+            cmap="YlOrRd",
+            origin="lower",
+            aspect="equal",
+            extent=extent_cell,
         )
-        ax.set_title(f"Cell-Centered\nGrid: {slice_cell.shape[0]}x{slice_cell.shape[1]} (odd)")
+        ax.set_title(
+            f"Cell-Centered\nGrid: {slice_cell.shape[0]}x{slice_cell.shape[1]} (odd)"
+        )
         ax.set_xlabel("x (m)")
         ax.set_ylabel("y (m)")
         # Draw grid lines at cell boundaries
