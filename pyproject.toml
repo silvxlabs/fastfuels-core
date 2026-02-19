@@ -22,6 +22,7 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 dependencies = [
+    "dask[dataframe]",
     "fastparquet",
     "geopandas",
     "nsvb",

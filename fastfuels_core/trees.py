@@ -18,7 +18,6 @@ from numpy import ndarray
 from nsvb.estimators import total_foliage_dry_weight
 from pandera.pandas import DataFrameSchema, Column, Check, Index
 
-
 TREE_SCHEMA_COLS = {
     "TREE_ID": Column(int),
     "SPCD": Column(
@@ -81,7 +80,7 @@ class TreeSample(ObjectIterableDataFrame):
         index=Index(int, unique=True),
     )
 
-    def expand_to_roi(self, process, roi, **kwargs):
+    def expand_to_roi(self, process, roi, lazy=False, **kwargs):
         """
         Expands the trees to the Region of Interest (ROI) using a specified
         point process.
@@ -89,9 +88,7 @@ class TreeSample(ObjectIterableDataFrame):
         This method generates a new set of trees that fit within the ROI
         based on the characteristics of the specified point process. It
         utilizes the 'run_point_process' function from the 'point_process'
-        module to create an instance of the PointProcess class, generate tree
-        locations using the specified point process, and assigns these
-        locations to trees.
+        module to produce a dask DataFrame of generated tree locations.
 
         Parameters
         ----------
@@ -102,21 +99,23 @@ class TreeSample(ObjectIterableDataFrame):
             The Region of Interest to which the trees should be expanded. It
             should be a GeoDataFrame containing the spatial boundaries of the
             region.
+        lazy : bool, optional
+            If True, returns the raw dask DataFrame without materializing.
+            If False (default), materializes and returns a TreePopulation.
         **kwargs : dict
             Additional parameters to pass to the point process. See the
             documentation for the 'point_process' module for more information.
 
         Returns
         -------
-        Trees
-            A new Trees instance where the trees have been expanded to fit
-            within the ROI based on the specified point process.
-
-        Example
-        -------
-        # TODO: Add example
+        TreePopulation or dask.dataframe.DataFrame
+            If lazy=False, a TreePopulation instance. If lazy=True, a dask
+            DataFrame that can be computed or written to parquet by the caller.
         """
-        return TreePopulation(run_point_process(process, roi, self, **kwargs))
+        ddf = run_point_process(process, roi, self, **kwargs)
+        if lazy:
+            return ddf
+        return TreePopulation(ddf.compute().reset_index(drop=True))
 
 
 class TreePopulation(ObjectIterableDataFrame):

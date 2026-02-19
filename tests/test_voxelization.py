@@ -37,7 +37,6 @@ TEST_PATH = Path(__file__).parent
 FIGURES_PATH = TEST_PATH / "figures"
 
 
-
 class TestGetHorizontalTreeCoords:
     def test_positive_radius(self):
         step = 1
@@ -1462,7 +1461,11 @@ class TestComputeIntersectionArea:
 
     @staticmethod
     def _compute_intersection_area_old(
-            x_center: np.ndarray, y_center: np.ndarray, length: float, radius: np.ndarray, exact=False
+        x_center: np.ndarray,
+        y_center: np.ndarray,
+        length: float,
+        radius: np.ndarray,
+        exact=False,
     ):
         """Original implementation of _compute_intersection_area using per-cell edge
         and distance computations. Preserved here as a reference for verifying the
@@ -1503,9 +1506,7 @@ class TestComputeIntersectionArea:
         hr = 1.0
 
         # Old method (meshgrid approach)
-        r_grid, y_grid, x_grid = np.meshgrid(
-            r_at_height, y_pts, x_pts, indexing="ij"
-        )
+        r_grid, y_grid, x_grid = np.meshgrid(r_at_height, y_pts, x_pts, indexing="ij")
         area_old = self._compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
 
         # New method (pre-computed edges)
@@ -1521,15 +1522,11 @@ class TestComputeIntersectionArea:
         r_at_height = np.array([2.0, 3.0, 3.5, 4.0, 5.0])
         hr = 1.0
 
-        r_grid, y_grid, x_grid = np.meshgrid(
-            r_at_height, y_pts, x_pts, indexing="ij"
-        )
+        r_grid, y_grid, x_grid = np.meshgrid(r_at_height, y_pts, x_pts, indexing="ij")
         area_old = self._compute_intersection_area_old(
             x_grid, y_grid, hr, r_grid, exact=True
         )
-        area_new = _compute_intersection_area(
-            x_pts, y_pts, r_at_height, hr, exact=True
-        )
+        area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr, exact=True)
 
         assert area_old.shape == area_new.shape
         assert np.allclose(area_old, area_new)
@@ -1541,15 +1538,11 @@ class TestComputeIntersectionArea:
         y_pts = np.flip(x_pts)
         r_at_height = np.linspace(0.5, 4.0, 50)
 
-        r_grid, y_grid, x_grid = np.meshgrid(
-            r_at_height, y_pts, x_pts, indexing="ij"
-        )
+        r_grid, y_grid, x_grid = np.meshgrid(r_at_height, y_pts, x_pts, indexing="ij")
         area_old = self._compute_intersection_area_old(
             x_grid, y_grid, hr, r_grid, exact=True
         )
-        area_new = _compute_intersection_area(
-            x_pts, y_pts, r_at_height, hr, exact=True
-        )
+        area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr, exact=True)
 
         assert area_old.shape == area_new.shape
         assert np.allclose(area_old, area_new)
@@ -1561,15 +1554,11 @@ class TestComputeIntersectionArea:
         y_pts = np.flip(x_pts)
         r_at_height = np.linspace(0.1, 2.5, 100)
 
-        r_grid, y_grid, x_grid = np.meshgrid(
-            r_at_height, y_pts, x_pts, indexing="ij"
-        )
+        r_grid, y_grid, x_grid = np.meshgrid(r_at_height, y_pts, x_pts, indexing="ij")
         area_old = self._compute_intersection_area_old(
             x_grid, y_grid, hr, r_grid, exact=True
         )
-        area_new = _compute_intersection_area(
-            x_pts, y_pts, r_at_height, hr, exact=True
-        )
+        area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr, exact=True)
 
         assert area_old.shape == area_new.shape
         assert np.allclose(area_old, area_new)
@@ -1581,9 +1570,7 @@ class TestComputeIntersectionArea:
         r_at_height = np.array([0.0, 1.0, 0.0, 2.0])
         hr = 1.0
 
-        r_grid, y_grid, x_grid = np.meshgrid(
-            r_at_height, y_pts, x_pts, indexing="ij"
-        )
+        r_grid, y_grid, x_grid = np.meshgrid(r_at_height, y_pts, x_pts, indexing="ij")
         area_old = self._compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
         area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr)
 
@@ -1597,9 +1584,7 @@ class TestComputeIntersectionArea:
         r_at_height = np.array([0.25, 0.5, 0.75])
         hr = 1.0
 
-        r_grid, y_grid, x_grid = np.meshgrid(
-            r_at_height, y_pts, x_pts, indexing="ij"
-        )
+        r_grid, y_grid, x_grid = np.meshgrid(r_at_height, y_pts, x_pts, indexing="ij")
         area_old = self._compute_intersection_area_old(x_grid, y_grid, hr, r_grid)
         area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr)
 
@@ -1629,14 +1614,16 @@ class TestPerformanceBenchmark:
         n_iterations = 1000
 
         # Old method
-        r_grid, y_grid, x_grid = np.meshgrid(
-            r_at_height, y_pts, x_pts, indexing="ij"
-        )
+        r_grid, y_grid, x_grid = np.meshgrid(r_at_height, y_pts, x_pts, indexing="ij")
         # Warmup
-        TestComputeIntersectionArea._compute_intersection_area_old(x_grid, y_grid, hr, r_grid, exact=True)
+        TestComputeIntersectionArea._compute_intersection_area_old(
+            x_grid, y_grid, hr, r_grid, exact=True
+        )
         start = time.perf_counter()
         for _ in range(n_iterations):
-            TestComputeIntersectionArea._compute_intersection_area_old(x_grid, y_grid, hr, r_grid, exact=True)
+            TestComputeIntersectionArea._compute_intersection_area_old(
+                x_grid, y_grid, hr, r_grid, exact=True
+            )
         time_old = time.perf_counter() - start
 
         # New method
@@ -1659,7 +1646,5 @@ class TestPerformanceBenchmark:
         area_old = TestComputeIntersectionArea._compute_intersection_area_old(
             x_grid, y_grid, hr, r_grid, exact=True
         )
-        area_new = _compute_intersection_area(
-            x_pts, y_pts, r_at_height, hr, exact=True
-        )
+        area_new = _compute_intersection_area(x_pts, y_pts, r_at_height, hr, exact=True)
         assert np.allclose(area_old, area_new)
