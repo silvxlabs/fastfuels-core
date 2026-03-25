@@ -11,8 +11,7 @@ from fastfuels_core.itd.local_maxima_filter import (
 )
 
 
-@pytest.fixture
-def complex_synthetic_chm() -> xr.DataArray:
+def generate_complex_synthetic_chm() -> xr.DataArray:
     """
     Generates a realistic synthetic CHM with three distinct stand structures:
     1. Isolated Dominant Trees
@@ -103,6 +102,11 @@ def complex_synthetic_chm() -> xr.DataArray:
     da.attrs["ground_truth"] = ground_truth_trees
 
     return da
+
+
+@pytest.fixture
+def complex_synthetic_chm() -> xr.DataArray:
+    return generate_complex_synthetic_chm()
 
 
 @pytest.fixture
