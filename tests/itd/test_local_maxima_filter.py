@@ -311,10 +311,13 @@ def test_find_treetops_vwf_accuracy(complex_synthetic_chm: xr.DataArray):
     # by checking our first planted dominant tree.
     first_dominant = ground_truth[0]
 
-    # Find the detected tree closest to our known height
-    detected_match = valid_trees.iloc[
-        (valid_trees["height"] - first_dominant["height"]).abs().argsort()[:1]
-    ]
+    # FIX: Find the detected tree closest to our known spatial location instead of height.
+    # Since we planted 5 dominant trees at exactly 25.0m, height matching is non-deterministic.
+    dx = valid_trees["x"] - first_dominant["x"]
+    dy = valid_trees["y"] - first_dominant["y"]
+    distances = np.sqrt(dx**2 + dy**2)
+
+    detected_match = valid_trees.iloc[distances.argsort()[:1]]
 
     assert np.isclose(
         detected_match["x"].values[0], first_dominant["x"]
