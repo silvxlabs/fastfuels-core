@@ -776,6 +776,178 @@ class TestToParquetRoundtrip:
         assert len(loaded) == len(computed)
 
 
+class TestZeroDensityAnchoring:
+    """Verify that plots with no trees (PLOT_ID=0 or unmatched IDs) act as
+    zero-density anchors in the interpolation, preventing tree generation in
+    areas that should be empty.
+
+    Without these anchors the linear interpolation fills the entire convex
+    hull of plot points with positive density, causing trees to appear
+    everywhere — including roads, water, clearings, etc.
+
+    The test layout places forested plots (PLOT_ID=101) around the perimeter
+    and empty plots (PLOT_ID=0) in the center. This ensures the empty region
+    is INSIDE the convex hull of plot points, which is where linear
+    interpolation operates. Without anchors, the center gets positive
+    density via interpolation between the surrounding forested plots.
+    """
+
+    @staticmethod
+    def _make_grid_with_center_gap():
+        """Create a 20x20 grid where a 2-cell-wide outer ring is forested
+        and the large 16x16 center is empty (PLOT_ID=0).
+
+        The large empty interior ensures grid cells deep inside are far from
+        any forested plot, making the test robust against interpolation
+        transition effects at boundaries.
+
+        Returns roi, trees, plots_with_anchors, plots_without_anchors,
+                inner_bounds (west, south, east, north)
+        """
+        resolution = 30
+        n = 20
+        west, south = 500000.0, 4500000.0
+        east = west + n * resolution
+        north = south + n * resolution
+
+        xs = np.arange(west + resolution / 2, east, resolution)
+        ys = np.arange(north - resolution / 2, south, -resolution)
+        xx, yy = np.meshgrid(xs, ys)
+
+        # 2-cell-wide outer ring: forested (101), inner 16x16: empty (0)
+        plot_ids = np.full((n, n), 101, dtype=int)
+        plot_ids[2:18, 2:18] = 0
+
+        plots_with_anchors = gpd.GeoDataFrame(
+            {"PLOT_ID": plot_ids.ravel()},
+            geometry=gpd.points_from_xy(xx.ravel(), yy.ravel()),
+            crs="EPSG:32610",
+        )
+
+        # Without anchors: drop zero-PLOT_ID rows (the bug scenario)
+        plots_without_anchors = plots_with_anchors[
+            plots_with_anchors["PLOT_ID"] != 0
+        ].reset_index(drop=True)
+
+        # Tree table for plot 101
+        trees = pd.DataFrame(
+            {
+                "PLOT_ID": [101, 101, 101],
+                "TREE_ID": [1, 2, 3],
+                "SPCD": [202, 122, 15],
+                "STATUSCD": [1, 1, 1],
+                "DIA": [30.0, 15.0, 45.0],
+                "HT": [20.0, 10.0, 25.0],
+                "CR": [0.4, 0.6, 0.3],
+                "TPA": [0.002, 0.005, 0.001],
+            }
+        )
+
+        from shapely.geometry import box
+
+        roi = gpd.GeoDataFrame(
+            geometry=[box(west, south, east, north)], crs="EPSG:32610"
+        )
+
+        # Bounds of the deep interior (indices 5-14, well inside the 2-17
+        # empty zone to avoid any interpolation transition)
+        inner_west = xs[5] - resolution / 2
+        inner_east = xs[14] + resolution / 2
+        inner_south = ys[14] - resolution / 2
+        inner_north = ys[5] + resolution / 2
+
+        return (
+            roi,
+            trees,
+            plots_with_anchors,
+            plots_without_anchors,
+            (inner_west, inner_south, inner_east, inner_north),
+        )
+
+    def test_density_zero_in_empty_center_with_anchors(self):
+        """With zero-PLOT_ID anchors, density should be zero in the center."""
+        roi, trees, plots_with, _, inner = self._make_grid_with_center_gap()
+        bounds = tuple(roi.total_bounds)
+        resolution = 15
+        grid_x, grid_y = _create_structured_coords_grid(bounds, resolution)
+
+        density = _interpolate_tree_density_to_grid(
+            trees, plots_with, grid_x, grid_y, resolution
+        )
+
+        # Select grid cells that fall within the inner empty region
+        inner_mask = (
+            (grid_x >= inner[0])
+            & (grid_x <= inner[2])
+            & (grid_y >= inner[1])
+            & (grid_y <= inner[3])
+        )
+        inner_density = density[inner_mask]
+        assert (
+            inner_density.max() == 0
+        ), f"Expected zero density in empty center, got max={inner_density.max():.4f}"
+
+    def test_density_positive_in_empty_center_without_anchors(self):
+        """Without anchors, interpolation bleeds positive density into
+        the empty center — this is the bug we're guarding against."""
+        roi, trees, _, plots_without, inner = self._make_grid_with_center_gap()
+        bounds = tuple(roi.total_bounds)
+        resolution = 15
+        grid_x, grid_y = _create_structured_coords_grid(bounds, resolution)
+
+        density = _interpolate_tree_density_to_grid(
+            trees, plots_without, grid_x, grid_y, resolution
+        )
+
+        inner_mask = (
+            (grid_x >= inner[0])
+            & (grid_x <= inner[2])
+            & (grid_y >= inner[1])
+            & (grid_y <= inner[3])
+        )
+        inner_density = density[inner_mask]
+        assert (
+            inner_density.max() > 0
+        ), "Expected positive density leak in center without anchors"
+
+    def test_no_trees_in_empty_center_with_anchors(self):
+        """End-to-end: with anchors, no trees in the empty center."""
+        roi, trees, plots_with, _, inner = self._make_grid_with_center_gap()
+
+        result = inhomogeneous_poisson_process(
+            roi, trees, plots_with, seed=42, intensity_resolution=15
+        ).compute()
+
+        trees_in_center = result[
+            (result["X"] >= inner[0])
+            & (result["X"] <= inner[2])
+            & (result["Y"] >= inner[1])
+            & (result["Y"] <= inner[3])
+        ]
+        assert (
+            len(trees_in_center) == 0
+        ), f"Expected 0 trees in empty center, found {len(trees_in_center)}"
+
+    def test_trees_leak_into_empty_center_without_anchors(self):
+        """End-to-end: without anchors, trees incorrectly appear in the
+        empty center — demonstrating the bug this fix prevents."""
+        roi, trees, _, plots_without, inner = self._make_grid_with_center_gap()
+
+        result = inhomogeneous_poisson_process(
+            roi, trees, plots_without, seed=42, intensity_resolution=15
+        ).compute()
+
+        trees_in_center = result[
+            (result["X"] >= inner[0])
+            & (result["X"] <= inner[2])
+            & (result["Y"] >= inner[1])
+            & (result["Y"] <= inner[3])
+        ]
+        assert (
+            len(trees_in_center) > 0
+        ), "Expected trees to leak into empty center without anchors"
+
+
 class TestExpandToRoi:
     def test_returns_valid_tree_population(self, real_data):
         """expand_to_roi should return a TreePopulation that passes schema."""

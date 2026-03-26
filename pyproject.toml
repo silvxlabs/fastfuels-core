@@ -57,4 +57,4 @@ source = "vcs"
 version-file = "fastfuels_core/_version.py"
 
 [tool.pytest.ini_options]
-log_cli = true
+addopts = "-q"
