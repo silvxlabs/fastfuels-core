@@ -14,6 +14,7 @@ from fastfuels_core.ref_data import REF_SPECIES, REF_JENKINS
 
 # External Imports
 import numpy as np
+import pandas as pd
 from numpy import ndarray
 from nsvb.estimators import total_foliage_dry_weight
 from pandera.pandas import DataFrameSchema, Column, Check, Index
@@ -206,6 +207,11 @@ class Tree:
         X coordinate of the tree in a projected coordinate system. Units: m.
     y : float
         Y coordinate of the tree in a projected coordinate system. Units: m.
+    max_crown_radius : float, optional
+        Measured maximum crown radius (m). When provided, the allometric crown
+        profile shape is preserved but scaled so that the maximum radius matches
+        this value. If None (default), the crown radius is computed entirely
+        from allometric equations based on species and diameter.
     """
 
     species_code: int
@@ -228,6 +234,7 @@ class Tree:
         y=0,
         crown_profile_model_type="purves",
         biomass_allometry_model_type="NSVB",
+        max_crown_radius=None,
     ):
         # TODO: Species code needs to be valid
         self.species_code = int(species_code)
@@ -262,6 +269,8 @@ class Tree:
                 f"Selected biomass allometry model: {biomass_allometry_model_type}. The biomass allometry model must be one of the following: {available_biomass_allometry_models}"
             )
         self._biomass_allometry_model_type = biomass_allometry_model_type
+
+        self._max_crown_radius_override = max_crown_radius
 
     @property
     def crown_length(self) -> float:
@@ -306,18 +315,34 @@ class Tree:
             )
 
     @property
+    def _crown_radius_scale_factor(self) -> float:
+        """Scale factor to match user-provided crown radius to allometric profile."""
+        if self._max_crown_radius_override is None:
+            return 1.0
+        allometric_max = self.crown_profile_model.get_max_radius()
+        if allometric_max == 0:
+            return 1.0
+        return self._max_crown_radius_override / allometric_max
+
+    @property
     def max_crown_radius(self) -> float:
         """
         Returns the maximum radius of the tree's crown.
         """
+        if self._max_crown_radius_override is not None:
+            return self._max_crown_radius_override
         return self.crown_profile_model.get_max_radius()
 
     def get_crown_radius_at_height(self, height: float | ndarray) -> float | ndarray:
         """
         Uses the crown profile model to get the radius of the crown at a given
-        height in meters.
+        height in meters. When a custom max_crown_radius is set, the allometric
+        profile shape is preserved but scaled to match the provided radius.
         """
-        return self.crown_profile_model.get_radius_at_height(height)
+        return (
+            self.crown_profile_model.get_radius_at_height(height)
+            * self._crown_radius_scale_factor
+        )
 
     @property
     def biomass_allometry_model(self) -> BiomassAllometryModel:
@@ -362,6 +387,12 @@ class Tree:
 
     @classmethod
     def from_row(cls, row):
+        max_crown_radius = None
+        if hasattr(row, "MAX_CROWN_RADIUS"):
+            val = row.MAX_CROWN_RADIUS
+            if pd.notna(val):
+                max_crown_radius = float(val)
+
         return cls(
             species_code=int(row.SPCD),
             status_code=int(row.STATUSCD),
@@ -370,6 +401,7 @@ class Tree:
             crown_ratio=row.CR,
             x=row.X,
             y=row.Y,
+            max_crown_radius=max_crown_radius,
         )
 
 

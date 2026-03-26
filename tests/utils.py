@@ -22,6 +22,7 @@ def make_random_tree(
     y=None,
     crown_profile_model=None,
     biomass_allometry_model=None,
+    max_crown_radius=None,
 ):
     if species_code is None:
         species_code = int(random.choice(LIST_SPCDS))
@@ -52,6 +53,7 @@ def make_random_tree(
         y=y,
         crown_profile_model_type=crown_profile_model,
         biomass_allometry_model_type=biomass_allometry_model,
+        max_crown_radius=max_crown_radius,
     )
 
 
