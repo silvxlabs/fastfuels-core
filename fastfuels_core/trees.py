@@ -212,6 +212,10 @@ class Tree:
         profile shape is preserved but scaled so that the maximum radius matches
         this value. If None (default), the crown radius is computed entirely
         from allometric equations based on species and diameter.
+    crown_fuel_load : float, optional
+        Pre-computed crown foliage biomass (kg). When provided, this value is
+        returned directly by the foliage_biomass property instead of computing
+        from allometric equations (NSVB/Jenkins).
     """
 
     species_code: int
@@ -235,6 +239,7 @@ class Tree:
         crown_profile_model_type="purves",
         biomass_allometry_model_type="NSVB",
         max_crown_radius=None,
+        crown_fuel_load=None,
     ):
         # TODO: Species code needs to be valid
         self.species_code = int(species_code)
@@ -271,6 +276,7 @@ class Tree:
         self._biomass_allometry_model_type = biomass_allometry_model_type
 
         self._max_crown_radius_override = max_crown_radius
+        self._crown_fuel_load_override = crown_fuel_load
 
     @property
     def crown_length(self) -> float:
@@ -358,8 +364,12 @@ class Tree:
     @property
     def foliage_biomass(self) -> float:
         """
-        Returns the estimated foliage biomass of the tree
+        Returns the foliage biomass of the tree. When a custom crown_fuel_load
+        is set, returns that value directly. Otherwise computes from allometric
+        equations.
         """
+        if self._crown_fuel_load_override is not None:
+            return self._crown_fuel_load_override
         return self.biomass_allometry_model.estimate_foliage_biomass()
 
     @property
@@ -393,6 +403,12 @@ class Tree:
             if pd.notna(val):
                 max_crown_radius = float(val)
 
+        crown_fuel_load = None
+        if hasattr(row, "CROWN_FUEL_LOAD"):
+            val = row.CROWN_FUEL_LOAD
+            if pd.notna(val):
+                crown_fuel_load = float(val)
+
         return cls(
             species_code=int(row.SPCD),
             status_code=int(row.STATUSCD),
@@ -402,6 +418,7 @@ class Tree:
             x=row.X,
             y=row.Y,
             max_crown_radius=max_crown_radius,
+            crown_fuel_load=crown_fuel_load,
         )
 
 
