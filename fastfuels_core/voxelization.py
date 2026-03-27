@@ -1,5 +1,6 @@
 # Core imports
 from __future__ import annotations
+import math
 from typing import TYPE_CHECKING, Literal
 
 # Internal imports
@@ -40,8 +41,10 @@ def voxelize_tree(
     **kwargs,
 ) -> VoxelizedTree:
 
+    vr_subgrid = kwargs.get("vr_subgrid", 0.1)
     crown_profile_mask = discretize_crown_profile(
-        tree, horizontal_resolution, vertical_resolution, centering=centering
+        tree, horizontal_resolution, vertical_resolution, centering=centering,
+        vr_subgrid=vr_subgrid,
     )
 
     alpha = kwargs.get("alpha", 0.5)
@@ -63,7 +66,15 @@ def discretize_crown_profile(
     vr: float,
     full_intersection=True,
     centering: CenteringMode = "cell",
+    vr_subgrid: float = 0.1,
 ) -> ndarray:
+    # Validate that vr_subgrid divides evenly into vr
+    ratio = vr / vr_subgrid
+    if not math.isclose(ratio, round(ratio)):
+        raise ValueError(
+            f"vr_subgrid ({vr_subgrid}) must divide evenly into vr ({vr})"
+        )
+
     # Get the horizontal and vertical coordinates of the tree crown
     horizontal_coords = _get_horizontal_tree_coords(
         hr, tree.max_crown_radius, centering=centering
@@ -76,7 +87,7 @@ def discretize_crown_profile(
     y_pts_q2 = np.flip(x_pts_q2)
 
     q2_grid = _discretize_crown_profile_quadrant(
-        tree, x_pts_q2, y_pts_q2, z_pts, hr, vr, full_intersection
+        tree, x_pts_q2, y_pts_q2, z_pts, hr, vr, full_intersection, vr_subgrid
     )
 
     # Build the other quadrants by flipping the q2 grid about the x and y axes
@@ -132,14 +143,14 @@ def _get_horizontal_tree_coords(
 
 
 def _discretize_crown_profile_quadrant(
-    tree: "Tree", x_pts, y_pts, z_pts, hr, vr, full_intersection=False
+    tree: "Tree", x_pts, y_pts, z_pts, hr, vr, full_intersection=False,
+    vr_subgrid=0.1,
 ):
     """
     Build a 3D grid of a quadrant of a tree crown represented as a rotational
     solid.
     """
     # Create a subgrid of the z-axis to increase the resolution of the crown
-    vr_subgrid = 0.1
     num_subgrid_cells_per_z = int(vr / vr_subgrid)
     z_pts_subgrid = _resample_coords_grid_to_subgrid(z_pts, vr, vr_subgrid)
     r_at_height_z = tree.get_crown_radius_at_height(z_pts_subgrid)

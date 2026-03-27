@@ -1323,6 +1323,60 @@ class TestDiscretizeCrownProfile:
         assert grid.shape[2] % 2 == 0
         assert np.sum(grid) > 0
 
+    def test_vr_subgrid_default_backward_compatible(self):
+        """Passing vr_subgrid=0.1 explicitly matches the default."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        grid_default = discretize_crown_profile(test_tree, 1, 1)
+        grid_explicit = discretize_crown_profile(test_tree, 1, 1, vr_subgrid=0.1)
+        assert np.array_equal(grid_default, grid_explicit)
+
+    def test_vr_subgrid_different_values(self):
+        """Different valid vr_subgrid values produce reasonable results."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        for vr_subgrid in [0.05, 0.1, 0.25, 0.5]:
+            grid = discretize_crown_profile(test_tree, 1, 1, vr_subgrid=vr_subgrid)
+            assert np.all(grid >= 0)
+            assert np.all(grid <= 1)
+            assert np.sum(grid) > 0
+
+    def test_vr_subgrid_equals_vr(self):
+        """vr_subgrid equal to vr means no subdivision."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        grid = discretize_crown_profile(test_tree, 1, 1, vr_subgrid=1.0)
+        assert np.all(grid >= 0)
+        assert np.all(grid <= 1)
+        assert np.sum(grid) > 0
+
+    def test_vr_subgrid_invalid_raises(self):
+        """vr_subgrid that doesn't divide evenly into vr raises ValueError."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        with pytest.raises(ValueError, match="vr_subgrid"):
+            discretize_crown_profile(test_tree, 1, 1, vr_subgrid=0.3)
+        with pytest.raises(ValueError, match="vr_subgrid"):
+            discretize_crown_profile(test_tree, 1, 0.5, vr_subgrid=0.3)
+        with pytest.raises(ValueError, match="vr_subgrid"):
+            discretize_crown_profile(test_tree, 1, 1, vr_subgrid=0.7)
+        with pytest.raises(ValueError, match="vr_subgrid"):
+            discretize_crown_profile(test_tree, 1, 2, vr_subgrid=0.3)
+
+    def test_vr_subgrid_valid_does_not_raise(self):
+        """Valid vr_subgrid values should not raise, even with tricky floats."""
+        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        # These all divide evenly but can have float representation issues
+        valid_pairs = [
+            (1.0, 0.1),
+            (1.0, 0.2),
+            (1.0, 0.5),
+            (0.5, 0.1),
+            (0.5, 0.25),
+            (2.0, 0.1),
+            (2.0, 0.2),
+            (2.0, 0.4),
+            (2.0, 1.0),
+        ]
+        for vr, vr_subgrid in valid_pairs:
+            discretize_crown_profile(test_tree, 1, vr, vr_subgrid=vr_subgrid)
+
 
 class TestCenteringVisualization:
     """Visualization tests comparing cell-centered vs vertex-centered grids."""
