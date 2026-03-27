@@ -150,6 +150,31 @@ def simple_chm() -> xr.DataArray:
     return da
 
 
+@pytest.fixture
+def l_shaped_plateau_chm() -> xr.DataArray:
+    """
+    Generates a CHM with an L-shaped canopy plateau.
+    The bounding box center of an 'L' shape falls in the negative space.
+    """
+    pixel_size = 0.5
+    width, height = 20, 20
+    transform = from_origin(500000.0, 4000000.0, pixel_size, pixel_size)
+
+    # Background
+    chm_array = np.full((height, width), 1.0)
+
+    # Draw an L-shaped plateau at 25.0m
+    # Vertical bar of the L
+    chm_array[5:15, 5] = 25.0
+    # Horizontal bar of the L
+    chm_array[14, 5:15] = 25.0
+
+    da = xr.DataArray(chm_array, dims=["y", "x"])
+    da.rio.write_crs("EPSG:32611", inplace=True)
+    da.rio.write_transform(transform, inplace=True)
+    return da
+
+
 def test_vwf_empty_forest(empty_chm: xr.DataArray):
     """Proves the algorithm doesn't crash on bare ground and returns the correct schema."""
     dask_df = variable_window_filter(
@@ -325,3 +350,29 @@ def test_find_treetops_vwf_accuracy(complex_synthetic_chm: xr.DataArray):
     assert np.isclose(
         detected_match["y"].values[0], first_dominant["y"]
     ), "Y coordinate drift detected!"
+
+
+def test_l_shaped_plateau_extraction(l_shaped_plateau_chm: xr.DataArray):
+    """
+    Proves that the algorithm extracts a coordinate physically located ON
+    the plateau (height=25.0), rather than in the bounding box center
+    (which would be height=5.0).
+    """
+    # Act
+    dask_df = variable_window_filter(
+        chm_da=l_shaped_plateau_chm,
+        min_height=2.0,
+        spatial_resolution=0.5,
+        crown_ratio=0.10,
+        crown_offset=1.0,
+    )
+    df = dask_df.compute()
+
+    # Assert
+    assert len(df) == 1, "Should detect exactly one flat-topped tree."
+
+    # THE CRITICAL ASSERTION:
+    # If we used find_objects (bounding box center), the center is at row 9, col 9.
+    # chm[9, 9] is empty air (5.0m).
+    # If we fixed it correctly, the height must be the plateau height (25.0m).
+    assert df.iloc[0]["height"] == 25.0, "Centroid missed the canopy plateau!"

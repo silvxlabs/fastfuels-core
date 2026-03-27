@@ -2,7 +2,7 @@ import numpy as np
 import xarray as xr
 import pandas as pd
 import dask.dataframe as dd
-from scipy.ndimage import maximum_filter, label, find_objects
+from scipy.ndimage import maximum_filter, label, maximum_position
 import rasterio as rio
 
 
@@ -65,13 +65,14 @@ def variable_window_filter(
     if num_labels == 0:
         return dd.from_pandas(pd.DataFrame(columns=["x", "y", "height"]), npartitions=1)
 
-    object_slices = find_objects(labeled_maxima)
-    rows, cols = [], []
-    for slc in object_slices:
-        if slc is None:
-            continue
-        rows.append((slc[0].start + slc[0].stop) // 2)
-        cols.append((slc[1].start + slc[1].stop) // 2)
+    # Use maximum_position
+    # This guarantees the selected coordinate physically exists ON the canopy plateau,
+    # avoiding the negative-space trap of C-shaped or L-shaped bounding boxes/centers of mass.
+    indices = np.arange(1, num_labels + 1)
+    positions = maximum_position(chm, labels=labeled_maxima, index=indices)
+
+    rows = [p[0] for p in positions]
+    cols = [p[1] for p in positions]
 
     heights = chm[rows, cols]
     xs, ys = rio.transform.xy(transform, rows, cols)
@@ -147,16 +148,14 @@ def fixed_window_filter(
         empty_df = pd.DataFrame(columns=["x", "y", "height"])
         return dd.from_pandas(empty_df, npartitions=1)
 
-    # Find center of bounding box for each region
-    object_slices = find_objects(labeled_maxima)
-    rows, cols = [], []
-    for slc in object_slices:
-        if slc is None:
-            continue
-        row_center = (slc[0].start + slc[0].stop) // 2
-        col_center = (slc[1].start + slc[1].stop) // 2
-        rows.append(row_center)
-        cols.append(col_center)
+    # Use maximum_position
+    # This guarantees the selected coordinate physically exists ON the canopy plateau,
+    # avoiding the negative-space trap of C-shaped or L-shaped bounding boxes/centers of mass.
+    indices = np.arange(1, num_labels + 1)
+    positions = maximum_position(chm, labels=labeled_maxima, index=indices)
+
+    rows = [p[0] for p in positions]
+    cols = [p[1] for p in positions]
 
     # Array indexing and coordinate transformation
     heights = chm[rows, cols]
