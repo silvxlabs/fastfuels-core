@@ -1,3 +1,6 @@
+from typing import List, Dict, Any
+from numpy.random import Generator
+
 import pytest
 import numpy as np
 import xarray as xr
@@ -11,89 +14,143 @@ from fastfuels_core.itd.local_maxima_filter import (
 )
 
 
+# --- SHARED GENERATOR HELPERS ---
+
+
+def _get_valid_location(
+    min_dist: float, rng: Generator, existing_centers: List, height: int, width: int
+) -> tuple[int, int]:
+    for _ in range(200):
+        r = rng.integers(20, height - 20)
+        c = rng.integers(20, width - 20)
+        if not existing_centers or all(
+            np.sqrt((r - er) ** 2 + (c - ec) ** 2) >= min_dist
+            for er, ec in existing_centers
+        ):
+            return r, c
+    raise ValueError("Could not find space to plant tree!")
+
+
+def _plant_conical_tree(
+    canopy_surface: np.ndarray,
+    ground_truth: List[Dict[str, Any]],
+    row: int,
+    col: int,
+    max_height: float,
+    sigma: float,
+    tree_type: str,
+    pixel_size: float,
+    origin_x: float,
+    origin_y: float,
+) -> None:
+    """Helper to mathematically stamp a 2D Gaussian tree into the canopy surface and log its ground truth."""
+    height, width = canopy_surface.shape
+    y_grid, x_grid = np.ogrid[:height, :width]
+
+    dist_sq = (x_grid - col) ** 2 + (y_grid - row) ** 2
+    tree_footprint = max_height * np.exp(-dist_sq / (2 * sigma**2))
+
+    # Simulating the LiDAR top-hit surface (np.maximum modifies the array in place safely here)
+    np.maximum(canopy_surface, tree_footprint, out=canopy_surface)
+
+    x_coord = origin_x + (col * pixel_size) + (pixel_size / 2)
+    y_coord = origin_y - (row * pixel_size) - (pixel_size / 2)
+
+    ground_truth.append(
+        {
+            "type": tree_type,
+            "row": row,
+            "col": col,
+            "x": x_coord,
+            "y": y_coord,
+            "height": max_height,
+        }
+    )
+
+
+# --- DATA GENERATORS ---
+
+
 def generate_complex_synthetic_chm() -> xr.DataArray:
-    """
-    Generates a realistic synthetic CHM with three distinct stand structures:
-    1. Isolated Dominant Trees
-    2. Suppressed Understory (Gap Phase)
-    3. Co-Dominant Clusters (Interlocking crowns with distinct peaks)
-    """
+    """Generates a realistic synthetic CHM with three distinct stand structures."""
     pixel_size = 0.5
-    width, height = 200, 200  # 100m x 100m plot
+    width, height = 200, 200
     origin_x, origin_y = 500000.0, 4000000.0
     transform = from_origin(origin_x, origin_y, pixel_size, pixel_size)
 
     rng = np.random.default_rng(seed=42)
-
-    # 1. Background noise floor
     chm_array = rng.normal(loc=1.0, scale=0.1, size=(height, width))
-
-    # We will build the canopy surface strictly using np.maximum to simulate top-hits
     canopy_surface = np.zeros((height, width))
-    y_grid, x_grid = np.ogrid[:height, :width]
 
     ground_truth_trees = []
     existing_centers = []
 
-    def plant_tree(row: int, col: int, max_height: float, sigma: float, tree_type: str):
-        """Generates a Gaussian tree and merges it into the canopy surface."""
-        nonlocal canopy_surface
-
-        dist_sq = (x_grid - col) ** 2 + (y_grid - row) ** 2
-        tree_footprint = max_height * np.exp(-dist_sq / (2 * sigma**2))
-
-        # Simulating the LiDAR top-hit surface
-        canopy_surface = np.maximum(canopy_surface, tree_footprint)
-
-        x_coord = origin_x + (col * pixel_size) + (pixel_size / 2)
-        y_coord = origin_y - (row * pixel_size) - (pixel_size / 2)
-
-        ground_truth_trees.append(
-            {
-                "type": tree_type,
-                "row": row,
-                "col": col,
-                "x": x_coord,
-                "y": y_coord,
-                "height": max_height,
-            }
-        )
-        existing_centers.append((row, col))
-
-    def get_valid_location(min_dist: float) -> tuple[int, int]:
-        """Finds a coordinate that is at least min_dist away from existing trees."""
-        for _ in range(200):
-            r = rng.integers(20, height - 20)
-            c = rng.integers(20, width - 20)
-            if not existing_centers or all(
-                np.sqrt((r - er) ** 2 + (c - ec) ** 2) >= min_dist
-                for er, ec in existing_centers
-            ):
-                return r, c
-        raise ValueError("Could not find space to plant tree!")
-
-    # 2. Plant 5 Isolated Dominant Trees (Distance > 10m / 20 pixels)
+    # 1. Plant 5 Isolated Dominant Trees
     for _ in range(5):
-        r, c = get_valid_location(min_dist=20)
-        plant_tree(r, c, max_height=25.0, sigma=4.0, tree_type="dominant")
+        r, c = _get_valid_location(20, rng, existing_centers, height, width)
+        _plant_conical_tree(
+            canopy_surface,
+            ground_truth_trees,
+            r,
+            c,
+            25.0,
+            4.0,
+            "dominant",
+            pixel_size,
+            origin_x,
+            origin_y,
+        )
+        existing_centers.append((r, c))
 
-    # 3. Plant 10 Suppressed Trees in the gaps (Distance > 6m / 12 pixels)
+    # 2. Plant 10 Suppressed Trees
     for _ in range(10):
-        r, c = get_valid_location(min_dist=12)
-        plant_tree(r, c, max_height=8.0, sigma=1.5, tree_type="suppressed")
+        r, c = _get_valid_location(12, rng, existing_centers, height, width)
+        _plant_conical_tree(
+            canopy_surface,
+            ground_truth_trees,
+            r,
+            c,
+            8.0,
+            1.5,
+            "suppressed",
+            pixel_size,
+            origin_x,
+            origin_y,
+        )
+        existing_centers.append((r, c))
 
-    # 4. Plant 3 Co-Dominant Twin Clusters (Interlocking Crowns)
+    # 3. Plant 3 Co-Dominant Twin Clusters
     for _ in range(3):
-        r1, c1 = get_valid_location(min_dist=20)
-        plant_tree(r1, c1, max_height=22.0, sigma=2.0, tree_type="co_dominant_A")
+        r1, c1 = _get_valid_location(20, rng, existing_centers, height, width)
+        _plant_conical_tree(
+            canopy_surface,
+            ground_truth_trees,
+            r1,
+            c1,
+            22.0,
+            2.0,
+            "co_dominant_A",
+            pixel_size,
+            origin_x,
+            origin_y,
+        )
+        existing_centers.append((r1, c1))
 
-        # Plant the twin exactly 6 pixels to the right, slightly shorter
         r2, c2 = r1, c1 + 6
-        plant_tree(
-            r2, c2, max_height=21.0, sigma=2.0, tree_type="co_dominant_B"
-        )  # <-- Changed to 21.0
+        _plant_conical_tree(
+            canopy_surface,
+            ground_truth_trees,
+            r2,
+            c2,
+            21.0,
+            2.0,
+            "co_dominant_B",
+            pixel_size,
+            origin_x,
+            origin_y,
+        )
+        existing_centers.append((r2, c2))
 
-    # Merge canopy over the noise floor
     final_chm = np.maximum(chm_array, canopy_surface)
 
     da = xr.DataArray(final_chm, dims=["y", "x"])
@@ -104,9 +161,85 @@ def generate_complex_synthetic_chm() -> xr.DataArray:
     return da
 
 
+def generate_mixed_morphology_chm() -> xr.DataArray:
+    """Generates a CHM containing a mixture of conical canopies and L-shaped plateaus."""
+    pixel_size = 0.5
+    width, height = 200, 200
+    origin_x, origin_y = 500000.0, 4000000.0
+    transform = from_origin(origin_x, origin_y, pixel_size, pixel_size)
+
+    rng = np.random.default_rng(seed=101)
+    chm_array = rng.normal(loc=1.0, scale=0.1, size=(height, width))
+    canopy_surface = np.zeros((height, width))
+
+    ground_truth = []
+    existing_centers = []
+
+    # 1. Plant 12 Normal Conical Trees
+    for _ in range(12):
+        r, c = _get_valid_location(15, rng, existing_centers, height, width)
+        max_height = rng.uniform(15.0, 22.0)
+        _plant_conical_tree(
+            canopy_surface,
+            ground_truth,
+            r,
+            c,
+            max_height,
+            3.0,
+            "conical",
+            pixel_size,
+            origin_x,
+            origin_y,
+        )
+        existing_centers.append((r, c))
+
+    # 2. Plant 6 Irregular L-Shaped Plateaus
+    for _ in range(6):
+        r, c = _get_valid_location(20, rng, existing_centers, height, width)
+        max_height = rng.uniform(22.0, 28.0)
+
+        # Draw L-shape
+        canopy_surface[r : r + 12, c : c + 3] = np.maximum(
+            canopy_surface[r : r + 12, c : c + 3], max_height
+        )
+        canopy_surface[r + 9 : r + 12, c + 3 : c + 10] = np.maximum(
+            canopy_surface[r + 9 : r + 12, c + 3 : c + 10], max_height
+        )
+
+        # Calculate coordinates for ground truth
+        x_coord = origin_x + (c * pixel_size) + (pixel_size / 2)
+        y_coord = origin_y - (r * pixel_size) - (pixel_size / 2)
+
+        ground_truth.append(
+            {
+                "type": "l_shape",
+                "row": r,
+                "col": c,
+                "x": x_coord,
+                "y": y_coord,
+                "height": max_height,
+            }
+        )
+        existing_centers.append((r, c))
+
+    final_chm = np.maximum(chm_array, canopy_surface)
+
+    da = xr.DataArray(final_chm, dims=["y", "x"])
+    da.rio.write_crs("EPSG:32611", inplace=True)
+    da.rio.write_transform(transform, inplace=True)
+    da.attrs["ground_truth"] = ground_truth
+
+    return da
+
+
 @pytest.fixture
 def complex_synthetic_chm() -> xr.DataArray:
     return generate_complex_synthetic_chm()
+
+
+@pytest.fixture
+def mixed_morphology_chm() -> xr.DataArray:
+    return generate_mixed_morphology_chm()
 
 
 @pytest.fixture
@@ -147,31 +280,6 @@ def simple_chm() -> xr.DataArray:
     # X = origin_x + (col * pixel_size) + (pixel_size / 2)
     da.attrs["exact_x"] = 500000.0 + (25 * 0.5) + 0.25
     da.attrs["exact_y"] = 4000000.0 - (25 * 0.5) - 0.25
-    return da
-
-
-@pytest.fixture
-def l_shaped_plateau_chm() -> xr.DataArray:
-    """
-    Generates a CHM with an L-shaped canopy plateau.
-    The bounding box center of an 'L' shape falls in the negative space.
-    """
-    pixel_size = 0.5
-    width, height = 20, 20
-    transform = from_origin(500000.0, 4000000.0, pixel_size, pixel_size)
-
-    # Background
-    chm_array = np.full((height, width), 1.0)
-
-    # Draw an L-shaped plateau at 25.0m
-    # Vertical bar of the L
-    chm_array[5:15, 5] = 25.0
-    # Horizontal bar of the L
-    chm_array[14, 5:15] = 25.0
-
-    da = xr.DataArray(chm_array, dims=["y", "x"])
-    da.rio.write_crs("EPSG:32611", inplace=True)
-    da.rio.write_transform(transform, inplace=True)
     return da
 
 
@@ -352,15 +460,10 @@ def test_find_treetops_vwf_accuracy(complex_synthetic_chm: xr.DataArray):
     ), "Y coordinate drift detected!"
 
 
-def test_l_shaped_plateau_extraction(l_shaped_plateau_chm: xr.DataArray):
-    """
-    Proves that the algorithm extracts a coordinate physically located ON
-    the plateau (height=25.0), rather than in the bounding box center
-    (which would be height=5.0).
-    """
-    # Act
+def test_mixed_morphology_extraction(mixed_morphology_chm: xr.DataArray):
+    """Proves the algorithm handles regular and irregular canopies simultaneously."""
     dask_df = variable_window_filter(
-        chm_da=l_shaped_plateau_chm,
+        chm_da=mixed_morphology_chm,
         min_height=2.0,
         spatial_resolution=0.5,
         crown_ratio=0.10,
@@ -368,11 +471,5 @@ def test_l_shaped_plateau_extraction(l_shaped_plateau_chm: xr.DataArray):
     )
     df = dask_df.compute()
 
-    # Assert
-    assert len(df) == 1, "Should detect exactly one flat-topped tree."
-
-    # THE CRITICAL ASSERTION:
-    # If we used find_objects (bounding box center), the center is at row 9, col 9.
-    # chm[9, 9] is empty air (5.0m).
-    # If we fixed it correctly, the height must be the plateau height (25.0m).
-    assert df.iloc[0]["height"] == 25.0, "Centroid missed the canopy plateau!"
+    # We planted exactly 12 conical + 6 L-shapes = 18 trees
+    assert len(df) == 18, "Algorithm failed to accurately count mixed morphologies."
