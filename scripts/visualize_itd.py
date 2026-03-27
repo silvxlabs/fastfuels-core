@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 
-# Adjust these import paths based on your exact project structure
 from fastfuels_core.itd.local_maxima_filter import (
     variable_window_filter,
     fixed_window_filter,
