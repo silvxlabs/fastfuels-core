@@ -6,6 +6,39 @@ from scipy.ndimage import maximum_filter, label, maximum_position
 import rasterio as rio
 
 
+def _extract_treetops(
+    chm: np.ndarray,
+    chm_max_filtered: np.ndarray,
+    transform: rio.Affine,
+    min_height: float,
+) -> dd.DataFrame:
+    """
+    Private helper function to extract spatial point data from a filtered CHM array.
+    Identifies plateaus, extracts the true maximum position, and maps to spatial coordinates.
+    """
+    local_maxima_mask = (chm == chm_max_filtered) & (chm > min_height)
+    labeled_maxima, num_labels = label(local_maxima_mask)
+
+    if num_labels == 0:
+        return dd.from_pandas(pd.DataFrame(columns=["x", "y", "height"]), npartitions=1)
+
+    # Use maximum_position
+    # This guarantees the selected coordinate physically exists ON the canopy plateau,
+    # avoiding the negative-space trap of C-shaped or L-shaped bounding boxes/centers of mass.
+    indices = np.arange(1, num_labels + 1)
+    positions = maximum_position(chm, labels=labeled_maxima, index=indices)
+
+    rows = [p[0] for p in positions]
+    cols = [p[1] for p in positions]
+
+    heights = chm[rows, cols]
+    xs, ys = rio.transform.xy(transform, rows, cols)
+
+    return dd.from_pandas(
+        pd.DataFrame({"x": xs, "y": ys, "height": heights}), npartitions=1
+    )
+
+
 def variable_window_filter(
     chm_da: xr.DataArray,
     min_height: float,
@@ -59,27 +92,7 @@ def variable_window_filter(
         mask = required_windows == w
         vw_max[mask] = chm_max_filtered[mask]
 
-    local_maxima_mask = (chm == vw_max) & (chm > min_height)
-    labeled_maxima, num_labels = label(local_maxima_mask)
-
-    if num_labels == 0:
-        return dd.from_pandas(pd.DataFrame(columns=["x", "y", "height"]), npartitions=1)
-
-    # Use maximum_position
-    # This guarantees the selected coordinate physically exists ON the canopy plateau,
-    # avoiding the negative-space trap of C-shaped or L-shaped bounding boxes/centers of mass.
-    indices = np.arange(1, num_labels + 1)
-    positions = maximum_position(chm, labels=labeled_maxima, index=indices)
-
-    rows = [p[0] for p in positions]
-    cols = [p[1] for p in positions]
-
-    heights = chm[rows, cols]
-    xs, ys = rio.transform.xy(transform, rows, cols)
-
-    return dd.from_pandas(
-        pd.DataFrame({"x": xs, "y": ys, "height": heights}), npartitions=1
-    )
+    return _extract_treetops(chm, vw_max, transform, min_height)
 
 
 def fixed_window_filter(
@@ -112,56 +125,23 @@ def fixed_window_filter(
     Returns:
         dd.DataFrame: Detected treetops with explicit 'x', 'y', and 'height' columns.
     """
-    # Extract raw numpy array and transform directly from xarray
     chm = chm_da.values
     transform = chm_da.rio.transform()
 
-    # Convert the real-world window size into a pixel count based on CHM resolution
     window_size_pixels = int(window_size_meters / spatial_resolution)
 
-    # Force window size to be an odd integer (required for center-pixel alignment)
     if window_size_pixels % 2 == 0:
         window_size_pixels += 1
 
-    # Ensure the window is at least 3x3 pixels to perform a valid neighborhood search
     if window_size_pixels < 3:
         window_size_pixels = 3
 
-    # Generate a single circular footprint for the filter
     y, x = np.ogrid[
         -window_size_pixels // 2 : window_size_pixels // 2 + 1,
         -window_size_pixels // 2 : window_size_pixels // 2 + 1,
     ]
     footprint = x * x + y * y <= (window_size_pixels // 2) ** 2
 
-    # Apply the maximum filter across the entire array at once
     chm_max_filtered = maximum_filter(chm, footprint=footprint)
 
-    # Identify peaks (pixels that are the highest in their fixed window AND above min_height)
-    local_maxima_mask = (chm == chm_max_filtered) & (chm > min_height)
-
-    # Find connected components of local maxima
-    labeled_maxima, num_labels = label(local_maxima_mask)
-
-    if num_labels == 0:
-        # Return empty Dask DataFrame with the correct schema
-        empty_df = pd.DataFrame(columns=["x", "y", "height"])
-        return dd.from_pandas(empty_df, npartitions=1)
-
-    # Use maximum_position
-    # This guarantees the selected coordinate physically exists ON the canopy plateau,
-    # avoiding the negative-space trap of C-shaped or L-shaped bounding boxes/centers of mass.
-    indices = np.arange(1, num_labels + 1)
-    positions = maximum_position(chm, labels=labeled_maxima, index=indices)
-
-    rows = [p[0] for p in positions]
-    cols = [p[1] for p in positions]
-
-    # Array indexing and coordinate transformation
-    heights = chm[rows, cols]
-    xs, ys = rio.transform.xy(transform, rows, cols)
-
-    # Create Dask DataFrame directly from native types
-    pdf = pd.DataFrame({"x": xs, "y": ys, "height": heights})
-
-    return dd.from_pandas(pdf, npartitions=1)
+    return _extract_treetops(chm, chm_max_filtered, transform, min_height)
