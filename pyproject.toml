@@ -23,7 +23,6 @@ classifiers = [
 ]
 dependencies = [
     "dask[dataframe]",
-    "dask-image",
     "fastparquet",
     "geopandas",
     "nsvb",

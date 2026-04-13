@@ -22,7 +22,7 @@ from rasterio.transform import from_origin
 import fastfuels_core.itd.local_maxima_filter as local_maxima_filter
 from fastfuels_core.itd.local_maxima_filter import (
     _extract_block_candidates,
-    _deduplicate_boundary_candidates,
+    _union_find_merge,
     fixed_window_filter,
     variable_window_filter,
 )
@@ -385,9 +385,16 @@ def generate_asymmetric_crown_chm() -> xr.DataArray:
     for _ in range(5):
         r, c = _get_valid_location(20, rng, existing_centers, height, width)
         _plant_conical_tree(
-            canopy_surface, ground_truth_trees, r, c,
-            rng.uniform(18.0, 25.0), cov_col_wide,
-            "elliptical_col", pixel_size, origin_x, origin_y,
+            canopy_surface,
+            ground_truth_trees,
+            r,
+            c,
+            rng.uniform(18.0, 25.0),
+            cov_col_wide,
+            "elliptical_col",
+            pixel_size,
+            origin_x,
+            origin_y,
         )
         existing_centers.append((r, c))
 
@@ -396,23 +403,36 @@ def generate_asymmetric_crown_chm() -> xr.DataArray:
     for _ in range(5):
         r, c = _get_valid_location(20, rng, existing_centers, height, width)
         _plant_conical_tree(
-            canopy_surface, ground_truth_trees, r, c,
-            rng.uniform(18.0, 25.0), cov_row_wide,
-            "elliptical_row", pixel_size, origin_x, origin_y,
+            canopy_surface,
+            ground_truth_trees,
+            r,
+            c,
+            rng.uniform(18.0, 25.0),
+            cov_row_wide,
+            "elliptical_row",
+            pixel_size,
+            origin_x,
+            origin_y,
         )
         existing_centers.append((r, c))
 
     # 3. Rotated elliptical crowns (45-degree tilt)
     theta = np.pi / 4
-    R = np.array([[np.cos(theta), -np.sin(theta)],
-                  [np.sin(theta),  np.cos(theta)]])
+    R = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
     cov_rotated = R @ np.diag([4.0, 36.0]) @ R.T
     for _ in range(5):
         r, c = _get_valid_location(20, rng, existing_centers, height, width)
         _plant_conical_tree(
-            canopy_surface, ground_truth_trees, r, c,
-            rng.uniform(18.0, 25.0), cov_rotated,
-            "elliptical_rotated", pixel_size, origin_x, origin_y,
+            canopy_surface,
+            ground_truth_trees,
+            r,
+            c,
+            rng.uniform(18.0, 25.0),
+            cov_rotated,
+            "elliptical_rotated",
+            pixel_size,
+            origin_x,
+            origin_y,
         )
         existing_centers.append((r, c))
 
@@ -692,14 +712,16 @@ def test_vwf_detects_all_asymmetric_crowns(asymmetric_crown_chm: xr.DataArray):
     df = dask_df.compute()
     valid_trees = df[df["height"] > 5.0]
 
-    assert len(valid_trees) == len(ground_truth), (
-        f"Expected {len(ground_truth)} trees, found {len(valid_trees)}"
-    )
+    assert len(valid_trees) == len(
+        ground_truth
+    ), f"Expected {len(ground_truth)} trees, found {len(valid_trees)}"
 
     if SAVE_FIG or SHOW_FIG:
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         _plot_chm_with_treetops(
-            ax, asymmetric_crown_chm, valid_trees,
+            ax,
+            asymmetric_crown_chm,
+            valid_trees,
             title=f"VWF on Asymmetric Crowns — {len(valid_trees)} treetops",
             ground_truth=ground_truth,
         )
@@ -724,14 +746,16 @@ def test_fwf_detects_asymmetric_crowns(asymmetric_crown_chm: xr.DataArray):
     df = dask_df.compute()
     valid_trees = df[df["height"] > 5.0]
 
-    assert len(valid_trees) == len(ground_truth), (
-        f"Expected {len(ground_truth)} trees, found {len(valid_trees)}"
-    )
+    assert len(valid_trees) == len(
+        ground_truth
+    ), f"Expected {len(ground_truth)} trees, found {len(valid_trees)}"
 
     if SAVE_FIG or SHOW_FIG:
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         _plot_chm_with_treetops(
-            ax, asymmetric_crown_chm, valid_trees,
+            ax,
+            asymmetric_crown_chm,
+            valid_trees,
             title=f"FWF on Asymmetric Crowns — {len(valid_trees)} treetops",
             ground_truth=ground_truth,
         )
@@ -816,18 +840,23 @@ def test_asymmetric_crowns_match_reference(
         ground_truth = asymmetric_crown_chm.attrs.get("ground_truth")
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), sharex=True, sharey=True)
         _plot_chm_with_treetops(
-            ax1, asymmetric_crown_chm, reference,
+            ax1,
+            asymmetric_crown_chm,
+            reference,
             title=f"Reference (eager scipy) — {len(reference)} treetops",
             ground_truth=ground_truth,
         )
         _plot_chm_with_treetops(
-            ax2, asymmetric_crown_chm, result,
+            ax2,
+            asymmetric_crown_chm,
+            result,
             title=f"New (dask-image) — {len(result)} treetops",
             ground_truth=ground_truth,
         )
         fig.suptitle(
             f"Asymmetric Crowns: Reference vs New ({filter_name})",
-            fontsize=13, fontweight="bold",
+            fontsize=13,
+            fontweight="bold",
         )
         fig.tight_layout()
         if SAVE_FIG:
@@ -904,7 +933,7 @@ def _run_reference(filter_name: str, chm_da: xr.DataArray) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# New fixtures for boundary and benchmark tests
+# Fixtures for boundary and benchmark tests
 # ---------------------------------------------------------------------------
 
 
@@ -975,7 +1004,7 @@ def corner_split_chm() -> xr.DataArray:
 
 
 # ---------------------------------------------------------------------------
-# New tests: chunked correctness
+# Chunked correctness tests
 # ---------------------------------------------------------------------------
 
 
@@ -1177,78 +1206,87 @@ def test_graph_contains_more_tasks_for_multi_chunk_inputs(
 class TestBoundaryFlagClassification:
     """Unit tests for is_boundary flag in _extract_block_candidates."""
 
+    @staticmethod
+    def _call(chm_block, mask_block, **kwargs):
+        """Helper: call _extract_block_candidates and return the candidates df."""
+        result_tuple = _extract_block_candidates(
+            chm_block,
+            mask_block,
+            row_offset=kwargs.get("row_offset", 0),
+            col_offset=kwargs.get("col_offset", 0),
+            label_offset=kwargs.get("label_offset", 0),
+        )
+        return result_tuple[0]  # candidates DataFrame
+
     def test_interior_label_flagged_false(self):
         """A label entirely inside the block (no edge pixels) is is_boundary=False."""
-        block = np.zeros((10, 10), dtype=np.int64)
-        block[4:6, 4:6] = 1  # 2x2 label in the center
+        mask = np.zeros((10, 10), dtype=bool)
+        mask[4:6, 4:6] = True
 
         chm_block = np.zeros((10, 10), dtype=np.float64)
         chm_block[4:6, 4:6] = 20.0
 
-        result = _extract_block_candidates(chm_block, block, row_offset=0, col_offset=0)
+        result = self._call(chm_block, mask)
         assert len(result) == 1
         assert result.iloc[0]["is_boundary"] == False  # noqa: E712
 
     def test_edge_touching_label_flagged_true(self):
         """A label touching the top row of the block is is_boundary=True."""
-        block = np.zeros((10, 10), dtype=np.int64)
-        block[0, 4:6] = 1  # touches row 0
+        mask = np.zeros((10, 10), dtype=bool)
+        mask[0, 4:6] = True
 
         chm_block = np.zeros((10, 10), dtype=np.float64)
         chm_block[0, 4:6] = 15.0
 
-        result = _extract_block_candidates(chm_block, block, row_offset=0, col_offset=0)
+        result = self._call(chm_block, mask)
         assert len(result) == 1
         assert result.iloc[0]["is_boundary"] == True  # noqa: E712
 
     def test_corner_label_flagged_true(self):
         """A label touching a corner pixel is is_boundary=True."""
-        block = np.zeros((10, 10), dtype=np.int64)
-        block[0, 0] = 1
+        mask = np.zeros((10, 10), dtype=bool)
+        mask[0, 0] = True
 
         chm_block = np.zeros((10, 10), dtype=np.float64)
         chm_block[0, 0] = 12.0
 
-        result = _extract_block_candidates(chm_block, block, row_offset=0, col_offset=0)
+        result = self._call(chm_block, mask)
         assert len(result) == 1
         assert result.iloc[0]["is_boundary"] == True  # noqa: E712
 
     def test_mixed_interior_and_boundary_labels(self):
-        """Multiple labels: some interior, some boundary, classified correctly."""
-        block = np.zeros((10, 10), dtype=np.int64)
-        block[5, 5] = 1  # interior
-        block[0, 5] = 2  # boundary (top edge)
-        block[9, 5] = 3  # boundary (bottom edge)
-        block[5, 0] = 4  # boundary (left edge)
-        block[5, 9] = 5  # boundary (right edge)
-        block[3, 3] = 6  # interior
+        """Multiple disconnected labels: some interior, some boundary."""
+        mask = np.zeros((10, 10), dtype=bool)
+        mask[5, 5] = True  # interior
+        mask[0, 5] = True  # boundary (top edge)
+        mask[9, 5] = True  # boundary (bottom edge)
+        mask[5, 0] = True  # boundary (left edge)
+        mask[5, 9] = True  # boundary (right edge)
+        mask[3, 3] = True  # interior
 
         chm_block = np.ones((10, 10), dtype=np.float64) * 10.0
 
-        result = _extract_block_candidates(chm_block, block, row_offset=0, col_offset=0)
-        result = result.set_index("label")
+        result = self._call(chm_block, mask)
+        n_interior = (result["is_boundary"] == False).sum()  # noqa: E712
+        n_boundary = (result["is_boundary"] == True).sum()  # noqa: E712
 
-        assert result.loc[1, "is_boundary"] == False  # noqa: E712
-        assert result.loc[2, "is_boundary"] == True  # noqa: E712
-        assert result.loc[3, "is_boundary"] == True  # noqa: E712
-        assert result.loc[4, "is_boundary"] == True  # noqa: E712
-        assert result.loc[5, "is_boundary"] == True  # noqa: E712
-        assert result.loc[6, "is_boundary"] == False  # noqa: E712
+        assert len(result) == 6
+        assert n_interior == 2
+        assert n_boundary == 4
 
     def test_label_spanning_edge_and_interior_flagged_true(self):
-        """A label with pixels on the edge AND in the interior is is_boundary=True."""
-        block = np.zeros((10, 10), dtype=np.int64)
-        block[0, 5] = 1
-        block[1, 5] = 1
-        block[2, 5] = 1  # extends 3 rows from the edge
+        """A connected component spanning edge and interior is is_boundary=True."""
+        mask = np.zeros((10, 10), dtype=bool)
+        mask[0, 5] = True
+        mask[1, 5] = True
+        mask[2, 5] = True  # connected, extends from edge
 
         chm_block = np.zeros((10, 10), dtype=np.float64)
-        chm_block[0:3, 5] = 15.0  # flat plateau (all same value)
+        chm_block[0:3, 5] = 15.0
 
-        result = _extract_block_candidates(chm_block, block, row_offset=0, col_offset=0)
+        result = self._call(chm_block, mask)
         assert len(result) == 1
         assert result.iloc[0]["is_boundary"] == True  # noqa: E712
-        # Centroid of rows [0,1,2] col [5,5,5] → (1.0, 5.0)
         centroid_row = (
             result.iloc[0]["centroid_row_sum"] / result.iloc[0]["centroid_count"]
         )
@@ -1259,20 +1297,42 @@ class TestBoundaryFlagClassification:
         assert centroid_col == pytest.approx(5.0)
 
     def test_empty_block_returns_empty_with_is_boundary_column(self):
-        """An empty labeled block returns an empty DataFrame with is_boundary column."""
-        block = np.zeros((10, 10), dtype=np.int64)
+        """An empty mask returns an empty DataFrame with is_boundary column."""
+        mask = np.zeros((10, 10), dtype=bool)
         chm_block = np.zeros((10, 10), dtype=np.float64)
 
-        result = _extract_block_candidates(chm_block, block, row_offset=0, col_offset=0)
+        result = self._call(chm_block, mask)
         assert len(result) == 0
         assert "is_boundary" in result.columns
 
+    def test_returns_edge_label_arrays(self):
+        """_extract_block_candidates returns 4 edge label arrays."""
+        mask = np.zeros((10, 10), dtype=bool)
+        mask[0, 5] = True  # top edge
+        mask[9, 3] = True  # bottom edge
 
-class TestDeduplicateBoundaryCandidates:
-    """Unit tests for _deduplicate_boundary_candidates."""
+        chm_block = np.ones((10, 10), dtype=np.float64) * 20.0
 
-    def test_single_candidate_passes_through(self):
-        """A single boundary candidate is returned as-is (no duplicate to remove)."""
+        _, bottom, right, top, left = _extract_block_candidates(
+            chm_block,
+            mask,
+            row_offset=0,
+            col_offset=0,
+            label_offset=0,
+        )
+        assert top[5] > 0  # label at top edge col 5
+        assert bottom[3] > 0  # label at bottom edge col 3
+        assert len(top) == 10
+        assert len(bottom) == 10
+        assert len(left) == 10
+        assert len(right) == 10
+
+
+class TestUnionFindMerge:
+    """Unit tests for _union_find_merge."""
+
+    def test_single_candidate_no_merges(self):
+        """A single boundary candidate with no merge pairs passes through."""
         candidates = pd.DataFrame(
             {
                 "label": [1],
@@ -1284,20 +1344,17 @@ class TestDeduplicateBoundaryCandidates:
             }
         )
         transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
-        result = _deduplicate_boundary_candidates(candidates, transform)
+        result = _union_find_merge(candidates, [], transform)
 
         assert len(result) == 1
         assert list(result.columns) == ["x", "y", "height"]
         assert result.iloc[0]["height"] == 25.0
 
-    def test_duplicate_label_combines_centroids(self):
-        """Two candidates with the same label: centroids are combined."""
-        # Chunk A saw 4 pixels of label 1 with row_sum=10, col_sum=40
-        # Chunk B saw 4 pixels of label 1 with row_sum=14, col_sum=60
-        # Global centroid: row=(10+14)/8=3.0, col=(40+60)/8=12.5
+    def test_merge_pair_combines_centroids(self):
+        """Two candidates linked by a merge pair: centroids are combined."""
         candidates = pd.DataFrame(
             {
-                "label": [1, 1],
+                "label": [1, 2],
                 "height": [20.0, 20.0],
                 "centroid_row_sum": [10.0, 14.0],
                 "centroid_col_sum": [40.0, 60.0],
@@ -1306,27 +1363,48 @@ class TestDeduplicateBoundaryCandidates:
             }
         )
         transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
-        result = _deduplicate_boundary_candidates(candidates, transform)
+        result = _union_find_merge(candidates, [(1, 2)], transform)
 
         assert len(result) == 1
         expected_x, expected_y = rio.transform.xy(transform, [3.0], [12.5])
         assert result.iloc[0]["x"] == pytest.approx(expected_x[0])
         assert result.iloc[0]["y"] == pytest.approx(expected_y[0])
 
-    def test_multiple_labels_each_deduplicated(self):
-        """Two different labels are each independently combined."""
+    def test_transitive_merge_three_labels(self):
+        """Three labels linked transitively: A-B and B-C merges all three."""
         candidates = pd.DataFrame(
             {
-                "label": [1, 1, 2],
-                "height": [20.0, 20.0, 15.0],
-                "centroid_row_sum": [5.0, 7.0, 30.0],
-                "centroid_col_sum": [10.0, 14.0, 50.0],
-                "centroid_count": [2, 2, 5],
+                "label": [1, 2, 3],
+                "height": [20.0, 20.0, 20.0],
+                "centroid_row_sum": [6.0, 10.0, 14.0],
+                "centroid_col_sum": [20.0, 30.0, 40.0],
+                "centroid_count": [2, 2, 2],
                 "is_boundary": [True, True, True],
             }
         )
         transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
-        result = _deduplicate_boundary_candidates(candidates, transform)
+        result = _union_find_merge(candidates, [(1, 2), (2, 3)], transform)
+
+        assert len(result) == 1
+        # centroid: row=(6+10+14)/6=5.0, col=(20+30+40)/6=15.0
+        expected_x, expected_y = rio.transform.xy(transform, [5.0], [15.0])
+        assert result.iloc[0]["x"] == pytest.approx(expected_x[0])
+        assert result.iloc[0]["y"] == pytest.approx(expected_y[0])
+
+    def test_independent_labels_stay_separate(self):
+        """Two unlinked boundary labels are not merged."""
+        candidates = pd.DataFrame(
+            {
+                "label": [1, 2],
+                "height": [20.0, 15.0],
+                "centroid_row_sum": [5.0, 30.0],
+                "centroid_col_sum": [10.0, 50.0],
+                "centroid_count": [2, 5],
+                "is_boundary": [True, True],
+            }
+        )
+        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
+        result = _union_find_merge(candidates, [], transform)
 
         assert len(result) == 2
 
@@ -1343,7 +1421,7 @@ class TestDeduplicateBoundaryCandidates:
             ]
         )
         transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
-        result = _deduplicate_boundary_candidates(candidates, transform)
+        result = _union_find_merge(candidates, [], transform)
 
         assert len(result) == 0
         assert list(result.columns) == ["x", "y", "height"]
@@ -1654,6 +1732,62 @@ def test_asymmetric_chunk_layout(
     os.getenv("RUN_HEAVY_ITD_BENCHMARK") != "1",
     reason="Set RUN_HEAVY_ITD_BENCHMARK=1 to run the ITD benchmark suite.",
 )
+def test_memory_bounded_execution():
+    """Peak memory during chunked execution must be bounded by chunk size,
+    not by the full CHM size.  This is acceptance criterion 2 from issue #70."""
+    import tracemalloc
+
+    size = 4096
+    chunk_size = 512
+    rng = np.random.default_rng(42)
+    arr = rng.normal(1.0, 0.1, (size, size)).astype(np.float64)
+    for r, c in [(500, 500), (500, 3500), (3500, 500), (3500, 3500), (2048, 2048)]:
+        y_grid, x_grid = np.ogrid[:size, :size]
+        canopy = 25.0 * np.exp(-((x_grid - c) ** 2 + (y_grid - r) ** 2) / (2 * 8**2))
+        np.maximum(arr, canopy, out=arr)
+
+    chm_da = xr.DataArray(arr, dims=["y", "x"])
+    chm_da.rio.write_crs("EPSG:32611", inplace=True)
+    chm_da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
+    chunked = _chunk_chm(chm_da, {"y": chunk_size, "x": chunk_size})
+
+    full_array_bytes = arr.nbytes  # 128 MB
+    chunk_bytes = chunk_size * chunk_size * arr.itemsize  # 2 MB
+
+    import dask
+
+    tracemalloc.start()
+    with dask.config.set(scheduler="synchronous"):
+        result = fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=1.0,
+            window_size_meters=5.0,
+        ).compute()
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    assert len(result) == 5
+    # Peak memory must be well below the full array size.
+    # Allow a generous bound: 10 chunks worth of memory for concurrent
+    # intermediate arrays (overlap buffers, mask, labels, etc.)
+    memory_bound = 10 * chunk_bytes
+    print(
+        f"Peak memory: {peak / 1024**2:.1f} MB, "
+        f"bound: {memory_bound / 1024**2:.1f} MB, "
+        f"full array: {full_array_bytes / 1024**2:.1f} MB"
+    )
+    assert peak < memory_bound, (
+        f"Peak memory {peak / 1024**2:.1f} MB exceeds bound "
+        f"{memory_bound / 1024**2:.1f} MB (full array is "
+        f"{full_array_bytes / 1024**2:.1f} MB)"
+    )
+
+
+@pytest.mark.skipif(
+    os.getenv("RUN_HEAVY_ITD_BENCHMARK") != "1",
+    reason="Set RUN_HEAVY_ITD_BENCHMARK=1 to run the ITD benchmark suite.",
+)
 @pytest.mark.parametrize("filter_name", ["fixed", "variable"])
 def test_benchmark_old_vs_new_chunked(filter_name: str):
     benchmark_chm = generate_benchmark_chm(size=1024)
@@ -1696,7 +1830,6 @@ def test_maximum_filter_blocks_execute_in_parallel():
 
     records: list[tuple[float, float, int]] = []
     lock = threading.Lock()
-    original_max_filter = local_maxima_filter.dask_image.ndfilters.maximum_filter
 
     import scipy.ndimage
 

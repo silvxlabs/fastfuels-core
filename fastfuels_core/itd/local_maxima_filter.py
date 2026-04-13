@@ -3,12 +3,12 @@ from __future__ import annotations
 import dask
 import dask.array as da
 import dask.dataframe as dd
-import dask_image.ndfilters
-import dask_image.ndmeasure
 import numpy as np
 import pandas as pd
 import rasterio as rio
 import xarray as xr
+from scipy.ndimage import label as scipy_label
+from scipy.ndimage import maximum_filter as scipy_maximum_filter
 
 DEFAULT_CHUNK_SIZE = 2048
 
@@ -67,32 +67,64 @@ def _build_circular_footprint(window_size_pixels: int) -> np.ndarray:
     return x * x + y * y <= (window_size_pixels // 2) ** 2
 
 
+def _chunked_maximum_filter(chm: da.Array, footprint: np.ndarray) -> da.Array:
+    """Apply scipy maximum_filter chunk-wise via map_overlap."""
+    depth = {i: s // 2 for i, s in enumerate(footprint.shape)}
+    return da.map_overlap(
+        scipy_maximum_filter,
+        chm,
+        depth=depth,
+        boundary="reflect",
+        dtype=chm.dtype,
+        footprint=footprint,
+    )
+
+
 def _extract_block_candidates(
     chm_block: np.ndarray,
-    labeled_block: np.ndarray,
+    mask_block: np.ndarray,
     row_offset: int,
     col_offset: int,
-) -> pd.DataFrame:
-    """Per-chunk extraction: compute centroid position per label within this chunk.
+    label_offset: int,
+) -> tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Per-chunk: label locally, extract candidates, and return boundary edges.
+
+    Runs ``scipy.ndimage.label`` on the chunk's local-maxima mask and extracts
+    one candidate per connected component.  Labels are offset by
+    ``label_offset`` to be globally unique across chunks.
 
     Within the local-maxima mask every pixel of a connected component has the
     same CHM value (a pixel whose neighbor is higher cannot satisfy
     ``chm == max_filter``).  The centroid of all component pixels is therefore
     a natural, chunk-layout-invariant representative position.
 
-    Centroid components (row_sum, col_sum, count) are additive across chunks,
-    enabling exact global-centroid computation during boundary deduplication
-    without materializing all pixel coordinates.
+    Returns a tuple of:
+    - candidates DataFrame
+    - bottom_edge_labels: 1-D array of labels along the last row
+    - right_edge_labels: 1-D array of labels along the last column
+    - top_edge_labels: 1-D array of labels along the first row
+    - left_edge_labels: 1-D array of labels along the first column
 
-    Labels touching the block edge are flagged ``is_boundary=True`` because
-    they may span adjacent chunks and require cross-chunk deduplication.
-    Interior labels are guaranteed complete within this single block.
+    Edge label arrays are used by the boundary adjacency step to detect
+    cross-chunk connections without materializing the full labeled array.
     """
+    labeled_block, _ = scipy_label(mask_block)
+
+    # Offset labels to be globally unique
+    labeled_block[labeled_block > 0] += label_offset
+
+    # Extract boundary edge labels for adjacency detection
+    bottom_edge = labeled_block[-1, :].copy()
+    right_edge = labeled_block[:, -1].copy()
+    top_edge = labeled_block[0, :].copy()
+    left_edge = labeled_block[:, 0].copy()
+
     unique_labels = np.unique(labeled_block)
     unique_labels = unique_labels[unique_labels > 0]
 
     if len(unique_labels) == 0:
-        return _CANDIDATE_META.copy()
+        empty = _CANDIDATE_META.copy()
+        return empty, bottom_edge, right_edge, top_edge, left_edge
 
     nrows, ncols = labeled_block.shape
     edge_mask = np.zeros((nrows, ncols), dtype=bool)
@@ -118,7 +150,8 @@ def _extract_block_candidates(
             }
         )
 
-    return pd.DataFrame(records, columns=_CANDIDATE_COLUMNS)
+    df = pd.DataFrame(records, columns=_CANDIDATE_COLUMNS)
+    return df, bottom_edge, right_edge, top_edge, left_edge
 
 
 def _candidates_to_spatial(
@@ -154,22 +187,62 @@ def _process_interior_candidates(
     return _candidates_to_spatial(interior, transform)
 
 
-def _deduplicate_boundary_candidates(
-    candidates: pd.DataFrame,
+def _find_edge_merge_pairs(
+    bottom_edge: np.ndarray,
+    top_edge: np.ndarray,
+) -> list[tuple[int, int]]:
+    """Find label pairs that should merge across a horizontal chunk boundary.
+
+    ``bottom_edge`` is the last row of labels from the upper chunk;
+    ``top_edge`` is the first row of labels from the lower chunk.
+    Where both have a non-zero label at the same column, those two labels
+    are connected (part of the same plateau straddling the boundary).
+    """
+    pairs = []
+    connected = (bottom_edge > 0) & (top_edge > 0)
+    for idx in np.flatnonzero(connected):
+        a, b = int(bottom_edge[idx]), int(top_edge[idx])
+        if a != b:
+            pairs.append((a, b))
+    return pairs
+
+
+def _union_find_merge(
+    all_candidates: pd.DataFrame,
+    merge_pairs: list[tuple[int, int]],
     transform: rio.Affine,
 ) -> pd.DataFrame:
-    """Deduplicate boundary labels and convert to spatial coords.
+    """Merge boundary candidates whose labels are transitively connected.
 
-    For labels that span chunk boundaries, combines centroid components
-    (row_sum, col_sum, count) across chunks to compute the exact global
-    centroid.  This is chunk-layout invariant because addition is
-    associative and commutative.
+    Uses union-find to group labels, then combines centroid components
+    within each group.  Returns spatial (x, y, height) output.
     """
-    if candidates.empty:
+    if all_candidates.empty:
         return _OUTPUT_META.copy()
 
+    # Union-find
+    parent: dict[int, int] = {}
+
+    def find(x: int) -> int:
+        while parent.get(x, x) != x:
+            parent[x] = parent.get(parent[x], parent[x])
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for a, b in merge_pairs:
+        union(a, b)
+
+    # Map every boundary label to its root
+    all_candidates = all_candidates.copy()
+    all_candidates["group"] = all_candidates["label"].map(lambda lbl: find(lbl))
+
     combined = (
-        candidates.groupby("label")
+        all_candidates.groupby("group")
         .agg(
             {
                 "height": "first",
@@ -190,51 +263,102 @@ def _extract_treetops(
     transform: rio.Affine,
     min_height: float,
 ) -> dd.DataFrame:
-    """Extract treetop spatial points from a filtered CHM. Fully lazy."""
+    """Extract treetop spatial points from a filtered CHM.
+
+    Fully lazy and memory-bounded: each chunk is labeled independently
+    with ``scipy.ndimage.label``, avoiding any global synchronization.
+    Cross-chunk plateaus are detected via 1-D boundary-edge comparison
+    and merged with a lightweight union-find.
+    """
     # Step 1: lazy boolean mask
     local_maxima_mask = (chm == chm_max_filtered) & (chm > min_height)
 
-    # Step 2: globally-consistent connected-component labeling (lazy)
-    labeled, _num_labels = dask_image.ndmeasure.label(local_maxima_mask)
-
-    # Step 3: per-chunk candidate extraction (lazy via delayed)
+    # Step 2: chunk grid metadata
+    n_row_chunks = len(chm.chunks[0])
+    n_col_chunks = len(chm.chunks[1])
     row_starts = np.cumsum((0,) + chm.chunks[0][:-1])
     col_starts = np.cumsum((0,) + chm.chunks[1][:-1])
-    offsets = [
-        (int(row_starts[i]), int(col_starts[j]))
-        for i in range(len(chm.chunks[0]))
-        for j in range(len(chm.chunks[1]))
+
+    # Label offsets ensure globally unique labels without a global pass.
+    # Upper bound: each chunk can have at most (chunk_rows * chunk_cols) // 2
+    # labels.  We use the chunk area as a safe offset per chunk.
+    chunk_areas = [
+        int(chm.chunks[0][i]) * int(chm.chunks[1][j])
+        for i in range(n_row_chunks)
+        for j in range(n_col_chunks)
     ]
+    label_offsets = np.cumsum([0] + chunk_areas[:-1])
 
+    # Step 3: per-chunk extraction (lazy via delayed)
     chm_blocks = chm.to_delayed().ravel()
-    labeled_blocks = labeled.to_delayed().ravel()
+    mask_blocks = local_maxima_mask.to_delayed().ravel()
 
+    chunk_results = []
+    for k, (cb, mb) in enumerate(zip(chm_blocks, mask_blocks)):
+        i, j = divmod(k, n_col_chunks)
+        ro, co = int(row_starts[i]), int(col_starts[j])
+        lo = int(label_offsets[k])
+        chunk_results.append(
+            dask.delayed(_extract_block_candidates)(cb, mb, ro, co, lo)
+        )
+
+    # Step 4: boundary adjacency detection (lazy, operates on 1-D edge slices)
+    # Each chunk_result is (candidates_df, bottom, right, top, left).
+    # Compare adjacent chunks' shared edges to find merge pairs.
+    edge_merge_delayed = []
+    for i in range(n_row_chunks):
+        for j in range(n_col_chunks):
+            k = i * n_col_chunks + j
+            # Vertical adjacency: this chunk's bottom ↔ chunk below's top
+            if i + 1 < n_row_chunks:
+                k_below = (i + 1) * n_col_chunks + j
+                edge_merge_delayed.append(
+                    dask.delayed(_find_edge_merge_pairs)(
+                        chunk_results[k][1],       # bottom edge
+                        chunk_results[k_below][3],  # top edge
+                    )
+                )
+            # Horizontal adjacency: this chunk's right ↔ chunk right's left
+            if j + 1 < n_col_chunks:
+                k_right = k + 1
+                edge_merge_delayed.append(
+                    dask.delayed(_find_edge_merge_pairs)(
+                        chunk_results[k][2],       # right edge
+                        chunk_results[k_right][4],  # left edge
+                    )
+                )
+
+    # Step 5: build candidate partitions from chunk results
     partitions = [
         dd.from_delayed(
-            dask.delayed(_extract_block_candidates)(cb, lb, ro, co),
+            dask.delayed(lambda cr: cr[0])(cr),
             meta=_CANDIDATE_META,
         )
-        for cb, lb, (ro, co) in zip(chm_blocks, labeled_blocks, offsets)
+        for cr in chunk_results
     ]
-
     candidates = dd.concat(partitions)
 
-    # Step 4a: interior labels — convert coords per-partition (fully chunked).
-    # Interior labels exist in exactly one chunk so no dedup is needed.
+    # Step 6a: interior labels — emit directly per-partition (no dedup needed)
     interior_output = candidates.map_partitions(
         _process_interior_candidates, transform, meta=_OUTPUT_META
     )
 
-    # Step 4b: boundary labels — collect and deduplicate.
-    # Only labels touching a chunk edge may span multiple chunks. Their count
-    # is proportional to chunk *perimeter*, not area, keeping the
-    # materialized set small even for very large CHMs.
+    # Step 6b: boundary labels — collect, merge via union-find, convert
     boundary_candidates = candidates.map_partitions(
         lambda part: part[part["is_boundary"]], meta=_CANDIDATE_META
     )
+
+    def _collect_merge_pairs(*pair_lists: list[tuple[int, int]]) -> list:
+        result = []
+        for pl in pair_lists:
+            result.extend(pl)
+        return result
+
+    all_merge_pairs = dask.delayed(_collect_merge_pairs)(*edge_merge_delayed)
+
     boundary_output = dd.from_delayed(
-        dask.delayed(_deduplicate_boundary_candidates)(
-            boundary_candidates, transform
+        dask.delayed(_union_find_merge)(
+            boundary_candidates, all_merge_pairs, transform
         ),
         meta=_OUTPUT_META,
     )
@@ -304,7 +428,7 @@ def variable_window_filter(
             vw_max = da.where(required_windows == w, chm, vw_max)
             continue
         footprint = _build_circular_footprint(w)
-        filtered = dask_image.ndfilters.maximum_filter(chm, footprint=footprint)
+        filtered = _chunked_maximum_filter(chm, footprint)
         vw_max = da.where(required_windows == w, filtered, vw_max)
 
     return _extract_treetops(chm, vw_max, transform, min_height)
@@ -354,6 +478,6 @@ def fixed_window_filter(
         window_size_pixels = 3
 
     footprint = _build_circular_footprint(window_size_pixels)
-    chm_max_filtered = dask_image.ndfilters.maximum_filter(chm, footprint=footprint)
+    chm_max_filtered = _chunked_maximum_filter(chm, footprint)
 
     return _extract_treetops(chm, chm_max_filtered, transform, min_height)
