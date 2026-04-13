@@ -16,10 +16,13 @@ import rioxarray  # noqa: F401
 import xarray as xr
 from dask.callbacks import Callback
 from numpy.random import Generator
+import rasterio as rio
 from rasterio.transform import from_origin
 
 import fastfuels_core.itd.local_maxima_filter as local_maxima_filter
 from fastfuels_core.itd.local_maxima_filter import (
+    _extract_block_candidates,
+    _deduplicate_boundary_candidates,
     fixed_window_filter,
     variable_window_filter,
 )
@@ -888,6 +891,370 @@ def test_graph_contains_more_tasks_for_multi_chunk_inputs(
     graph_four = len(four_chunks.__dask_graph__())
 
     assert graph_four > graph_one
+
+
+# ---------------------------------------------------------------------------
+# Tests: interior/boundary split correctness
+# ---------------------------------------------------------------------------
+
+
+class TestBoundaryFlagClassification:
+    """Unit tests for is_boundary flag in _extract_block_candidates."""
+
+    def test_interior_label_flagged_false(self):
+        """A label entirely inside the block (no edge pixels) is is_boundary=False."""
+        block = np.zeros((10, 10), dtype=np.int64)
+        block[4:6, 4:6] = 1  # 2x2 label in the center
+
+        chm_block = np.zeros((10, 10), dtype=np.float64)
+        chm_block[4:6, 4:6] = 20.0
+
+        result = _extract_block_candidates(chm_block, block, row_offset=0, col_offset=0)
+        assert len(result) == 1
+        assert result.iloc[0]["is_boundary"] == False  # noqa: E712
+
+    def test_edge_touching_label_flagged_true(self):
+        """A label touching the top row of the block is is_boundary=True."""
+        block = np.zeros((10, 10), dtype=np.int64)
+        block[0, 4:6] = 1  # touches row 0
+
+        chm_block = np.zeros((10, 10), dtype=np.float64)
+        chm_block[0, 4:6] = 15.0
+
+        result = _extract_block_candidates(chm_block, block, row_offset=0, col_offset=0)
+        assert len(result) == 1
+        assert result.iloc[0]["is_boundary"] == True  # noqa: E712
+
+    def test_corner_label_flagged_true(self):
+        """A label touching a corner pixel is is_boundary=True."""
+        block = np.zeros((10, 10), dtype=np.int64)
+        block[0, 0] = 1
+
+        chm_block = np.zeros((10, 10), dtype=np.float64)
+        chm_block[0, 0] = 12.0
+
+        result = _extract_block_candidates(chm_block, block, row_offset=0, col_offset=0)
+        assert len(result) == 1
+        assert result.iloc[0]["is_boundary"] == True  # noqa: E712
+
+    def test_mixed_interior_and_boundary_labels(self):
+        """Multiple labels: some interior, some boundary, classified correctly."""
+        block = np.zeros((10, 10), dtype=np.int64)
+        block[5, 5] = 1  # interior
+        block[0, 5] = 2  # boundary (top edge)
+        block[9, 5] = 3  # boundary (bottom edge)
+        block[5, 0] = 4  # boundary (left edge)
+        block[5, 9] = 5  # boundary (right edge)
+        block[3, 3] = 6  # interior
+
+        chm_block = np.ones((10, 10), dtype=np.float64) * 10.0
+
+        result = _extract_block_candidates(chm_block, block, row_offset=0, col_offset=0)
+        result = result.set_index("label")
+
+        assert result.loc[1, "is_boundary"] == False  # noqa: E712
+        assert result.loc[2, "is_boundary"] == True  # noqa: E712
+        assert result.loc[3, "is_boundary"] == True  # noqa: E712
+        assert result.loc[4, "is_boundary"] == True  # noqa: E712
+        assert result.loc[5, "is_boundary"] == True  # noqa: E712
+        assert result.loc[6, "is_boundary"] == False  # noqa: E712
+
+    def test_label_spanning_edge_and_interior_flagged_true(self):
+        """A label with pixels on the edge AND in the interior is is_boundary=True."""
+        block = np.zeros((10, 10), dtype=np.int64)
+        block[0, 5] = 1
+        block[1, 5] = 1
+        block[2, 5] = 1  # extends 3 rows from the edge
+
+        chm_block = np.zeros((10, 10), dtype=np.float64)
+        chm_block[0, 5] = 10.0
+        chm_block[1, 5] = 15.0  # max is interior to block
+        chm_block[2, 5] = 10.0
+
+        result = _extract_block_candidates(chm_block, block, row_offset=0, col_offset=0)
+        assert len(result) == 1
+        assert result.iloc[0]["is_boundary"] == True  # noqa: E712
+        # Max position should be at (1, 5), not the edge pixel
+        assert result.iloc[0]["row"] == 1
+        assert result.iloc[0]["col"] == 5
+
+    def test_empty_block_returns_empty_with_is_boundary_column(self):
+        """An empty labeled block returns an empty DataFrame with is_boundary column."""
+        block = np.zeros((10, 10), dtype=np.int64)
+        chm_block = np.zeros((10, 10), dtype=np.float64)
+
+        result = _extract_block_candidates(chm_block, block, row_offset=0, col_offset=0)
+        assert len(result) == 0
+        assert "is_boundary" in result.columns
+
+
+class TestDeduplicateBoundaryCandidates:
+    """Unit tests for _deduplicate_boundary_candidates."""
+
+    def test_single_candidate_passes_through(self):
+        """A single boundary candidate is returned as-is (no duplicate to remove)."""
+        candidates = pd.DataFrame(
+            {
+                "label": [1],
+                "row": [10],
+                "col": [20],
+                "height": [25.0],
+                "is_boundary": [True],
+            }
+        )
+        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
+        result = _deduplicate_boundary_candidates(candidates, transform)
+
+        assert len(result) == 1
+        assert list(result.columns) == ["x", "y", "height"]
+        assert result.iloc[0]["height"] == 25.0
+
+    def test_duplicate_label_keeps_highest(self):
+        """Two candidates with the same label: keeps the one with highest height."""
+        candidates = pd.DataFrame(
+            {
+                "label": [1, 1],
+                "row": [10, 12],
+                "col": [20, 22],
+                "height": [25.0, 30.0],
+                "is_boundary": [True, True],
+            }
+        )
+        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
+        result = _deduplicate_boundary_candidates(candidates, transform)
+
+        assert len(result) == 1
+        assert result.iloc[0]["height"] == 30.0
+
+    def test_tie_broken_by_raster_scan_order(self):
+        """Equal heights: picks smallest row, then smallest col."""
+        candidates = pd.DataFrame(
+            {
+                "label": [1, 1, 1],
+                "row": [12, 10, 10],
+                "col": [5, 8, 5],
+                "height": [20.0, 20.0, 20.0],
+                "is_boundary": [True, True, True],
+            }
+        )
+        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
+        result = _deduplicate_boundary_candidates(candidates, transform)
+
+        assert len(result) == 1
+        # row=10, col=5 wins (smallest row, then smallest col)
+        expected_x, expected_y = rio.transform.xy(transform, [10], [5])
+        assert result.iloc[0]["x"] == pytest.approx(expected_x[0])
+        assert result.iloc[0]["y"] == pytest.approx(expected_y[0])
+
+    def test_empty_input_returns_empty_output(self):
+        """Empty input returns empty DataFrame with correct columns."""
+        candidates = pd.DataFrame(
+            columns=["label", "row", "col", "height", "is_boundary"]
+        )
+        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
+        result = _deduplicate_boundary_candidates(candidates, transform)
+
+        assert len(result) == 0
+        assert list(result.columns) == ["x", "y", "height"]
+
+
+class TestInteriorBoundarySplit:
+    """Integration tests verifying the interior/boundary split in the full pipeline."""
+
+    def test_output_has_more_partitions_than_one(self):
+        """Multi-chunk input produces multi-partition output (not single-partition)."""
+        chm_da = generate_boundary_plateau_chm(
+            slice(28, 32), slice(30, 34), width=64, height=64
+        )
+        chunked = _chunk_chm(chm_da, {"y": 32, "x": 32})
+
+        ddf = fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=1.0,
+            window_size_meters=3.0,
+        )
+        assert ddf.npartitions > 1
+
+    def test_interior_only_chm_has_empty_boundary_partition(self):
+        """When all treetops are interior to their chunks, the boundary partition
+        should be empty and the result should still be correct."""
+        # Place a single tree well inside a chunk (center of a 64x64 block,
+        # chunked as a single 64x64 chunk — all labels touch the "boundary"
+        # of the one chunk). Instead, use a large chunk so trees are interior.
+        chm_array = np.zeros((128, 128), dtype=np.float64)
+        # Place Gaussian trees far from any chunk boundary (chunk size 128)
+        for r, c in [(32, 32), (32, 96), (96, 32), (96, 96)]:
+            y_grid, x_grid = np.ogrid[:128, :128]
+            dist_sq = (x_grid - c) ** 2 + (y_grid - r) ** 2
+            canopy = 20.0 * np.exp(-dist_sq / (2 * 3.0**2))
+            np.maximum(chm_array, canopy, out=chm_array)
+
+        chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+        chm_da.rio.write_crs("EPSG:32611", inplace=True)
+        chm_da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
+        # Chunk so each tree is well within its chunk
+        chunked = _chunk_chm(chm_da, {"y": 64, "x": 64})
+
+        ddf = fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=1.0,
+            window_size_meters=3.0,
+        )
+        result = ddf.compute()
+        assert len(result) == 4
+
+        # The last partition is the boundary dedup partition — should be empty
+        boundary_partition = ddf.get_partition(ddf.npartitions - 1).compute()
+        assert len(boundary_partition) == 0
+
+    def test_boundary_partition_contains_only_boundary_labels(
+        self,
+        boundary_split_half_chm: xr.DataArray,
+    ):
+        """The boundary dedup partition should contain only labels that
+        straddled chunk edges, not interior labels."""
+        # This CHM has a single plateau at rows 28-31, cols 30-33
+        # in a 64x64 grid. With 32x32 chunks, the plateau straddles
+        # the row boundary (row 31/32) and col boundary (col 31/32).
+        chunked = _chunk_chm(boundary_split_half_chm, {"y": 32, "x": 32})
+
+        ddf = fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=1.0,
+            window_size_meters=3.0,
+        )
+        result = ddf.compute()
+        assert len(result) == 1
+
+        # The single treetop should come from the boundary partition (last one)
+        boundary_partition = ddf.get_partition(ddf.npartitions - 1).compute()
+        assert len(boundary_partition) == 1
+
+        # Interior partitions should all be empty (no interior trees in this CHM)
+        for i in range(ddf.npartitions - 1):
+            interior_part = ddf.get_partition(i).compute()
+            assert len(interior_part) == 0
+
+    @pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+    def test_boundary_materialization_is_small_fraction(
+        self,
+        filter_name: str,
+    ):
+        """The boundary partition should be a small fraction of total treetops.
+
+        This is the core memory-safety property: only O(perimeter) candidates
+        are materialized for dedup, not O(area).
+
+        Uses a dense random CHM so that treetops are uniformly distributed
+        across each chunk's interior, not concentrated at chunk boundaries.
+        """
+        rng = np.random.default_rng(777)
+        arr = rng.uniform(0, 30, (256, 256)).astype(np.float64)
+        chm_da = xr.DataArray(arr, dims=["y", "x"])
+        chm_da.rio.write_crs("EPSG:32611", inplace=True)
+        chm_da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
+        chunked = _chunk_chm(chm_da, {"y": 64, "x": 64})  # 16 chunks
+
+        ddf = (
+            fixed_window_filter(
+                chm_da=chunked,
+                min_height=2.0,
+                spatial_resolution=1.0,
+                window_size_meters=3.0,
+            )
+            if filter_name == "fixed"
+            else variable_window_filter(
+                chm_da=chunked,
+                min_height=2.0,
+                spatial_resolution=1.0,
+                crown_ratio=0.10,
+                crown_offset=1.0,
+            )
+        )
+
+        total = len(ddf)
+        boundary_count = len(ddf.get_partition(ddf.npartitions - 1))
+
+        assert total > 0, "Test expects a non-empty result"
+        boundary_fraction = boundary_count / total
+        # Boundary labels should be a small fraction of total.
+        # For 64x64 chunks, perimeter/area = 4*64 / 64^2 ≈ 6%.
+        # In practice, boundary labels are typically 2-8% of total.
+        assert boundary_fraction < 0.15, (
+            f"Boundary fraction {boundary_fraction:.1%} is too high — "
+            f"dedup materialization may not be bounded"
+        )
+
+    @pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+    def test_split_matches_reference_on_dense_random_chm(
+        self,
+        filter_name: str,
+    ):
+        """Interior + boundary paths combined must match the eager reference
+        on a dense random CHM where both paths are exercised."""
+        rng = np.random.default_rng(12345)
+        arr = rng.uniform(0, 30, (128, 128)).astype(np.float64)
+        chm_da = xr.DataArray(arr, dims=["y", "x"])
+        chm_da.rio.write_crs("EPSG:32611", inplace=True)
+        chm_da.rio.write_transform(from_origin(0, 0, 0.5, 0.5), inplace=True)
+        chunked = _chunk_chm(chm_da, {"y": 32, "x": 32})
+
+        reference = _run_reference(filter_name, chm_da)
+        result = _run_filter(filter_name, chunked)
+
+        _assert_same_output(result, reference)
+
+    def test_all_zeros_chm_produces_empty_output(self):
+        """A CHM with all zero values produces empty output from both paths."""
+        chm_array = np.zeros((64, 64), dtype=np.float64)
+        chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+        chm_da.rio.write_crs("EPSG:32611", inplace=True)
+        chm_da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
+        chunked = _chunk_chm(chm_da, {"y": 32, "x": 32})
+
+        result = fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=1.0,
+            window_size_meters=3.0,
+        ).compute()
+        assert len(result) == 0
+        assert list(result.columns) == ["x", "y", "height"]
+
+    def test_all_below_min_height_produces_empty_output(self):
+        """A CHM with all values below min_height produces empty output."""
+        rng = np.random.default_rng(99)
+        chm_array = rng.uniform(0.1, 1.5, (64, 64)).astype(np.float64)
+        chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+        chm_da.rio.write_crs("EPSG:32611", inplace=True)
+        chm_da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
+        chunked = _chunk_chm(chm_da, {"y": 32, "x": 32})
+
+        result = fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=1.0,
+            window_size_meters=3.0,
+        ).compute()
+        assert len(result) == 0
+
+    def test_small_chunks_mostly_boundary_still_correct(self):
+        """With small chunks where most labels touch an edge, the pipeline
+        must still produce correct results via the boundary dedup path."""
+        rng = np.random.default_rng(42)
+        arr = rng.uniform(0, 30, (64, 64)).astype(np.float64)
+        chm_da = xr.DataArray(arr, dims=["y", "x"])
+        chm_da.rio.write_crs("EPSG:32611", inplace=True)
+        chm_da.rio.write_transform(from_origin(0, 0, 0.5, 0.5), inplace=True)
+        chunked = _chunk_chm(chm_da, {"y": 16, "x": 16})  # 16 chunks
+
+        reference = _run_reference("fixed", chm_da)
+        result = _run_filter("fixed", chunked)
+
+        _assert_same_output(result, reference)
 
 
 # ---------------------------------------------------------------------------

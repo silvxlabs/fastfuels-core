@@ -12,7 +12,7 @@ import xarray as xr
 
 DEFAULT_CHUNK_SIZE = 2048
 
-_CANDIDATE_COLUMNS = ["label", "row", "col", "height"]
+_CANDIDATE_COLUMNS = ["label", "row", "col", "height", "is_boundary"]
 
 _OUTPUT_META = pd.DataFrame(
     {
@@ -28,6 +28,7 @@ _CANDIDATE_META = pd.DataFrame(
         "row": pd.Series(dtype="int64"),
         "col": pd.Series(dtype="int64"),
         "height": pd.Series(dtype="float64"),
+        "is_boundary": pd.Series(dtype="bool"),
     }
 )
 
@@ -65,12 +66,23 @@ def _extract_block_candidates(
     first occurrence in raster-scan order for tied values. This matches
     dask_image.ndmeasure.maximum_position's behavior and guarantees identical
     results regardless of chunk layout.
+
+    Labels touching the block edge are flagged ``is_boundary=True`` because
+    they may span adjacent chunks and require cross-chunk deduplication.
+    Interior labels are guaranteed complete within this single block.
     """
     unique_labels = np.unique(labeled_block)
     unique_labels = unique_labels[unique_labels > 0]
 
     if len(unique_labels) == 0:
         return _CANDIDATE_META.copy()
+
+    nrows, ncols = labeled_block.shape
+    edge_mask = np.zeros((nrows, ncols), dtype=bool)
+    edge_mask[0, :] = True
+    edge_mask[-1, :] = True
+    edge_mask[:, 0] = True
+    edge_mask[:, -1] = True
 
     records = []
     for lbl in unique_labels:
@@ -86,17 +98,51 @@ def _extract_block_candidates(
                 "row": int(local_row) + row_offset,
                 "col": int(local_col) + col_offset,
                 "height": float(chm_block[int(local_row), int(local_col)]),
+                "is_boundary": bool(np.any(mask & edge_mask)),
             }
         )
 
     return pd.DataFrame(records, columns=_CANDIDATE_COLUMNS)
 
 
-def _deduplicate_and_convert(
+def _candidates_to_spatial(
     candidates: pd.DataFrame,
     transform: rio.Affine,
 ) -> pd.DataFrame:
-    """Deduplicate cross-chunk labels and convert pixel coords to spatial coords.
+    """Convert row/col pixel coordinates to x/y spatial coordinates."""
+    if candidates.empty:
+        return _OUTPUT_META.copy()
+
+    rows = candidates["row"].values
+    cols = candidates["col"].values
+    xs, ys = rio.transform.xy(transform, rows.tolist(), cols.tolist())
+    return pd.DataFrame(
+        {
+            "x": np.asarray(xs, dtype=np.float64),
+            "y": np.asarray(ys, dtype=np.float64),
+            "height": candidates["height"].values.astype(np.float64),
+        }
+    )
+
+
+def _process_interior_candidates(
+    partition: pd.DataFrame,
+    transform: rio.Affine,
+) -> pd.DataFrame:
+    """Convert interior (non-boundary) candidates directly to spatial coords.
+
+    Interior labels exist in exactly one chunk, so no cross-chunk
+    deduplication is needed — convert and emit immediately.
+    """
+    interior = partition[~partition["is_boundary"]]
+    return _candidates_to_spatial(interior, transform)
+
+
+def _deduplicate_boundary_candidates(
+    candidates: pd.DataFrame,
+    transform: rio.Affine,
+) -> pd.DataFrame:
+    """Deduplicate boundary labels and convert to spatial coords.
 
     For labels that span chunk boundaries, keeps the candidate with the highest
     height value (the true maximum position). Then converts row/col pixel
@@ -109,16 +155,7 @@ def _deduplicate_and_convert(
         ["height", "row", "col"], ascending=[False, True, True]
     ).drop_duplicates(subset=["label"], keep="first")
 
-    rows = best["row"].values
-    cols = best["col"].values
-    xs, ys = rio.transform.xy(transform, rows.tolist(), cols.tolist())
-    return pd.DataFrame(
-        {
-            "x": np.asarray(xs, dtype=np.float64),
-            "y": np.asarray(ys, dtype=np.float64),
-            "height": best["height"].values.astype(np.float64),
-        }
-    )
+    return _candidates_to_spatial(best, transform)
 
 
 def _extract_treetops(
@@ -156,11 +193,27 @@ def _extract_treetops(
 
     candidates = dd.concat(partitions)
 
-    # Step 4: deduplicate cross-chunk labels and convert to spatial coords (lazy).
-    # The candidate DataFrame is small (one row per label per chunk), so
-    # collecting it into a single delayed function is safe for memory.
-    delayed_result = dask.delayed(_deduplicate_and_convert)(candidates, transform)
-    return dd.from_delayed(delayed_result, meta=_OUTPUT_META)
+    # Step 4a: interior labels — convert coords per-partition (fully chunked).
+    # Interior labels exist in exactly one chunk so no dedup is needed.
+    interior_output = candidates.map_partitions(
+        _process_interior_candidates, transform, meta=_OUTPUT_META
+    )
+
+    # Step 4b: boundary labels — collect and deduplicate.
+    # Only labels touching a chunk edge may span multiple chunks. Their count
+    # is proportional to chunk *perimeter*, not area, keeping the
+    # materialized set small even for very large CHMs.
+    boundary_candidates = candidates.map_partitions(
+        lambda part: part[part["is_boundary"]], meta=_CANDIDATE_META
+    )
+    boundary_output = dd.from_delayed(
+        dask.delayed(_deduplicate_boundary_candidates)(
+            boundary_candidates, transform
+        ),
+        meta=_OUTPUT_META,
+    )
+
+    return dd.concat([interior_output, boundary_output])
 
 
 def variable_window_filter(
