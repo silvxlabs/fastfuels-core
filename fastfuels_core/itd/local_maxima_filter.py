@@ -372,6 +372,7 @@ def variable_window_filter(
     spatial_resolution: float,
     crown_ratio: float = 0.10,
     crown_offset: float = 1.0,
+    max_height: float | None = None,
 ) -> dd.DataFrame:
     """Finds treetops from a CHM using a Variable Window Filter (VWF).
 
@@ -391,6 +392,8 @@ def variable_window_filter(
         crown_ratio (float): The multiplier for tree height to estimate crown width.
             Defaults to 0.10 (10%).
         crown_offset (float): The base crown width in meters. Defaults to 1.0m.
+        max_height (float | None): Maximum canopy height in meters. Determines
+            the largest search window. If None, computed from the CHM.
 
     Returns:
         dd.DataFrame: Detected treetops with explicit 'x', 'y', and 'height' columns.
@@ -402,11 +405,13 @@ def variable_window_filter(
 
     chm, transform = _prepare_chm(chm_da)
 
-    # Derive the set of unique window sizes from CHM value range.
-    # Two scalar reductions (chunk-by-chunk) avoid materializing the full array.
-    min_h, max_h = da.compute(chm.min(), chm.max())
-    min_w = int((float(min_h) * crown_ratio + crown_offset) / spatial_resolution)
-    max_w = int((float(max_h) * crown_ratio + crown_offset) / spatial_resolution)
+    if max_height is None:
+        max_height = float(chm.max().compute())
+
+    # Window sizes must be odd (centered kernel). Derive the range of odd
+    # sizes from min_height and max_height.
+    min_w = int((min_height * crown_ratio + crown_offset) / spatial_resolution)
+    max_w = int((max_height * crown_ratio + crown_offset) / spatial_resolution)
     if min_w % 2 == 0:
         min_w -= 1
     if max_w % 2 == 0:

@@ -1728,10 +1728,10 @@ def test_asymmetric_chunk_layout(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    os.getenv("RUN_HEAVY_ITD_BENCHMARK") != "1",
-    reason="Set RUN_HEAVY_ITD_BENCHMARK=1 to run the ITD benchmark suite.",
-)
+# @pytest.mark.skipif(
+#     os.getenv("RUN_HEAVY_ITD_BENCHMARK") != "1",
+#     reason="Set RUN_HEAVY_ITD_BENCHMARK=1 to run the ITD benchmark suite.",
+# )
 def test_memory_bounded_execution():
     """Peak memory during chunked execution must be bounded by chunk size,
     not by the full CHM size.  This is acceptance criterion 2 from issue #70."""
@@ -1784,10 +1784,10 @@ def test_memory_bounded_execution():
     )
 
 
-@pytest.mark.skipif(
-    os.getenv("RUN_HEAVY_ITD_BENCHMARK") != "1",
-    reason="Set RUN_HEAVY_ITD_BENCHMARK=1 to run the ITD benchmark suite.",
-)
+# @pytest.mark.skipif(
+#     os.getenv("RUN_HEAVY_ITD_BENCHMARK") != "1",
+#     reason="Set RUN_HEAVY_ITD_BENCHMARK=1 to run the ITD benchmark suite.",
+# )
 @pytest.mark.parametrize("filter_name", ["fixed", "variable"])
 def test_benchmark_old_vs_new_chunked(filter_name: str):
     benchmark_chm = generate_benchmark_chm(size=1024)
@@ -1820,10 +1820,10 @@ def test_benchmark_old_vs_new_chunked(filter_name: str):
     _assert_same_output(one_chunk, four_chunks)
 
 
-@pytest.mark.skipif(
-    os.getenv("RUN_HEAVY_ITD_PARALLEL") != "1",
-    reason="Set RUN_HEAVY_ITD_PARALLEL=1 to run the ITD parallel-execution proof.",
-)
+# @pytest.mark.skipif(
+#     os.getenv("RUN_HEAVY_ITD_PARALLEL") != "1",
+#     reason="Set RUN_HEAVY_ITD_PARALLEL=1 to run the ITD parallel-execution proof.",
+# )
 def test_maximum_filter_blocks_execute_in_parallel():
     benchmark_chm = generate_benchmark_chm(size=128)
     chunked = _chunk_chm(benchmark_chm, {"y": 32, "x": 32})
