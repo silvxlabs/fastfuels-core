@@ -150,20 +150,34 @@ def _plant_conical_tree(
     row: int,
     col: int,
     max_height: float,
-    sigma: float,
+    sigma: float | np.ndarray,
     tree_type: str,
     pixel_size: float,
     origin_x: float,
     origin_y: float,
 ) -> None:
-    """Helper to mathematically stamp a 2D Gaussian tree into the canopy surface and log its ground truth."""
+    """Stamp a 2D Gaussian tree into the canopy surface and log its ground truth.
+
+    ``sigma`` controls the crown shape:
+    - scalar: isotropic circular crown (σ_row = σ_col = sigma, no rotation).
+    - 2x2 array: full covariance matrix, enabling elliptical and rotated crowns.
+    """
     height, width = canopy_surface.shape
     y_grid, x_grid = np.ogrid[:height, :width]
 
-    dist_sq = (x_grid - col) ** 2 + (y_grid - row) ** 2
-    tree_footprint = max_height * np.exp(-dist_sq / (2 * sigma**2))
+    dy = y_grid - row
+    dx = x_grid - col
+    cov = np.atleast_2d(sigma)
+    if cov.shape == (1, 1):
+        cov = np.array([[sigma**2, 0.0], [0.0, sigma**2]])
+    inv_cov = np.linalg.inv(cov)
+    mahal = (
+        inv_cov[0, 0] * dy**2
+        + (inv_cov[0, 1] + inv_cov[1, 0]) * dy * dx
+        + inv_cov[1, 1] * dx**2
+    )
+    tree_footprint = max_height * np.exp(-0.5 * mahal)
 
-    # Simulating the LiDAR top-hit surface (np.maximum modifies the array in place safely here)
     np.maximum(canopy_surface, tree_footprint, out=canopy_surface)
 
     x_coord = origin_x + (col * pixel_size) + (pixel_size / 2)
@@ -343,6 +357,78 @@ def generate_mixed_morphology_chm() -> xr.DataArray:
     da.attrs["ground_truth"] = ground_truth
 
     return da
+
+
+def generate_asymmetric_crown_chm() -> xr.DataArray:
+    """Generates a CHM with elliptical and rotated tree crowns.
+
+    Contains three groups of trees whose crowns are non-circular:
+    - 5 axis-aligned elliptical crowns (wider in the column direction)
+    - 5 axis-aligned elliptical crowns (wider in the row direction)
+    - 5 rotated elliptical crowns (45-degree tilt)
+    All trees have a single well-defined peak at the Gaussian center.
+    """
+    pixel_size = 0.5
+    width, height = 200, 200
+    origin_x, origin_y = 500000.0, 4000000.0
+    transform = from_origin(origin_x, origin_y, pixel_size, pixel_size)
+
+    rng = np.random.default_rng(seed=555)
+    chm_array = rng.normal(loc=1.0, scale=0.1, size=(height, width))
+    canopy_surface = np.zeros((height, width))
+
+    ground_truth_trees: List[Dict[str, Any]] = []
+    existing_centers: List = []
+
+    # 1. Column-elongated elliptical crowns (σ_row=2, σ_col=6)
+    cov_col_wide = np.array([[4.0, 0.0], [0.0, 36.0]])
+    for _ in range(5):
+        r, c = _get_valid_location(20, rng, existing_centers, height, width)
+        _plant_conical_tree(
+            canopy_surface, ground_truth_trees, r, c,
+            rng.uniform(18.0, 25.0), cov_col_wide,
+            "elliptical_col", pixel_size, origin_x, origin_y,
+        )
+        existing_centers.append((r, c))
+
+    # 2. Row-elongated elliptical crowns (σ_row=6, σ_col=2)
+    cov_row_wide = np.array([[36.0, 0.0], [0.0, 4.0]])
+    for _ in range(5):
+        r, c = _get_valid_location(20, rng, existing_centers, height, width)
+        _plant_conical_tree(
+            canopy_surface, ground_truth_trees, r, c,
+            rng.uniform(18.0, 25.0), cov_row_wide,
+            "elliptical_row", pixel_size, origin_x, origin_y,
+        )
+        existing_centers.append((r, c))
+
+    # 3. Rotated elliptical crowns (45-degree tilt)
+    theta = np.pi / 4
+    R = np.array([[np.cos(theta), -np.sin(theta)],
+                  [np.sin(theta),  np.cos(theta)]])
+    cov_rotated = R @ np.diag([4.0, 36.0]) @ R.T
+    for _ in range(5):
+        r, c = _get_valid_location(20, rng, existing_centers, height, width)
+        _plant_conical_tree(
+            canopy_surface, ground_truth_trees, r, c,
+            rng.uniform(18.0, 25.0), cov_rotated,
+            "elliptical_rotated", pixel_size, origin_x, origin_y,
+        )
+        existing_centers.append((r, c))
+
+    final_chm = np.maximum(chm_array, canopy_surface)
+
+    da = xr.DataArray(final_chm, dims=["y", "x"])
+    da.rio.write_crs("EPSG:32611", inplace=True)
+    da.rio.write_transform(transform, inplace=True)
+    da.attrs["ground_truth"] = ground_truth_trees
+
+    return da
+
+
+@pytest.fixture
+def asymmetric_crown_chm() -> xr.DataArray:
+    return generate_asymmetric_crown_chm()
 
 
 @pytest.fixture
@@ -586,6 +672,172 @@ def test_mixed_morphology_extraction(mixed_morphology_chm: xr.DataArray):
 
     # We planted exactly 12 conical + 6 L-shapes = 18 trees
     assert len(df) == 18, "Algorithm failed to accurately count mixed morphologies."
+
+
+# ---------------------------------------------------------------------------
+# Asymmetric crown tests
+# ---------------------------------------------------------------------------
+
+
+def test_vwf_detects_all_asymmetric_crowns(asymmetric_crown_chm: xr.DataArray):
+    """VWF must detect every planted tree regardless of crown ellipticity or rotation."""
+    ground_truth = asymmetric_crown_chm.attrs["ground_truth"]
+    dask_df = variable_window_filter(
+        chm_da=asymmetric_crown_chm,
+        min_height=2.0,
+        spatial_resolution=0.5,
+        crown_ratio=0.10,
+        crown_offset=1.0,
+    )
+    df = dask_df.compute()
+    valid_trees = df[df["height"] > 5.0]
+
+    assert len(valid_trees) == len(ground_truth), (
+        f"Expected {len(ground_truth)} trees, found {len(valid_trees)}"
+    )
+
+    if SAVE_FIG or SHOW_FIG:
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        _plot_chm_with_treetops(
+            ax, asymmetric_crown_chm, valid_trees,
+            title=f"VWF on Asymmetric Crowns — {len(valid_trees)} treetops",
+            ground_truth=ground_truth,
+        )
+        fig.tight_layout()
+        if SAVE_FIG:
+            FIGURES_PATH.mkdir(parents=True, exist_ok=True)
+            fig.savefig(FIGURES_PATH / "itd_asymmetric_vwf.png", dpi=150)
+        if SHOW_FIG:
+            plt.show()
+        plt.close(fig)
+
+
+def test_fwf_detects_asymmetric_crowns(asymmetric_crown_chm: xr.DataArray):
+    """Fixed window filter must detect every asymmetric crown."""
+    ground_truth = asymmetric_crown_chm.attrs["ground_truth"]
+    dask_df = fixed_window_filter(
+        chm_da=asymmetric_crown_chm,
+        min_height=2.0,
+        spatial_resolution=0.5,
+        window_size_meters=3.0,
+    )
+    df = dask_df.compute()
+    valid_trees = df[df["height"] > 5.0]
+
+    assert len(valid_trees) == len(ground_truth), (
+        f"Expected {len(ground_truth)} trees, found {len(valid_trees)}"
+    )
+
+    if SAVE_FIG or SHOW_FIG:
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        _plot_chm_with_treetops(
+            ax, asymmetric_crown_chm, valid_trees,
+            title=f"FWF on Asymmetric Crowns — {len(valid_trees)} treetops",
+            ground_truth=ground_truth,
+        )
+        fig.tight_layout()
+        if SAVE_FIG:
+            FIGURES_PATH.mkdir(parents=True, exist_ok=True)
+            fig.savefig(FIGURES_PATH / "itd_asymmetric_fwf.png", dpi=150)
+        if SHOW_FIG:
+            plt.show()
+        plt.close(fig)
+
+
+def test_asymmetric_crown_coordinate_accuracy(asymmetric_crown_chm: xr.DataArray):
+    """Detected treetop positions must land at the planted Gaussian center."""
+    ground_truth = asymmetric_crown_chm.attrs["ground_truth"]
+    dask_df = variable_window_filter(
+        chm_da=asymmetric_crown_chm,
+        min_height=2.0,
+        spatial_resolution=0.5,
+        crown_ratio=0.10,
+        crown_offset=1.0,
+    )
+    df = dask_df.compute()
+
+    for tree in ground_truth:
+        dx = df["x"] - tree["x"]
+        dy = df["y"] - tree["y"]
+        distances = np.sqrt(dx**2 + dy**2)
+        closest = df.iloc[distances.argmin()]
+
+        assert np.isclose(closest["x"], tree["x"]), (
+            f"{tree['type']} tree at ({tree['x']:.2f}, {tree['y']:.2f}): "
+            f"x drift = {abs(closest['x'] - tree['x']):.4f}"
+        )
+        assert np.isclose(closest["y"], tree["y"]), (
+            f"{tree['type']} tree at ({tree['x']:.2f}, {tree['y']:.2f}): "
+            f"y drift = {abs(closest['y'] - tree['y']):.4f}"
+        )
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+def test_asymmetric_crowns_chunk_invariant(
+    filter_name: str,
+    asymmetric_crown_chm: xr.DataArray,
+):
+    """Asymmetric crowns must produce identical results across chunk layouts."""
+    reference = _run_reference(filter_name, asymmetric_crown_chm)
+    square = _run_filter(
+        filter_name, _chunk_chm(asymmetric_crown_chm, {"y": 100, "x": 100})
+    )
+    asymmetric = _run_filter(
+        filter_name, _chunk_chm(asymmetric_crown_chm, {"y": 50, "x": 200})
+    )
+
+    _assert_same_output(reference, square)
+    _assert_same_output(reference, asymmetric)
+
+    if SAVE_FIG or SHOW_FIG:
+        _plot_chunked_comparison(
+            asymmetric_crown_chm,
+            {
+                "Reference (eager)": reference,
+                "4 chunks (100x100)": square,
+                "Asymmetric (50x200)": asymmetric,
+            },
+            suptitle=f"Asymmetric Crowns Chunk Invariance: {filter_name}",
+            filename=f"itd_asymmetric_chunk_invariance_{filter_name}.png",
+        )
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+def test_asymmetric_crowns_match_reference(
+    filter_name: str,
+    asymmetric_crown_chm: xr.DataArray,
+):
+    """Dask implementation must match eager scipy reference for asymmetric crowns."""
+    reference = _run_reference(filter_name, asymmetric_crown_chm)
+    result = _run_filter(filter_name, asymmetric_crown_chm)
+    _assert_same_output(result, reference)
+
+    if SAVE_FIG or SHOW_FIG:
+        ground_truth = asymmetric_crown_chm.attrs.get("ground_truth")
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), sharex=True, sharey=True)
+        _plot_chm_with_treetops(
+            ax1, asymmetric_crown_chm, reference,
+            title=f"Reference (eager scipy) — {len(reference)} treetops",
+            ground_truth=ground_truth,
+        )
+        _plot_chm_with_treetops(
+            ax2, asymmetric_crown_chm, result,
+            title=f"New (dask-image) — {len(result)} treetops",
+            ground_truth=ground_truth,
+        )
+        fig.suptitle(
+            f"Asymmetric Crowns: Reference vs New ({filter_name})",
+            fontsize=13, fontweight="bold",
+        )
+        fig.tight_layout()
+        if SAVE_FIG:
+            FIGURES_PATH.mkdir(parents=True, exist_ok=True)
+            fig.savefig(
+                FIGURES_PATH / f"itd_asymmetric_ref_vs_new_{filter_name}.png", dpi=150
+            )
+        if SHOW_FIG:
+            plt.show()
+        plt.close(fig)
 
 
 # ---------------------------------------------------------------------------
