@@ -1,18 +1,30 @@
-from typing import List, Dict, Any
-from numpy.random import Generator
+from __future__ import annotations
 
-import pytest
+import os
+import threading
+import time
+from typing import Any, Callable, Dict, List, Tuple
+
+import dask
+import dask.dataframe as dd
 import numpy as np
-import xarray as xr
-from rasterio.transform import from_origin
+import pandas as pd
+import pytest
 import rioxarray  # noqa: F401
+import xarray as xr
+from dask.callbacks import Callback
+from numpy.random import Generator
+from rasterio.transform import from_origin
 
-
+import fastfuels_core.itd.local_maxima_filter as local_maxima_filter
 from fastfuels_core.itd.local_maxima_filter import (
-    variable_window_filter,
     fixed_window_filter,
+    variable_window_filter,
 )
-
+from tests.itd.reference_local_maxima_filter import (
+    fixed_window_filter_reference,
+    variable_window_filter_reference,
+)
 
 # --- SHARED GENERATOR HELPERS ---
 
@@ -473,3 +485,339 @@ def test_mixed_morphology_extraction(mixed_morphology_chm: xr.DataArray):
 
     # We planted exactly 12 conical + 6 L-shapes = 18 trees
     assert len(df) == 18, "Algorithm failed to accurately count mixed morphologies."
+
+
+# ---------------------------------------------------------------------------
+# Helpers for new chunked-correctness tests
+# ---------------------------------------------------------------------------
+
+
+def _sort_output(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame(columns=["x", "y", "height"])
+    return df.sort_values(["x", "y", "height"]).reset_index(drop=True)
+
+
+def _assert_same_output(left: pd.DataFrame, right: pd.DataFrame) -> None:
+    pd.testing.assert_frame_equal(
+        _sort_output(left),
+        _sort_output(right),
+        check_exact=False,
+        atol=1e-9,
+        rtol=1e-9,
+    )
+
+
+def _chunk_chm(chm_da: xr.DataArray, chunking: dict[str, int]) -> xr.DataArray:
+    return chm_da.chunk(chunking)
+
+
+def _run_filter(filter_name: str, chm_da: xr.DataArray) -> pd.DataFrame:
+    if filter_name == "fixed":
+        return fixed_window_filter(
+            chm_da=chm_da,
+            min_height=2.0,
+            spatial_resolution=0.5,
+            window_size_meters=3.0,
+        ).compute()
+    if filter_name == "variable":
+        return variable_window_filter(
+            chm_da=chm_da,
+            min_height=2.0,
+            spatial_resolution=0.5,
+            crown_ratio=0.10,
+            crown_offset=1.0,
+        ).compute()
+    raise ValueError(f"Unsupported filter: {filter_name}")
+
+
+def _run_reference(filter_name: str, chm_da: xr.DataArray) -> pd.DataFrame:
+    if filter_name == "fixed":
+        return fixed_window_filter_reference(
+            chm_da=chm_da,
+            min_height=2.0,
+            spatial_resolution=0.5,
+            window_size_meters=3.0,
+        )
+    if filter_name == "variable":
+        return variable_window_filter_reference(
+            chm_da=chm_da,
+            min_height=2.0,
+            spatial_resolution=0.5,
+            crown_ratio=0.10,
+            crown_offset=1.0,
+        )
+    raise ValueError(f"Unsupported filter: {filter_name}")
+
+
+# ---------------------------------------------------------------------------
+# New fixtures for boundary and benchmark tests
+# ---------------------------------------------------------------------------
+
+
+def rio_coords(transform, row: int, col: int) -> tuple[float, float]:
+    import rasterio
+
+    x, y = rasterio.transform.xy(transform, [row], [col])
+    return float(x[0]), float(y[0])
+
+
+def generate_boundary_plateau_chm(
+    row_slice: slice,
+    col_slice: slice,
+    *,
+    width: int = 64,
+    height: int = 64,
+    pixel_size: float = 1.0,
+) -> xr.DataArray:
+    origin_x, origin_y = 1000.0, 2000.0
+    transform = from_origin(origin_x, origin_y, pixel_size, pixel_size)
+    chm_array = np.zeros((height, width), dtype=np.float64)
+    chm_array[row_slice, col_slice] = 20.0
+
+    chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+    chm_da.rio.write_crs("EPSG:32611", inplace=True)
+    chm_da.rio.write_transform(transform, inplace=True)
+    expected_x, expected_y = rio_coords(transform, row_slice.start, col_slice.start)
+    chm_da.attrs["expected_x"] = expected_x
+    chm_da.attrs["expected_y"] = expected_y
+    return chm_da
+
+
+def generate_benchmark_chm(size: int = 1024, pixel_size: float = 1.0) -> xr.DataArray:
+    origin_x, origin_y = 250000.0, 4100000.0
+    transform = from_origin(origin_x, origin_y, pixel_size, pixel_size)
+    chm_array = np.full((size, size), 0.25, dtype=np.float64)
+    y_grid, x_grid = np.ogrid[:size, :size]
+    for row, col, ht, sigma in [
+        (size // 4, size // 4, 24.0, 9.0),
+        (size // 4, (3 * size) // 4, 22.0, 8.0),
+        ((3 * size) // 4, size // 4, 21.0, 10.0),
+        ((3 * size) // 4, (3 * size) // 4, 23.0, 7.0),
+        (size // 2, size // 2, 28.0, 12.0),
+    ]:
+        dist_sq = (x_grid - col) ** 2 + (y_grid - row) ** 2
+        canopy = ht * np.exp(-dist_sq / (2 * sigma**2))
+        np.maximum(chm_array, canopy, out=chm_array)
+
+    chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+    chm_da.rio.write_crs("EPSG:32611", inplace=True)
+    chm_da.rio.write_transform(transform, inplace=True)
+    return chm_da
+
+
+@pytest.fixture
+def boundary_split_half_chm() -> xr.DataArray:
+    return generate_boundary_plateau_chm(slice(28, 32), slice(30, 34))
+
+
+@pytest.fixture
+def boundary_split_three_quarters_chm() -> xr.DataArray:
+    return generate_boundary_plateau_chm(slice(28, 32), slice(29, 33))
+
+
+@pytest.fixture
+def corner_split_chm() -> xr.DataArray:
+    return generate_boundary_plateau_chm(slice(30, 34), slice(30, 34))
+
+
+# ---------------------------------------------------------------------------
+# New tests: chunked correctness
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+def test_new_implementation_matches_eager_reference(
+    filter_name: str,
+    complex_synthetic_chm: xr.DataArray,
+):
+    """New dask-image implementation matches the old eager scipy reference."""
+    reference = _run_reference(filter_name, complex_synthetic_chm)
+    result = _run_filter(filter_name, complex_synthetic_chm)
+    _assert_same_output(result, reference)
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+def test_output_is_identical_across_chunk_layouts(
+    filter_name: str,
+    mixed_morphology_chm: xr.DataArray,
+):
+    """Results must be identical whether CHM is 1, 2, or 4 chunks."""
+    one_chunk = _run_filter(
+        filter_name, _chunk_chm(mixed_morphology_chm, {"y": 200, "x": 200})
+    )
+    two_chunks = _run_filter(
+        filter_name, _chunk_chm(mixed_morphology_chm, {"y": 200, "x": 100})
+    )
+    four_chunks = _run_filter(
+        filter_name, _chunk_chm(mixed_morphology_chm, {"y": 100, "x": 100})
+    )
+
+    _assert_same_output(one_chunk, two_chunks)
+    _assert_same_output(one_chunk, four_chunks)
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+@pytest.mark.parametrize(
+    "fixture_name",
+    [
+        "boundary_split_half_chm",
+        "boundary_split_three_quarters_chm",
+        "corner_split_chm",
+    ],
+)
+def test_boundary_straddle_plateaus_emit_one_treetop(
+    filter_name: str,
+    fixture_name: str,
+    request: pytest.FixtureRequest,
+):
+    """A flat plateau straddling a chunk boundary must produce exactly 1 treetop."""
+    boundary_chm = request.getfixturevalue(fixture_name)
+    one_chunk = _chunk_chm(boundary_chm, {"y": 64, "x": 64})
+    chunked = _chunk_chm(boundary_chm, {"y": 32, "x": 32})
+
+    reference = _run_filter(filter_name, one_chunk)
+    result = _run_filter(filter_name, chunked)
+
+    assert len(result) == 1
+    _assert_same_output(result, reference)
+
+
+def test_returned_dataframe_is_lazy(
+    mixed_morphology_chm: xr.DataArray,
+):
+    """Graph construction must not trigger computation."""
+    chunked = _chunk_chm(mixed_morphology_chm, {"y": 100, "x": 100})
+
+    class TaskCounter(Callback):
+        def __init__(self) -> None:
+            super().__init__()
+            self.task_count = 0
+
+        def _pretask(self, key, dsk, state) -> None:  # noqa: ANN001
+            self.task_count += 1
+
+    callback = TaskCounter()
+    with callback:
+        ddf = fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=0.5,
+            window_size_meters=3.0,
+        )
+
+    assert callback.task_count == 0
+    assert isinstance(ddf, dd.DataFrame)
+
+
+def test_graph_contains_more_tasks_for_multi_chunk_inputs(
+    boundary_split_half_chm: xr.DataArray,
+):
+    """More chunks should produce a larger task graph."""
+    one_chunk = fixed_window_filter(
+        chm_da=_chunk_chm(boundary_split_half_chm, {"y": 64, "x": 64}),
+        min_height=2.0,
+        spatial_resolution=1.0,
+        window_size_meters=3.0,
+    )
+    four_chunks = fixed_window_filter(
+        chm_da=_chunk_chm(boundary_split_half_chm, {"y": 32, "x": 32}),
+        min_height=2.0,
+        spatial_resolution=1.0,
+        window_size_meters=3.0,
+    )
+
+    graph_one = len(one_chunk.__dask_graph__())
+    graph_four = len(four_chunks.__dask_graph__())
+
+    assert graph_four > graph_one
+
+
+# ---------------------------------------------------------------------------
+# Benchmark and parallel execution tests (gated by env vars)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    os.getenv("RUN_HEAVY_ITD_BENCHMARK") != "1",
+    reason="Set RUN_HEAVY_ITD_BENCHMARK=1 to run the ITD benchmark suite.",
+)
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+def test_benchmark_old_vs_new_chunked(filter_name: str):
+    benchmark_chm = generate_benchmark_chm(size=1024)
+
+    def measure(label: str, runner: Callable[[], pd.DataFrame]) -> pd.DataFrame:
+        start = time.perf_counter()
+        result = runner()
+        elapsed = time.perf_counter() - start
+        print(f"{filter_name} {label}: elapsed={elapsed:.4f}s")
+        return result
+
+    reference = measure(
+        label="reference",
+        runner=lambda: _run_reference(filter_name, benchmark_chm),
+    )
+    one_chunk = measure(
+        label="new_one_chunk",
+        runner=lambda: _run_filter(
+            filter_name, _chunk_chm(benchmark_chm, {"y": 1024, "x": 1024})
+        ),
+    )
+    four_chunks = measure(
+        label="new_four_chunks",
+        runner=lambda: _run_filter(
+            filter_name, _chunk_chm(benchmark_chm, {"y": 512, "x": 512})
+        ),
+    )
+
+    _assert_same_output(reference, one_chunk)
+    _assert_same_output(one_chunk, four_chunks)
+
+
+@pytest.mark.skipif(
+    os.getenv("RUN_HEAVY_ITD_PARALLEL") != "1",
+    reason="Set RUN_HEAVY_ITD_PARALLEL=1 to run the ITD parallel-execution proof.",
+)
+def test_maximum_filter_blocks_execute_in_parallel():
+    benchmark_chm = generate_benchmark_chm(size=128)
+    chunked = _chunk_chm(benchmark_chm, {"y": 32, "x": 32})
+
+    records: list[tuple[float, float, int]] = []
+    lock = threading.Lock()
+    original_max_filter = local_maxima_filter.dask_image.ndfilters.maximum_filter
+
+    import scipy.ndimage
+
+    original_scipy_mf = scipy.ndimage.maximum_filter
+
+    def wrapped_scipy_mf(*args, **kwargs):
+        start = time.perf_counter()
+        thread_id = threading.get_ident()
+        time.sleep(0.05)
+        result = original_scipy_mf(*args, **kwargs)
+        end = time.perf_counter()
+        with lock:
+            records.append((start, end, thread_id))
+        return result
+
+    import unittest.mock
+
+    with (
+        unittest.mock.patch("scipy.ndimage.maximum_filter", wrapped_scipy_mf),
+        unittest.mock.patch("scipy.ndimage._filters.maximum_filter", wrapped_scipy_mf),
+        dask.config.set(scheduler="threads", num_workers=4),
+    ):
+        fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=1.0,
+            window_size_meters=3.0,
+        ).compute()
+
+    assert len(records) >= 4
+    assert len({thread_id for _, _, thread_id in records}) > 1
+    assert any(
+        start_a < end_b and start_b < end_a
+        for index, (start_a, end_a, _) in enumerate(records)
+        for start_b, end_b, _ in records[index + 1 :]
+    )
