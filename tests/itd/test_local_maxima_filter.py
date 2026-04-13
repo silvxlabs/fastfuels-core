@@ -3,10 +3,12 @@ from __future__ import annotations
 import os
 import threading
 import time
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Tuple
 
 import dask
 import dask.dataframe as dd
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
@@ -25,6 +27,90 @@ from tests.itd.reference_local_maxima_filter import (
     fixed_window_filter_reference,
     variable_window_filter_reference,
 )
+
+FIGURES_PATH = Path(__file__).parent / "figures"
+
+# Toggle to True to save/show diagnostic plots during test runs
+SAVE_FIG = False
+SHOW_FIG = False
+
+
+def _get_extent(chm_da: xr.DataArray) -> list[float]:
+    """Calculate real-world extent [min_x, max_x, min_y, max_y] for imshow."""
+    transform = chm_da.rio.transform()
+    width, height = chm_da.shape[1], chm_da.shape[0]
+    min_x = transform.c
+    max_y = transform.f
+    max_x = min_x + (width * transform.a)
+    min_y = max_y + (height * transform.e)
+    return [min_x, max_x, min_y, max_y]
+
+
+def _plot_chm_with_treetops(
+    ax,
+    chm_da: xr.DataArray,
+    treetops: pd.DataFrame,
+    *,
+    title: str = "",
+    ground_truth: list[dict] | None = None,
+) -> None:
+    """Plot a CHM with detected treetops overlaid."""
+    extent = _get_extent(chm_da)
+    ax.imshow(chm_da.values, extent=extent, cmap="viridis", origin="upper")
+    if ground_truth:
+        gt_x = [t["x"] for t in ground_truth]
+        gt_y = [t["y"] for t in ground_truth]
+        ax.scatter(
+            gt_x, gt_y,
+            facecolors="none", edgecolors="lime", s=150, linewidths=2,
+            label="Ground Truth",
+        )
+    ax.scatter(
+        treetops["x"], treetops["y"],
+        c="red", marker="x", s=60, linewidths=1.5,
+        label=f"Detected ({len(treetops)})",
+    )
+    ax.set_title(title)
+    ax.legend(loc="upper right", fontsize=8)
+    ax.set_xlabel("Easting (X)")
+    ax.set_ylabel("Northing (Y)")
+
+
+def _plot_chunked_comparison(
+    chm_da: xr.DataArray,
+    results: dict[str, pd.DataFrame],
+    *,
+    chunk_boundaries: list[tuple[str, list[float]]] | None = None,
+    suptitle: str = "",
+    filename: str = "",
+) -> None:
+    """Plot side-by-side comparison of results from different chunk layouts."""
+    n = len(results)
+    fig, axes = plt.subplots(1, n, figsize=(6 * n, 6), squeeze=False)
+    axes = axes[0]
+    extent = _get_extent(chm_da)
+
+    for ax, (label, df) in zip(axes, results.items()):
+        ax.imshow(chm_da.values, extent=extent, cmap="viridis", origin="upper")
+        ax.scatter(
+            df["x"], df["y"],
+            c="red", marker="x", s=80, linewidths=2,
+            label=f"Detected ({len(df)})",
+        )
+        ax.set_title(f"{label}\n{len(df)} treetops", fontsize=10)
+        ax.legend(loc="upper right", fontsize=8)
+        ax.set_xlabel("Easting (X)")
+
+    if suptitle:
+        fig.suptitle(suptitle, fontsize=13, fontweight="bold")
+    fig.tight_layout()
+    if SAVE_FIG and filename:
+        FIGURES_PATH.mkdir(parents=True, exist_ok=True)
+        fig.savefig(FIGURES_PATH / filename, dpi=150)
+    if SHOW_FIG:
+        plt.show()
+    plt.close(fig)
+
 
 # --- SHARED GENERATOR HELPERS ---
 
@@ -636,6 +722,30 @@ def test_new_implementation_matches_eager_reference(
     result = _run_filter(filter_name, complex_synthetic_chm)
     _assert_same_output(result, reference)
 
+    if SAVE_FIG or SHOW_FIG:
+        ground_truth = complex_synthetic_chm.attrs.get("ground_truth")
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), sharex=True, sharey=True)
+        _plot_chm_with_treetops(
+            ax1, complex_synthetic_chm, reference,
+            title=f"Reference (eager scipy) — {len(reference)} treetops",
+            ground_truth=ground_truth,
+        )
+        _plot_chm_with_treetops(
+            ax2, complex_synthetic_chm, result,
+            title=f"New (dask-image) — {len(result)} treetops",
+            ground_truth=ground_truth,
+        )
+        fig.suptitle(
+            f"Reference vs New: {filter_name} filter", fontsize=13, fontweight="bold"
+        )
+        fig.tight_layout()
+        if SAVE_FIG:
+            FIGURES_PATH.mkdir(parents=True, exist_ok=True)
+            fig.savefig(FIGURES_PATH / f"itd_reference_vs_new_{filter_name}.png", dpi=150)
+        if SHOW_FIG:
+            plt.show()
+        plt.close(fig)
+
 
 @pytest.mark.parametrize("filter_name", ["fixed", "variable"])
 def test_output_is_identical_across_chunk_layouts(
@@ -655,6 +765,18 @@ def test_output_is_identical_across_chunk_layouts(
 
     _assert_same_output(one_chunk, two_chunks)
     _assert_same_output(one_chunk, four_chunks)
+
+    if SAVE_FIG or SHOW_FIG:
+        _plot_chunked_comparison(
+            mixed_morphology_chm,
+            {
+                "1 chunk (200×200)": one_chunk,
+                "2 chunks (200×100)": two_chunks,
+                "4 chunks (100×100)": four_chunks,
+            },
+            suptitle=f"Chunk Layout Invariance: {filter_name} filter",
+            filename=f"itd_chunk_invariance_{filter_name}.png",
+        )
 
 
 @pytest.mark.parametrize("filter_name", ["fixed", "variable"])
@@ -681,6 +803,41 @@ def test_boundary_straddle_plateaus_emit_one_treetop(
 
     assert len(result) == 1
     _assert_same_output(result, reference)
+
+    if SAVE_FIG or SHOW_FIG:
+        extent = _get_extent(boundary_chm)
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5), sharex=True, sharey=True)
+        for ax, df, label in [
+            (ax1, reference, "1 chunk (64×64)"),
+            (ax2, result, "4 chunks (32×32)"),
+        ]:
+            ax.imshow(
+                boundary_chm.values, extent=extent, cmap="viridis", origin="upper"
+            )
+            ax.scatter(
+                df["x"], df["y"], c="red", marker="x", s=120, linewidths=2,
+                label=f"Detected ({len(df)})",
+            )
+            # Draw chunk boundaries
+            mid_x = extent[0] + (extent[1] - extent[0]) / 2
+            mid_y = extent[2] + (extent[3] - extent[2]) / 2
+            ax.axhline(mid_y, color="white", linestyle="--", alpha=0.5, linewidth=0.8)
+            ax.axvline(mid_x, color="white", linestyle="--", alpha=0.5, linewidth=0.8)
+            ax.set_title(f"{label}", fontsize=10)
+            ax.legend(loc="upper right", fontsize=8)
+        fig.suptitle(
+            f"Boundary Plateau: {fixture_name} / {filter_name}",
+            fontsize=11, fontweight="bold",
+        )
+        fig.tight_layout()
+        if SAVE_FIG:
+            FIGURES_PATH.mkdir(parents=True, exist_ok=True)
+            fig.savefig(
+                FIGURES_PATH / f"itd_boundary_{fixture_name}_{filter_name}.png", dpi=150
+            )
+        if SHOW_FIG:
+            plt.show()
+        plt.close(fig)
 
 
 def test_returned_dataframe_is_lazy(
