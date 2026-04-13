@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import rasterio as rio
 import xarray as xr
-from scipy.ndimage import label, maximum_filter, maximum_position
+from scipy.ndimage import label, maximum_filter
 
 
 def _extract_treetops_reference(
@@ -25,16 +25,17 @@ def _extract_treetops_reference(
     if num_labels == 0:
         return pd.DataFrame(columns=["x", "y", "height"])
 
-    indices = np.arange(1, num_labels + 1)
-    positions = maximum_position(chm, labels=labeled_maxima, index=indices)
+    centroid_rows = []
+    centroid_cols = []
+    heights = []
+    for lbl in range(1, num_labels + 1):
+        mask = labeled_maxima == lbl
+        r_arr, c_arr = np.where(mask)
+        centroid_rows.append(float(np.mean(r_arr)))
+        centroid_cols.append(float(np.mean(c_arr)))
+        heights.append(float(chm[r_arr[0], c_arr[0]]))
 
-    if num_labels == 1 and isinstance(positions[0], (int, np.integer)):
-        positions = [positions]
-
-    rows = [int(p[0]) for p in positions]
-    cols = [int(p[1]) for p in positions]
-    heights = chm[rows, cols]
-    xs, ys = rio.transform.xy(transform, rows, cols)
+    xs, ys = rio.transform.xy(transform, centroid_rows, centroid_cols)
 
     return pd.DataFrame({"x": xs, "y": ys, "height": heights})
 

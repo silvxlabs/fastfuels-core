@@ -4,7 +4,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List
 
 import dask
 import dask.dataframe as dd
@@ -34,7 +34,7 @@ from tests.itd.reference_local_maxima_filter import (
 FIGURES_PATH = Path(__file__).parent / "figures"
 
 # Toggle to True to save/show diagnostic plots during test runs
-SAVE_FIG = False
+SAVE_FIG = True
 SHOW_FIG = False
 
 
@@ -64,13 +64,21 @@ def _plot_chm_with_treetops(
         gt_x = [t["x"] for t in ground_truth]
         gt_y = [t["y"] for t in ground_truth]
         ax.scatter(
-            gt_x, gt_y,
-            facecolors="none", edgecolors="lime", s=150, linewidths=2,
+            gt_x,
+            gt_y,
+            facecolors="none",
+            edgecolors="lime",
+            s=150,
+            linewidths=2,
             label="Ground Truth",
         )
     ax.scatter(
-        treetops["x"], treetops["y"],
-        c="red", marker="x", s=60, linewidths=1.5,
+        treetops["x"],
+        treetops["y"],
+        c="red",
+        marker="x",
+        s=60,
+        linewidths=1.5,
         label=f"Detected ({len(treetops)})",
     )
     ax.set_title(title)
@@ -96,8 +104,12 @@ def _plot_chunked_comparison(
     for ax, (label, df) in zip(axes, results.items()):
         ax.imshow(chm_da.values, extent=extent, cmap="viridis", origin="upper")
         ax.scatter(
-            df["x"], df["y"],
-            c="red", marker="x", s=80, linewidths=2,
+            df["x"],
+            df["y"],
+            c="red",
+            marker="x",
+            s=80,
+            linewidths=2,
             label=f"Detected ({len(df)})",
         )
         ax.set_title(f"{label}\n{len(df)} treetops", fontsize=10)
@@ -729,12 +741,16 @@ def test_new_implementation_matches_eager_reference(
         ground_truth = complex_synthetic_chm.attrs.get("ground_truth")
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), sharex=True, sharey=True)
         _plot_chm_with_treetops(
-            ax1, complex_synthetic_chm, reference,
+            ax1,
+            complex_synthetic_chm,
+            reference,
             title=f"Reference (eager scipy) — {len(reference)} treetops",
             ground_truth=ground_truth,
         )
         _plot_chm_with_treetops(
-            ax2, complex_synthetic_chm, result,
+            ax2,
+            complex_synthetic_chm,
+            result,
             title=f"New (dask-image) — {len(result)} treetops",
             ground_truth=ground_truth,
         )
@@ -744,7 +760,9 @@ def test_new_implementation_matches_eager_reference(
         fig.tight_layout()
         if SAVE_FIG:
             FIGURES_PATH.mkdir(parents=True, exist_ok=True)
-            fig.savefig(FIGURES_PATH / f"itd_reference_vs_new_{filter_name}.png", dpi=150)
+            fig.savefig(
+                FIGURES_PATH / f"itd_reference_vs_new_{filter_name}.png", dpi=150
+            )
         if SHOW_FIG:
             plt.show()
         plt.close(fig)
@@ -818,7 +836,12 @@ def test_boundary_straddle_plateaus_emit_one_treetop(
                 boundary_chm.values, extent=extent, cmap="viridis", origin="upper"
             )
             ax.scatter(
-                df["x"], df["y"], c="red", marker="x", s=120, linewidths=2,
+                df["x"],
+                df["y"],
+                c="red",
+                marker="x",
+                s=120,
+                linewidths=2,
                 label=f"Detected ({len(df)})",
             )
             # Draw chunk boundaries
@@ -830,7 +853,8 @@ def test_boundary_straddle_plateaus_emit_one_treetop(
             ax.legend(loc="upper right", fontsize=8)
         fig.suptitle(
             f"Boundary Plateau: {fixture_name} / {filter_name}",
-            fontsize=11, fontweight="bold",
+            fontsize=11,
+            fontweight="bold",
         )
         fig.tight_layout()
         if SAVE_FIG:
@@ -967,16 +991,20 @@ class TestBoundaryFlagClassification:
         block[2, 5] = 1  # extends 3 rows from the edge
 
         chm_block = np.zeros((10, 10), dtype=np.float64)
-        chm_block[0, 5] = 10.0
-        chm_block[1, 5] = 15.0  # max is interior to block
-        chm_block[2, 5] = 10.0
+        chm_block[0:3, 5] = 15.0  # flat plateau (all same value)
 
         result = _extract_block_candidates(chm_block, block, row_offset=0, col_offset=0)
         assert len(result) == 1
         assert result.iloc[0]["is_boundary"] == True  # noqa: E712
-        # Max position should be at (1, 5), not the edge pixel
-        assert result.iloc[0]["row"] == 1
-        assert result.iloc[0]["col"] == 5
+        # Centroid of rows [0,1,2] col [5,5,5] → (1.0, 5.0)
+        centroid_row = (
+            result.iloc[0]["centroid_row_sum"] / result.iloc[0]["centroid_count"]
+        )
+        centroid_col = (
+            result.iloc[0]["centroid_col_sum"] / result.iloc[0]["centroid_count"]
+        )
+        assert centroid_row == pytest.approx(1.0)
+        assert centroid_col == pytest.approx(5.0)
 
     def test_empty_block_returns_empty_with_is_boundary_column(self):
         """An empty labeled block returns an empty DataFrame with is_boundary column."""
@@ -996,9 +1024,10 @@ class TestDeduplicateBoundaryCandidates:
         candidates = pd.DataFrame(
             {
                 "label": [1],
-                "row": [10],
-                "col": [20],
                 "height": [25.0],
+                "centroid_row_sum": [10.0],
+                "centroid_col_sum": [20.0],
+                "centroid_count": [1],
                 "is_boundary": [True],
             }
         )
@@ -1009,14 +1038,18 @@ class TestDeduplicateBoundaryCandidates:
         assert list(result.columns) == ["x", "y", "height"]
         assert result.iloc[0]["height"] == 25.0
 
-    def test_duplicate_label_keeps_highest(self):
-        """Two candidates with the same label: keeps the one with highest height."""
+    def test_duplicate_label_combines_centroids(self):
+        """Two candidates with the same label: centroids are combined."""
+        # Chunk A saw 4 pixels of label 1 with row_sum=10, col_sum=40
+        # Chunk B saw 4 pixels of label 1 with row_sum=14, col_sum=60
+        # Global centroid: row=(10+14)/8=3.0, col=(40+60)/8=12.5
         candidates = pd.DataFrame(
             {
                 "label": [1, 1],
-                "row": [10, 12],
-                "col": [20, 22],
-                "height": [25.0, 30.0],
+                "height": [20.0, 20.0],
+                "centroid_row_sum": [10.0, 14.0],
+                "centroid_col_sum": [40.0, 60.0],
+                "centroid_count": [4, 4],
                 "is_boundary": [True, True],
             }
         )
@@ -1024,32 +1057,38 @@ class TestDeduplicateBoundaryCandidates:
         result = _deduplicate_boundary_candidates(candidates, transform)
 
         assert len(result) == 1
-        assert result.iloc[0]["height"] == 30.0
+        expected_x, expected_y = rio.transform.xy(transform, [3.0], [12.5])
+        assert result.iloc[0]["x"] == pytest.approx(expected_x[0])
+        assert result.iloc[0]["y"] == pytest.approx(expected_y[0])
 
-    def test_tie_broken_by_raster_scan_order(self):
-        """Equal heights: picks smallest row, then smallest col."""
+    def test_multiple_labels_each_deduplicated(self):
+        """Two different labels are each independently combined."""
         candidates = pd.DataFrame(
             {
-                "label": [1, 1, 1],
-                "row": [12, 10, 10],
-                "col": [5, 8, 5],
-                "height": [20.0, 20.0, 20.0],
+                "label": [1, 1, 2],
+                "height": [20.0, 20.0, 15.0],
+                "centroid_row_sum": [5.0, 7.0, 30.0],
+                "centroid_col_sum": [10.0, 14.0, 50.0],
+                "centroid_count": [2, 2, 5],
                 "is_boundary": [True, True, True],
             }
         )
         transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
         result = _deduplicate_boundary_candidates(candidates, transform)
 
-        assert len(result) == 1
-        # row=10, col=5 wins (smallest row, then smallest col)
-        expected_x, expected_y = rio.transform.xy(transform, [10], [5])
-        assert result.iloc[0]["x"] == pytest.approx(expected_x[0])
-        assert result.iloc[0]["y"] == pytest.approx(expected_y[0])
+        assert len(result) == 2
 
     def test_empty_input_returns_empty_output(self):
         """Empty input returns empty DataFrame with correct columns."""
         candidates = pd.DataFrame(
-            columns=["label", "row", "col", "height", "is_boundary"]
+            columns=[
+                "label",
+                "height",
+                "centroid_row_sum",
+                "centroid_col_sum",
+                "centroid_count",
+                "is_boundary",
+            ]
         )
         transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
         result = _deduplicate_boundary_candidates(candidates, transform)
@@ -1255,6 +1294,103 @@ class TestInteriorBoundarySplit:
         result = _run_filter("fixed", chunked)
 
         _assert_same_output(result, reference)
+
+
+# ---------------------------------------------------------------------------
+# Input validation tests
+# ---------------------------------------------------------------------------
+
+
+class TestInputValidation:
+    """Tests for input validation in public API functions."""
+
+    def test_fixed_window_rejects_negative_min_height(self, simple_chm: xr.DataArray):
+        with pytest.raises(ValueError, match="min_height cannot be negative"):
+            fixed_window_filter(
+                chm_da=simple_chm, min_height=-1.0, spatial_resolution=0.5
+            )
+
+    def test_fixed_window_rejects_zero_spatial_resolution(
+        self, simple_chm: xr.DataArray
+    ):
+        with pytest.raises(ValueError, match="spatial_resolution must be positive"):
+            fixed_window_filter(
+                chm_da=simple_chm, min_height=2.0, spatial_resolution=0.0
+            )
+
+    def test_fixed_window_rejects_negative_spatial_resolution(
+        self, simple_chm: xr.DataArray
+    ):
+        with pytest.raises(ValueError, match="spatial_resolution must be positive"):
+            fixed_window_filter(
+                chm_da=simple_chm, min_height=2.0, spatial_resolution=-1.0
+            )
+
+    def test_variable_window_rejects_negative_min_height(
+        self, simple_chm: xr.DataArray
+    ):
+        with pytest.raises(ValueError, match="min_height cannot be negative"):
+            variable_window_filter(
+                chm_da=simple_chm, min_height=-1.0, spatial_resolution=0.5
+            )
+
+    def test_variable_window_rejects_zero_spatial_resolution(
+        self, simple_chm: xr.DataArray
+    ):
+        with pytest.raises(ValueError, match="spatial_resolution must be positive"):
+            variable_window_filter(
+                chm_da=simple_chm, min_height=2.0, spatial_resolution=0.0
+            )
+
+    def test_prepare_chm_rejects_non_2d_input(self):
+        arr = np.zeros((10, 10, 3))
+        da = xr.DataArray(arr, dims=["y", "x", "band"])
+        da.rio.write_crs("EPSG:32611", inplace=True)
+        da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
+        with pytest.raises(ValueError, match="CHM must be a 2D DataArray"):
+            fixed_window_filter(chm_da=da, min_height=2.0, spatial_resolution=1.0)
+
+    def test_fixed_window_small_window_floors_to_three(self):
+        """A window_size_meters that resolves to < 3 pixels is floored to 3."""
+        pixel_size = 1.0
+        chm_array = np.zeros((50, 50), dtype=np.float64)
+        chm_array[25, 25] = 20.0
+        chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+        chm_da.rio.write_crs("EPSG:32611", inplace=True)
+        chm_da.rio.write_transform(
+            from_origin(0, 0, pixel_size, pixel_size), inplace=True
+        )
+
+        result = fixed_window_filter(
+            chm_da=chm_da,
+            min_height=2.0,
+            spatial_resolution=pixel_size,
+            window_size_meters=1.0,  # 1.0 / 1.0 = 1 pixel, floored to 3
+        ).compute()
+        assert len(result) == 1
+
+
+# ---------------------------------------------------------------------------
+# Asymmetric chunk layout test
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+def test_asymmetric_chunk_layout(
+    filter_name: str,
+    mixed_morphology_chm: xr.DataArray,
+):
+    """Results must be identical with non-square (asymmetric) chunk layouts."""
+    reference = _run_reference(filter_name, mixed_morphology_chm)
+    tall_chunks = _run_filter(
+        filter_name, _chunk_chm(mixed_morphology_chm, {"y": 200, "x": 50})
+    )
+    wide_chunks = _run_filter(
+        filter_name, _chunk_chm(mixed_morphology_chm, {"y": 50, "x": 200})
+    )
+
+    _assert_same_output(reference, tall_chunks)
+    _assert_same_output(reference, wide_chunks)
 
 
 # ---------------------------------------------------------------------------

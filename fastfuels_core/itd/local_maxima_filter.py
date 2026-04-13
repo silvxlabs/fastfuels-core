@@ -12,7 +12,14 @@ import xarray as xr
 
 DEFAULT_CHUNK_SIZE = 2048
 
-_CANDIDATE_COLUMNS = ["label", "row", "col", "height", "is_boundary"]
+_CANDIDATE_COLUMNS = [
+    "label",
+    "height",
+    "centroid_row_sum",
+    "centroid_col_sum",
+    "centroid_count",
+    "is_boundary",
+]
 
 _OUTPUT_META = pd.DataFrame(
     {
@@ -25,16 +32,22 @@ _OUTPUT_META = pd.DataFrame(
 _CANDIDATE_META = pd.DataFrame(
     {
         "label": pd.Series(dtype="int64"),
-        "row": pd.Series(dtype="int64"),
-        "col": pd.Series(dtype="int64"),
         "height": pd.Series(dtype="float64"),
+        "centroid_row_sum": pd.Series(dtype="float64"),
+        "centroid_col_sum": pd.Series(dtype="float64"),
+        "centroid_count": pd.Series(dtype="int64"),
         "is_boundary": pd.Series(dtype="bool"),
     }
 )
 
 
 def _prepare_chm(chm_da: xr.DataArray) -> tuple[da.Array, rio.Affine]:
-    """Return the CHM as a dask array and its affine transform."""
+    """Return the CHM as a chunked dask array and its affine transform.
+
+    If the input is already dask-backed it is returned as-is. Otherwise
+    the numpy array is wrapped and chunked to ``DEFAULT_CHUNK_SIZE`` so
+    that downstream operations run in parallel.
+    """
     if chm_da.ndim != 2:
         raise ValueError("CHM must be a 2D DataArray")
 
@@ -43,7 +56,7 @@ def _prepare_chm(chm_da: xr.DataArray) -> tuple[da.Array, rio.Affine]:
     if isinstance(chm_da.data, da.Array):
         return chm_da.data, transform
 
-    return da.from_array(chm_da.values, chunks=chm_da.shape), transform
+    return da.from_array(chm_da.values, chunks=DEFAULT_CHUNK_SIZE), transform
 
 
 def _build_circular_footprint(window_size_pixels: int) -> np.ndarray:
@@ -60,12 +73,16 @@ def _extract_block_candidates(
     row_offset: int,
     col_offset: int,
 ) -> pd.DataFrame:
-    """Per-chunk extraction: find the max-value position per label within this chunk.
+    """Per-chunk extraction: compute centroid position per label within this chunk.
 
-    Uses np.argmax for position selection, which deterministically picks the
-    first occurrence in raster-scan order for tied values. This matches
-    dask_image.ndmeasure.maximum_position's behavior and guarantees identical
-    results regardless of chunk layout.
+    Within the local-maxima mask every pixel of a connected component has the
+    same CHM value (a pixel whose neighbor is higher cannot satisfy
+    ``chm == max_filter``).  The centroid of all component pixels is therefore
+    a natural, chunk-layout-invariant representative position.
+
+    Centroid components (row_sum, col_sum, count) are additive across chunks,
+    enabling exact global-centroid computation during boundary deduplication
+    without materializing all pixel coordinates.
 
     Labels touching the block edge are flagged ``is_boundary=True`` because
     they may span adjacent chunks and require cross-chunk deduplication.
@@ -87,17 +104,16 @@ def _extract_block_candidates(
     records = []
     for lbl in unique_labels:
         mask = labeled_block == lbl
-        flat_indices = np.flatnonzero(mask)
-        values = chm_block.flat[flat_indices]
-        best = np.argmax(values)
-        local_row, local_col = np.unravel_index(flat_indices[best], chm_block.shape)
+        rows_arr, cols_arr = np.where(mask)
+        n_pixels = len(rows_arr)
 
         records.append(
             {
                 "label": int(lbl),
-                "row": int(local_row) + row_offset,
-                "col": int(local_col) + col_offset,
-                "height": float(chm_block[int(local_row), int(local_col)]),
+                "height": float(chm_block[rows_arr[0], cols_arr[0]]),
+                "centroid_row_sum": float(np.sum(rows_arr)) + row_offset * n_pixels,
+                "centroid_col_sum": float(np.sum(cols_arr)) + col_offset * n_pixels,
+                "centroid_count": n_pixels,
                 "is_boundary": bool(np.any(mask & edge_mask)),
             }
         )
@@ -109,12 +125,12 @@ def _candidates_to_spatial(
     candidates: pd.DataFrame,
     transform: rio.Affine,
 ) -> pd.DataFrame:
-    """Convert row/col pixel coordinates to x/y spatial coordinates."""
+    """Convert centroid pixel coordinates to x/y spatial coordinates."""
     if candidates.empty:
         return _OUTPUT_META.copy()
 
-    rows = candidates["row"].values
-    cols = candidates["col"].values
+    rows = candidates["centroid_row_sum"].values / candidates["centroid_count"].values
+    cols = candidates["centroid_col_sum"].values / candidates["centroid_count"].values
     xs, ys = rio.transform.xy(transform, rows.tolist(), cols.tolist())
     return pd.DataFrame(
         {
@@ -144,18 +160,28 @@ def _deduplicate_boundary_candidates(
 ) -> pd.DataFrame:
     """Deduplicate boundary labels and convert to spatial coords.
 
-    For labels that span chunk boundaries, keeps the candidate with the highest
-    height value (the true maximum position). Then converts row/col pixel
-    coordinates to x/y spatial coordinates via the rasterio transform.
+    For labels that span chunk boundaries, combines centroid components
+    (row_sum, col_sum, count) across chunks to compute the exact global
+    centroid.  This is chunk-layout invariant because addition is
+    associative and commutative.
     """
     if candidates.empty:
         return _OUTPUT_META.copy()
 
-    best = candidates.sort_values(
-        ["height", "row", "col"], ascending=[False, True, True]
-    ).drop_duplicates(subset=["label"], keep="first")
+    combined = (
+        candidates.groupby("label")
+        .agg(
+            {
+                "height": "first",
+                "centroid_row_sum": "sum",
+                "centroid_col_sum": "sum",
+                "centroid_count": "sum",
+            }
+        )
+        .reset_index()
+    )
 
-    return _candidates_to_spatial(best, transform)
+    return _candidates_to_spatial(combined, transform)
 
 
 def _extract_treetops(
