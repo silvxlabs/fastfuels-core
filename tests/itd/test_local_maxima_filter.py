@@ -1848,8 +1848,9 @@ def test_maximum_filter_blocks_execute_in_parallel():
     import unittest.mock
 
     with (
-        unittest.mock.patch("scipy.ndimage.maximum_filter", wrapped_scipy_mf),
-        unittest.mock.patch("scipy.ndimage._filters.maximum_filter", wrapped_scipy_mf),
+        unittest.mock.patch.object(
+            local_maxima_filter, "scipy_maximum_filter", wrapped_scipy_mf
+        ),
         dask.config.set(scheduler="threads", num_workers=4),
     ):
         fixed_window_filter(
