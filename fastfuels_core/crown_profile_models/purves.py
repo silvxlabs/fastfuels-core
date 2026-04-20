@@ -147,12 +147,15 @@ class PurvesCrownProfile(CrownProfileModel):
             height < self.crown_base_height, height > self.height
         )
 
+        # Clip the base of the power to [0, 0.95] before exponentiation.
+        # np.where evaluates both branches, so out-of-range heights (> self.height)
+        # would otherwise produce (negative ** non_integer) → NaN + RuntimeWarning
+        # even though those cells are masked off. Clipping keeps the base real.
+        base = np.clip((self.height - height) / self.height, 0.0, 0.95) / 0.95
         radius = np.where(
             height_mask,
             0.0,
-            self.max_theoretical_crown_radius
-            * (np.minimum((self.height - height) / self.height, 0.95) / 0.95)
-            ** self.shape_parameter,
+            self.max_theoretical_crown_radius * base**self.shape_parameter,
         )
         radius = np.nan_to_num(radius, nan=0.0)
 
