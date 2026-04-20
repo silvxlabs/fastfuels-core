@@ -119,10 +119,7 @@ class BetaCrownProfile(CrownProfileModel):
         z_clipped = np.clip(z, 0.0, 1.0)
         result = np.where(
             mask,
-            (
-                (self.c * z_clipped ** (self.a - 1))
-                * ((1 - z_clipped) ** (self.b - 1))
-            )
+            ((self.c * z_clipped ** (self.a - 1)) * ((1 - z_clipped) ** (self.b - 1)))
             / self.beta_norm,
             0.0,
         )
