@@ -112,9 +112,15 @@ class BetaCrownProfile(CrownProfileModel):
         z = np.asarray(z)
         mask = (z >= 0) & (z <= 1)
 
+        # Clip z to [0, 1] before exponentiation. np.where evaluates both
+        # branches, so out-of-range z would otherwise produce
+        # (negative ** non_integer) → NaN + RuntimeWarning even though those
+        # cells are masked off. Clipping keeps both `z` and `1 - z` non-negative.
+        z_clipped = np.clip(z, 0.0, 1.0)
         result = np.where(
             mask,
-            ((self.c * z ** (self.a - 1)) * ((1 - z) ** (self.b - 1))) / self.beta_norm,
+            ((self.c * z_clipped ** (self.a - 1)) * ((1 - z_clipped) ** (self.b - 1)))
+            / self.beta_norm,
             0.0,
         )
         return np.nan_to_num(result, nan=0.0)
