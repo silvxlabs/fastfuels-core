@@ -6,6 +6,7 @@ from typing import Optional
 
 import numpy as np
 import xarray as xr
+import rioxarray  # noqa: F401 — registers the .rio accessor on xarray objects
 import geopandas as gpd
 from rasterio.transform import from_origin
 from rasterio.features import rasterize as rio_rasterize
