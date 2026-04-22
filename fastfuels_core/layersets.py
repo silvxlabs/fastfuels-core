@@ -165,7 +165,9 @@ def create_layerset(
             continue
 
         # Randomly assign loading to cover_fraction of cells within the polygon
-        loading_contribution = _sample_polygon_cells(polygon_mask, cover_fraction, rng, loading_val)
+        loading_contribution = _sample_polygon_cells(
+            polygon_mask, cover_fraction, rng, loading_val
+        )
         loading_grids[out_name] += loading_contribution
 
         # Accumulate height on filled cells; divide at the end to get per-cell average
