@@ -57,10 +57,22 @@ def _make_overlapping_gdf(height1=2.0, height2=4.0, crs=CRS):
     poly = box(0, 0, 100, 100)
     return gpd.GeoDataFrame(
         [
-            {"strata": "Shrub", "loading": 1.0, "height": height1,
-             "spatial_pattern": "Uniform", "percent_cover": 100, "geometry": poly},
-            {"strata": "Shrub", "loading": 1.0, "height": height2,
-             "spatial_pattern": "Uniform", "percent_cover": 100, "geometry": poly},
+            {
+                "strata": "Shrub",
+                "loading": 1.0,
+                "height": height1,
+                "spatial_pattern": "Uniform",
+                "percent_cover": 100,
+                "geometry": poly,
+            },
+            {
+                "strata": "Shrub",
+                "loading": 1.0,
+                "height": height2,
+                "spatial_pattern": "Uniform",
+                "percent_cover": 100,
+                "geometry": poly,
+            },
         ],
         geometry="geometry",
         crs=crs,
@@ -70,6 +82,7 @@ def _make_overlapping_gdf(height1=2.0, height2=4.0, crs=CRS):
 # ---------------------------------------------------------------------------
 # _resolve_strata_names
 # ---------------------------------------------------------------------------
+
 
 class TestResolveStrataNames:
     def test_no_trailing_digits(self):
@@ -100,6 +113,7 @@ class TestResolveStrataNames:
 # ---------------------------------------------------------------------------
 # create_layerset — validation
 # ---------------------------------------------------------------------------
+
 
 class TestCreateLayersetValidation:
     def test_raises_on_geographic_crs(self):
@@ -174,9 +188,11 @@ class TestCreateLayersetValidation:
         assert (ds["loading"] == 0).all()
         assert (ds["height"] == 0).all()
 
+
 # ---------------------------------------------------------------------------
 # create_layerset — output structure
 # ---------------------------------------------------------------------------
+
 
 class TestCreateLayersetOutput:
     def setup_method(self):
@@ -224,6 +240,7 @@ class TestCreateLayersetOutput:
 # create_layerset — external transform + shape
 # ---------------------------------------------------------------------------
 
+
 class TestCreateLayersetTransformShape:
     def test_grid_dimensions_match_shape(self):
         gdf = _make_simple_gdf()
@@ -259,16 +276,29 @@ class TestCreateLayersetTransformShape:
 # create_layerset — strata combining
 # ---------------------------------------------------------------------------
 
+
 class TestCombinePrimarySecondaryStrata:
     @staticmethod
     def _make_numbered_gdf():
         poly = box(0, 0, 100, 100)
         return gpd.GeoDataFrame(
             [
-                {"strata": "Shrub1", "loading": 1.0, "height": 2.0,
-                 "spatial_pattern": "Uniform", "percent_cover": 50, "geometry": poly},
-                {"strata": "Shrub2", "loading": 1.0, "height": 2.0,
-                 "spatial_pattern": "Uniform", "percent_cover": 50, "geometry": poly},
+                {
+                    "strata": "Shrub1",
+                    "loading": 1.0,
+                    "height": 2.0,
+                    "spatial_pattern": "Uniform",
+                    "percent_cover": 50,
+                    "geometry": poly,
+                },
+                {
+                    "strata": "Shrub2",
+                    "loading": 1.0,
+                    "height": 2.0,
+                    "spatial_pattern": "Uniform",
+                    "percent_cover": 50,
+                    "geometry": poly,
+                },
             ],
             geometry="geometry",
             crs=CRS,
@@ -281,7 +311,9 @@ class TestCombinePrimarySecondaryStrata:
 
     def test_combine_false_yields_two_strata(self):
         gdf = self._make_numbered_gdf()
-        ds = create_layerset(gdf, RESOLUTION, seed=SEED, combine_primary_secondary_strata=False)
+        ds = create_layerset(
+            gdf, RESOLUTION, seed=SEED, combine_primary_secondary_strata=False
+        )
         strata = ds.coords["strata"].to_index().tolist()
         assert "Shrub_primary" in strata
         assert "Shrub_secondary" in strata
@@ -290,6 +322,7 @@ class TestCombinePrimarySecondaryStrata:
 # ---------------------------------------------------------------------------
 # create_layerset — height_func
 # ---------------------------------------------------------------------------
+
 
 class TestHeightFunc:
     def test_default_is_mean(self):
@@ -301,11 +334,14 @@ class TestHeightFunc:
             ds_default["height"].values, ds_mean["height"].values
         )
 
-    @pytest.mark.parametrize("func, expected_val", [
-        (np.mean, 3.0),
-        (np.min, 2.0),
-        (np.max, 4.0),
-    ])
+    @pytest.mark.parametrize(
+        "func, expected_val",
+        [
+            (np.mean, 3.0),
+            (np.min, 2.0),
+            (np.max, 4.0),
+        ],
+    )
     def test_height_functions(self, func, expected_val):
         gdf = _make_overlapping_gdf(height1=2.0, height2=4.0)
         ds = create_layerset(gdf, RESOLUTION, height_func=func)
@@ -317,12 +353,30 @@ class TestHeightFunc:
         poly = box(0, 0, 100, 100)
         gdf = gpd.GeoDataFrame(
             [
-                {"strata": "Shrub", "loading": 1.0, "height": 1.0,
-                 "spatial_pattern": "Uniform", "percent_cover": 100, "geometry": poly},
-                {"strata": "Shrub", "loading": 1.0, "height": 2.0,
-                 "spatial_pattern": "Uniform", "percent_cover": 100, "geometry": poly},
-                {"strata": "Shrub", "loading": 1.0, "height": 3.0,
-                 "spatial_pattern": "Uniform", "percent_cover": 100, "geometry": poly},
+                {
+                    "strata": "Shrub",
+                    "loading": 1.0,
+                    "height": 1.0,
+                    "spatial_pattern": "Uniform",
+                    "percent_cover": 100,
+                    "geometry": poly,
+                },
+                {
+                    "strata": "Shrub",
+                    "loading": 1.0,
+                    "height": 2.0,
+                    "spatial_pattern": "Uniform",
+                    "percent_cover": 100,
+                    "geometry": poly,
+                },
+                {
+                    "strata": "Shrub",
+                    "loading": 1.0,
+                    "height": 3.0,
+                    "spatial_pattern": "Uniform",
+                    "percent_cover": 100,
+                    "geometry": poly,
+                },
             ],
             geometry="geometry",
             crs=CRS,
@@ -335,8 +389,16 @@ class TestHeightFunc:
         """A cell covered by only one polygon keeps that polygon's height for all funcs."""
         poly = box(0, 0, 100, 100)
         gdf = gpd.GeoDataFrame(
-            [{"strata": "Shrub", "loading": 1.0, "height": 5.0,
-              "spatial_pattern": "Uniform", "percent_cover": 100, "geometry": poly}],
+            [
+                {
+                    "strata": "Shrub",
+                    "loading": 1.0,
+                    "height": 5.0,
+                    "spatial_pattern": "Uniform",
+                    "percent_cover": 100,
+                    "geometry": poly,
+                }
+            ],
             geometry="geometry",
             crs=CRS,
         )
@@ -350,6 +412,7 @@ class TestHeightFunc:
 # create_layerset — values
 # ---------------------------------------------------------------------------
 
+
 class TestCreateLayersetValues:
     def test_loading_nonnegative(self):
         ds = create_layerset(_make_simple_gdf(), RESOLUTION, seed=SEED)
@@ -362,16 +425,27 @@ class TestCreateLayersetValues:
     def test_full_cover_loading_equals_polygon_value(self):
         poly = box(0, 0, 100, 100)
         gdf = gpd.GeoDataFrame(
-            [{"strata": "Shrub", "loading": 2.5, "height": 1.0,
-              "spatial_pattern": "Uniform", "percent_cover": 100, "geometry": poly}],
-            geometry="geometry", crs=CRS,
+            [
+                {
+                    "strata": "Shrub",
+                    "loading": 2.5,
+                    "height": 1.0,
+                    "spatial_pattern": "Uniform",
+                    "percent_cover": 100,
+                    "geometry": poly,
+                }
+            ],
+            geometry="geometry",
+            crs=CRS,
         )
         ds = create_layerset(gdf, RESOLUTION)
         loading = ds["loading"].sel(strata="Shrub").values
         np.testing.assert_allclose(loading[loading > 0], 2.5)
 
     def test_loading_accumulates_across_overlapping_polygons(self):
-        gdf = _make_overlapping_gdf(height1=1, height2=1)  # two rows, each loading=1.0, 100% cover
+        gdf = _make_overlapping_gdf(
+            height1=1, height2=1
+        )  # two rows, each loading=1.0, 100% cover
         ds = create_layerset(gdf, RESOLUTION)
         loading = ds["loading"].sel(strata="Shrub").values
         np.testing.assert_allclose(loading[loading > 0], 2.0)
@@ -379,9 +453,18 @@ class TestCreateLayersetValues:
     def test_loading_zero_outside_polygon(self):
         poly = box(0, 0, 50, 50)
         gdf = gpd.GeoDataFrame(
-            [{"strata": "Shrub", "loading": 3.0, "height": 1.0,
-              "spatial_pattern": "Uniform", "percent_cover": 100, "geometry": poly}],
-            geometry="geometry", crs=CRS,
+            [
+                {
+                    "strata": "Shrub",
+                    "loading": 3.0,
+                    "height": 1.0,
+                    "spatial_pattern": "Uniform",
+                    "percent_cover": 100,
+                    "geometry": poly,
+                }
+            ],
+            geometry="geometry",
+            crs=CRS,
         )
         # Grid larger than the polygon so cells outside it exist
         tf = from_origin(0, 100, RESOLUTION, RESOLUTION)
@@ -404,10 +487,19 @@ class TestCreateLayersetValues:
 
     def test_percent_cover(self):
         poly = box(0, 0, 100, 100)
-        gdf = gpd.GeoDataFrame([{
-            "strata": "Shrub", "loading": 1.0, "height": 1.0,
-            "spatial_pattern": "Uniform", "percent_cover": 50, "geometry": poly
-        }], crs=CRS)
+        gdf = gpd.GeoDataFrame(
+            [
+                {
+                    "strata": "Shrub",
+                    "loading": 1.0,
+                    "height": 1.0,
+                    "spatial_pattern": "Uniform",
+                    "percent_cover": 50,
+                    "geometry": poly,
+                }
+            ],
+            crs=CRS,
+        )
 
         ds = create_layerset(gdf, horizontal_resolution=1.0, seed=42)
         loading = ds["loading"].sel(strata="Shrub").values
@@ -422,6 +514,7 @@ class TestCreateLayersetValues:
 # ---------------------------------------------------------------------------
 # create_layerset — real data (integration)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not LAYERSETS_PARQUET.exists(), reason="sample parquet not present")
 class TestCreateLayersetIntegration:
