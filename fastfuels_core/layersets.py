@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import re
 import warnings
-from typing import Optional
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 import xarray as xr
 import rioxarray  # noqa: F401 — registers the .rio accessor on xarray objects
 import geopandas as gpd
-from rasterio.transform import from_origin
+from rasterio.transform import Affine, from_origin
 from rasterio.features import rasterize as rio_rasterize
 
 
@@ -62,9 +62,12 @@ def _resolve_strata_names(
 
 def create_layerset(
     gdf: gpd.GeoDataFrame,
-    horizontal_resolution: float,
+    horizontal_resolution: Optional[float] = None,
     seed: Optional[int] = None,
     combine_primary_secondary_strata: bool = True,
+    transform: Optional[Affine] = None,
+    shape: Optional[Tuple[int, int]] = None,
+    height_func: Callable = np.mean,
 ) -> xr.Dataset:
     """
     Create a 2D layerset xarray Dataset from a surface fuels GeoDataFrame.
@@ -74,14 +77,26 @@ def create_layerset(
     gdf : GeoDataFrame
         Surface fuels data with columns: strata, loading, height, spatial_pattern,
         percent_cover, and a geometry column. Must be in a projected CRS.
-    horizontal_resolution : float
-        Output grid cell size in CRS units (applied to both x and y).
+    horizontal_resolution : float, optional
+        Output grid cell size in CRS units (applied to both x and y). Required
+        when ``transform`` and ``shape`` are not provided.
     seed : int, optional
         Seed for the random number generator used in percent-cover sampling.
     combine_primary_secondary_strata : bool
         If True, strata names with trailing digits are merged (e.g., Shrub1 and
         Shrub2 both become Shrub). If False, digit 1 maps to _primary and digit
         2 maps to _secondary.
+    transform : Affine, optional
+        Rasterio affine transform defining the output grid origin and resolution.
+        Must be provided together with ``shape``; if omitted the grid is derived
+        from the GeoDataFrame extent and ``horizontal_resolution``.
+    shape : tuple of (int, int), optional
+        Output grid dimensions as ``(n_rows, n_cols)``. Must be provided together
+        with ``transform``.
+    height_func : callable
+        Reduction applied when multiple polygons contribute height to the same
+        cell. Supported values are ``np.mean`` (default), ``np.min``, and
+        ``np.max`` (and their ``nan``-aware equivalents).
 
     Returns
     -------
@@ -124,20 +139,35 @@ def create_layerset(
     strata_mapping = _resolve_strata_names(raw_strata, combine_primary_secondary_strata)
     output_strata = list(dict.fromkeys(strata_mapping.values()))
 
-    # Build grid dimensions from the extent of filtered data
-    minx, miny, maxx, maxy = gdf_filtered.total_bounds
-    n_cols = int(np.ceil((maxx - minx) / horizontal_resolution))
-    n_rows = int(np.ceil((maxy - miny) / horizontal_resolution))
+    # Build grid dimensions from external transform+shape or from the GDF extent
+    if (transform is None) != (shape is None):
+        raise ValueError(
+            "'transform' and 'shape' must be provided together or not at all."
+        )
 
-    transform = from_origin(minx, maxy, horizontal_resolution, horizontal_resolution)
+    if transform is not None:
+        n_rows, n_cols = shape
+    else:
+        if horizontal_resolution is None:
+            raise ValueError(
+                "horizontal_resolution is required when transform and shape are not provided."
+            )
+        minx, miny, maxx, maxy = gdf_filtered.total_bounds
+        n_cols = int(np.ceil((maxx - minx) / horizontal_resolution))
+        n_rows = int(np.ceil((maxy - miny) / horizontal_resolution))
+        transform = from_origin(
+            minx, maxy, horizontal_resolution, horizontal_resolution
+        )
 
-    x_coords = minx + (np.arange(n_cols) + 0.5) * horizontal_resolution
-    y_coords = maxy - (np.arange(n_rows) + 0.5) * horizontal_resolution
+    # Cell-center coordinates derived uniformly from the affine transform
+    x_coords = transform.c + (np.arange(n_cols) + 0.5) * transform.a
+    y_coords = transform.f + (np.arange(n_rows) + 0.5) * transform.e
 
     loading_grids = {s: np.zeros((n_rows, n_cols), dtype=float) for s in output_strata}
     height_grids = {s: np.zeros((n_rows, n_cols), dtype=float) for s in output_strata}
-    # Track how many polygons contributed to each cell for averaging
     hit_counts = {s: np.zeros((n_rows, n_cols), dtype=int) for s in output_strata}
+
+    _is_mean = height_func is np.mean
 
     rng = np.random.default_rng(seed)
 
@@ -159,7 +189,7 @@ def create_layerset(
 
         if not polygon_mask.any():
             warnings.warn(
-                f"Polygon for strata '{row['strata']}' (fccs_id={row.get('fccs_id', 'N/A')}) "
+                f"Polygon for strata '{row['strata']}' (fuelbed_num={row.get('fuelbed_num', 'N/A')}) "
                 "does not intersect any grid cells at the given resolution and will be skipped.",
                 stacklevel=2,
             )
@@ -171,15 +201,31 @@ def create_layerset(
         )
         loading_grids[out_name] += loading_contribution
 
-        # Accumulate height on filled cells; divide at the end to get per-cell average
+        # Update height in-place
         filled_cells = loading_contribution > 0
-        height_grids[out_name][filled_cells] += height_val
         hit_counts[out_name][filled_cells] += 1
 
-    # Finalize height as average across all polygons that filled each cell
-    for s in output_strata:
-        nonzero = hit_counts[s] > 0
-        height_grids[s][nonzero] /= hit_counts[s][nonzero]
+        if _is_mean:
+            # Accumulate sum; divide by hit_counts after the loop for exact mean
+            height_grids[out_name][filled_cells] += height_val
+        else:
+            # First hit sets the value; subsequent hits reduce pairwise with height_func
+            first_hit = filled_cells & (hit_counts[out_name] == 1)
+            multi_hit = filled_cells & (hit_counts[out_name] > 1)
+            height_grids[out_name][first_hit] = height_val
+            if multi_hit.any():
+                height_grids[out_name][multi_hit] = height_func(
+                    [
+                        height_grids[out_name][multi_hit],
+                        np.full(multi_hit.sum(), height_val),
+                    ],
+                    axis=0,
+                )
+
+    if _is_mean:
+        for s in output_strata:
+            multi = hit_counts[s] > 1
+            height_grids[s][multi] /= hit_counts[s][multi]
 
     coords = {"strata": output_strata, "y": y_coords, "x": x_coords}
     ds = xr.Dataset(
