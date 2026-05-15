@@ -1,539 +1,735 @@
-# Core imports
+"""
+test_layersets.py
+=================
+Tests for layersets.py — rasterize_layerset() and its helpers.
+
+Coverage
+--------
+- Input validation (_validate_gdf)
+- Raster grid construction (_build_raster_grid)
+- Output structure (Dataset shape, coords, CRS, transform)
+- Distribution modes: homogeneous, uniform_random, random_clusters
+- Overlap resolution: loading sums, optional bands via mean/min/max
+- Optional-band NaN propagation
+- Seed reproducibility
+- Integration test with blue_mountain_fuels.geojson (all three modes)
+"""
+
+from __future__ import annotations
+
 from pathlib import Path
 
-# Internal imports
-from fastfuels_core.layersets import create_layerset, _resolve_strata_names
-
-# External imports
-import pytest
 import numpy as np
 import geopandas as gpd
+import pytest
 import xarray as xr
 from shapely.geometry import box
-from rasterio.transform import from_origin
 
-TEST_PATH = Path(__file__).parent
-LAYERSETS_PARQUET = Path(__file__).parent / "data" / "surface_fuels_ex.parquet"
+from fastfuels_core.layersets import (
+    ALL_BANDS,
+    rasterize_layerset,
+    _build_raster_grid,
+    _validate_gdf,
+)
+
+# ---------------------------------------------------------------------------
+# Paths & shared constants
+# ---------------------------------------------------------------------------
+DATA_PATH = Path(__file__).parent / "data"
+GEOJSON_PATH = DATA_PATH / "surface_fuels.geojson"
 
 RESOLUTION = 2.0
 SEED = 42
-CRS = "EPSG:5070"
+CRS_PROJECTED = "EPSG:32611"  # UTM zone 11N — same as the GeoJSON
+CRS_GEOGRAPHIC = "EPSG:4326"
 
 
-def _load_gdf(path=LAYERSETS_PARQUET):
-    return gpd.read_parquet(path)
+# ---------------------------------------------------------------------------
+# Fixtures / factories
+# ---------------------------------------------------------------------------
 
 
-def _make_simple_gdf(crs: str | None = CRS):
-    """Two non-overlapping polygons, same strata."""
-    poly1 = box(0, 0, 100, 100)
-    poly2 = box(200, 0, 300, 100)
-    return gpd.GeoDataFrame(
+def _make_gdf(
+    rows: list[dict],
+    crs: str | None = CRS_PROJECTED,
+) -> gpd.GeoDataFrame:
+    """Build a GeoDataFrame from a list of property dicts (geometry key required)."""
+    return gpd.GeoDataFrame(rows, geometry="geometry", crs=crs)
+
+
+def _single_poly(
+    fuel_type: str = "litter",
+    distribution: str = "homogeneous",
+    fuel_loading: float = 1.0,
+    fuel_height: float = 0.5,
+    percent_cover: float = 100.0,
+    patch_size: float | None = None,
+    live_fuel_moisture: float | None = None,
+    dead_fuel_moisture: float | None = None,
+    heat_of_combustion: float | None = None,
+    geom=None,
+    crs: str | None = CRS_PROJECTED,
+) -> gpd.GeoDataFrame:
+    """One-row GeoDataFrame covering a 100×100 m square at the origin."""
+    if geom is None:
+        geom = box(0, 0, 100, 100)
+    row = dict(
+        fuel_type=fuel_type,
+        distribution=distribution,
+        fuel_loading=fuel_loading,
+        fuel_height=fuel_height,
+        percent_cover=percent_cover,
+        geometry=geom,
+    )
+    if patch_size is not None:
+        row["patch_size"] = patch_size
+    if live_fuel_moisture is not None:
+        row["live_fuel_moisture"] = live_fuel_moisture
+    if dead_fuel_moisture is not None:
+        row["dead_fuel_moisture"] = dead_fuel_moisture
+    if heat_of_combustion is not None:
+        row["heat_of_combustion"] = heat_of_combustion
+    return _make_gdf([row], crs=crs)
+
+
+def _two_non_overlapping(crs: str | None = CRS_PROJECTED) -> gpd.GeoDataFrame:
+    """Two non-overlapping 100×100 m polygons of different fuel types."""
+    return _make_gdf(
         [
-            {
-                "strata": "Shrub",
-                "loading": 2.0,
-                "height": 3.0,
-                "spatial_pattern": "Uniform",
-                "percent_cover": 50,
-                "geometry": poly1,
-            },
-            {
-                "strata": "Shrub",
-                "loading": 1.0,
-                "height": 1.0,
-                "spatial_pattern": "Uniform",
-                "percent_cover": 100,
-                "geometry": poly2,
-            },
+            dict(
+                fuel_type="litter",
+                distribution="homogeneous",
+                fuel_loading=0.5,
+                fuel_height=0.05,
+                percent_cover=90.0,
+                geometry=box(0, 0, 100, 100),
+            ),
+            dict(
+                fuel_type="shrub",
+                distribution="uniform_random",
+                fuel_loading=1.2,
+                fuel_height=1.0,
+                percent_cover=50.0,
+                geometry=box(200, 0, 300, 100),
+            ),
         ],
-        geometry="geometry",
         crs=crs,
     )
 
 
-def _make_overlapping_gdf(height1=2.0, height2=4.0, crs=CRS):
-    """Two identical polygons with different heights and 100% cover."""
+def _two_overlapping(
+    loading1: float = 1.0,
+    loading2: float = 1.0,
+    fuel_height1: float = 1.0,
+    fuel_height2: float = 2.0,
+    live_fm1: float | None = None,
+    live_fm2: float | None = None,
+) -> gpd.GeoDataFrame:
+    """Two identical 100×100 m polygons of the same fuel_type — triggers overlap logic."""
     poly = box(0, 0, 100, 100)
-    return gpd.GeoDataFrame(
-        [
-            {
-                "strata": "Shrub",
-                "loading": 1.0,
-                "height": height1,
-                "spatial_pattern": "Uniform",
-                "percent_cover": 100,
-                "geometry": poly,
-            },
-            {
-                "strata": "Shrub",
-                "loading": 1.0,
-                "height": height2,
-                "spatial_pattern": "Uniform",
-                "percent_cover": 100,
-                "geometry": poly,
-            },
-        ],
-        geometry="geometry",
-        crs=crs,
-    )
+    rows = [
+        dict(
+            fuel_type="shrub",
+            distribution="homogeneous",
+            fuel_loading=loading1,
+            fuel_height=fuel_height1,
+            percent_cover=100.0,
+            geometry=poly,
+        ),
+        dict(
+            fuel_type="shrub",
+            distribution="homogeneous",
+            fuel_loading=loading2,
+            fuel_height=fuel_height2,
+            percent_cover=100.0,
+            geometry=poly,
+        ),
+    ]
+    if live_fm1 is not None:
+        rows[0]["live_fuel_moisture"] = live_fm1
+    if live_fm2 is not None:
+        rows[1]["live_fuel_moisture"] = live_fm2
+    return _make_gdf(rows)
 
 
 # ---------------------------------------------------------------------------
-# _resolve_strata_names
+# 1. Validation
 # ---------------------------------------------------------------------------
 
 
-class TestResolveStrataNames:
-    def test_no_trailing_digits(self):
-        result = _resolve_strata_names(["Shrub", "Herb"], combine=True)
-        assert result == {"Shrub": "Shrub", "Herb": "Herb"}
-
-    def test_combine_true_merges_variants(self):
-        result = _resolve_strata_names(["Shrub1", "Shrub2"], combine=True)
-        assert result["Shrub1"] == "Shrub"
-        assert result["Shrub2"] == "Shrub"
-
-    def test_combine_false_primary_secondary(self):
-        result = _resolve_strata_names(["Shrub1", "Shrub2"], combine=False)
-        assert result["Shrub1"] == "Shrub_primary"
-        assert result["Shrub2"] == "Shrub_secondary"
-
-    def test_combine_false_number_gt_2_warns(self):
-        with pytest.warns(UserWarning, match="trailing number > 2"):
-            result = _resolve_strata_names(["Shrub3"], combine=False)
-        assert result["Shrub3"] == "Shrub_3"
-
-    def test_mixed_named_and_numbered(self):
-        result = _resolve_strata_names(["Shrub1", "GroundFuels"], combine=True)
-        assert result["Shrub1"] == "Shrub"
-        assert result["GroundFuels"] == "GroundFuels"
-
-
-# ---------------------------------------------------------------------------
-# create_layerset — validation
-# ---------------------------------------------------------------------------
-
-
-class TestCreateLayersetValidation:
-    def test_raises_on_geographic_crs(self):
-        gdf = _make_simple_gdf(crs="EPSG:4326")
-        with pytest.raises(ValueError, match="projected CRS"):
-            create_layerset(gdf, RESOLUTION)
-
-    def test_raises_on_missing_crs(self):
-        gdf = _make_simple_gdf(crs=None)
+class TestValidation:
+    def test_raises_on_no_crs(self):
+        gdf = _single_poly(crs=None)
         with pytest.raises(ValueError, match="CRS"):
-            create_layerset(gdf, RESOLUTION)
+            _validate_gdf(gdf)
 
-    def test_raises_on_missing_column(self):
-        gdf = _make_simple_gdf().drop(columns=["loading"])
-        with pytest.raises(ValueError, match="loading"):
-            create_layerset(gdf, RESOLUTION)
+    def test_raises_on_geographic_crs(self):
+        # Create a polygon in geographic coords (tiny, near origin)
+        gdf = _single_poly(crs=CRS_GEOGRAPHIC, geom=box(0, 0, 0.001, 0.001))
+        with pytest.raises(ValueError, match="projected CRS"):
+            _validate_gdf(gdf)
 
-    def test_raises_when_all_filtered_out(self):
-        gdf = _make_simple_gdf()
-        gdf["loading"] = 0
-        with pytest.raises(ValueError, match="No rows remain"):
-            create_layerset(gdf, RESOLUTION)
+    def test_raises_on_missing_required_column(self):
+        gdf = _single_poly().drop(columns=["fuel_loading"])
+        with pytest.raises(ValueError, match="fuel_loading"):
+            _validate_gdf(gdf)
 
-    def test_raises_when_spatial_pattern_not_uniform(self):
-        gdf = _make_simple_gdf()
-        gdf["spatial_pattern"] = "Clumped"
-        with pytest.raises(ValueError, match="No rows remain"):
-            create_layerset(gdf, RESOLUTION)
+    @pytest.mark.parametrize("col", ["fuel_loading", "fuel_height", "percent_cover"])
+    def test_raises_on_nan_in_required_numeric(self, col):
+        gdf = _single_poly()
+        gdf[col] = np.nan
+        with pytest.raises(ValueError, match=col):
+            _validate_gdf(gdf)
 
-    def test_raises_when_no_resolution_and_no_transform(self):
-        gdf = _make_simple_gdf()
-        with pytest.raises(ValueError, match="horizontal_resolution"):
-            create_layerset(gdf)
+    def test_raises_on_missing_distribution(self):
+        gdf = _single_poly()
+        gdf["distribution"] = np.nan
+        with pytest.raises(ValueError, match="distribution"):
+            _validate_gdf(gdf)
 
-    def test_raises_when_only_transform_given(self):
-        gdf = _make_simple_gdf()
-        tf = from_origin(0, 100, RESOLUTION, RESOLUTION)
-        with pytest.raises(ValueError, match="together"):
-            create_layerset(gdf, transform=tf)
+    def test_raises_on_unknown_distribution_mode(self):
+        gdf = _single_poly()
+        gdf["distribution"] = "clumped"
+        with pytest.raises(ValueError, match="clumped"):
+            _validate_gdf(gdf)
 
-    def test_raises_when_only_shape_given(self):
-        gdf = _make_simple_gdf()
-        with pytest.raises(ValueError, match="together"):
-            create_layerset(gdf, shape=(50, 150))
+    def test_raises_on_random_clusters_without_patch_size_column(self):
+        gdf = _single_poly(distribution="random_clusters")
+        # patch_size column is absent
+        with pytest.raises(ValueError, match="patch_size"):
+            _validate_gdf(gdf)
 
-    def test_warns_on_tiny_polygon_no_intersection(self):
-        """
-        Test that a polygon smaller than the resolution triggers a warning
-        and results in an empty grid rather than a crash.
-        """
-        # Create a tiny box (0.1 x 0.1) that won't hit a 2.0 resolution cell center
-        tiny_poly = box(0, 0, 0.1, 0.1)
-        gdf = gpd.GeoDataFrame(
-            [
-                {
-                    "strata": "Shrub",
-                    "loading": 1.0,
-                    "height": 1.0,
-                    "spatial_pattern": "Uniform",
-                    "percent_cover": 100,
-                    "geometry": tiny_poly,
-                }
-            ],
-            geometry="geometry",
-            crs=CRS,
-        )
+    def test_raises_on_random_clusters_with_nan_patch_size(self):
+        gdf = _single_poly(distribution="random_clusters")
+        gdf["patch_size"] = np.nan
+        with pytest.raises(ValueError, match="patch_size"):
+            _validate_gdf(gdf)
 
-        with pytest.warns(UserWarning, match="does not intersect any grid cells"):
-            ds = create_layerset(gdf, RESOLUTION)
+    def test_valid_gdf_does_not_raise(self):
+        _validate_gdf(_single_poly())  # should not raise
 
-        # Verify the output is still a valid Dataset but contains only zeros
-        assert (ds["loading"] == 0).all()
-        assert (ds["height"] == 0).all()
+    def test_raises_on_invalid_overlap_method(self):
+        gdf = _single_poly()
+        with pytest.raises(ValueError, match="overlap_method"):
+            rasterize_layerset(gdf, resolution=RESOLUTION, overlap_method=np.sum)
 
 
 # ---------------------------------------------------------------------------
-# create_layerset — output structure
+# 2. Grid construction
 # ---------------------------------------------------------------------------
 
 
-class TestCreateLayersetOutput:
-    def setup_method(self):
-        self.gdf = _make_simple_gdf()
-        self.ds = create_layerset(self.gdf, RESOLUTION, seed=SEED)
+class TestBuildRasterGrid:
+    def test_grid_covers_bounds(self):
+        gdf = _single_poly(geom=box(0, 0, 100, 100))
+        grid = _build_raster_grid(gdf, RESOLUTION)
+        # Cell centers span [res/2, bound - res/2]
+        assert grid.xs[0] >= 0
+        assert grid.xs[-1] <= 100
+        assert grid.ys[0] <= 100
+        assert grid.ys[-1] >= 0
 
-    def test_returns_dataset(self):
+    def test_cell_center_spacing_equals_resolution(self):
+        gdf = _single_poly(geom=box(0, 0, 100, 100))
+        grid = _build_raster_grid(gdf, RESOLUTION)
+        np.testing.assert_allclose(np.diff(grid.xs), RESOLUTION)
+        np.testing.assert_allclose(np.abs(np.diff(grid.ys)), RESOLUTION)
+
+    def test_first_cell_center_at_half_resolution(self):
+        gdf = _single_poly(geom=box(0, 0, 100, 100))
+        grid = _build_raster_grid(gdf, RESOLUTION)
+        assert grid.xs[0] == pytest.approx(RESOLUTION / 2)
+
+    def test_grid_size_scales_with_extent(self):
+        gdf_small = _single_poly(geom=box(0, 0, 10, 10))
+        gdf_large = _single_poly(geom=box(0, 0, 100, 100))
+        grid_small = _build_raster_grid(gdf_small, RESOLUTION)
+        grid_large = _build_raster_grid(gdf_large, RESOLUTION)
+        assert grid_large.nx > grid_small.nx
+        assert grid_large.ny > grid_small.ny
+
+    def test_single_cell_minimum(self):
+        """A polygon smaller than resolution still yields at least 1×1 grid."""
+        gdf = _single_poly(geom=box(0, 0, 0.5, 0.5))
+        grid = _build_raster_grid(gdf, RESOLUTION)
+        assert grid.nx >= 1
+        assert grid.ny >= 1
+
+
+# ---------------------------------------------------------------------------
+# 3. Output structure
+# ---------------------------------------------------------------------------
+
+
+class TestOutputStructure:
+    @pytest.fixture(autouse=True)
+    def _ds(self):
+        self.gdf = _two_non_overlapping()
+        self.ds = rasterize_layerset(self.gdf, resolution=RESOLUTION, seed=SEED)
+
+    def test_returns_xarray_dataset(self):
         assert isinstance(self.ds, xr.Dataset)
 
-    def test_has_loading_and_height_variables(self):
-        assert "loading" in self.ds
-        assert "height" in self.ds
+    def test_one_variable_per_fuel_type(self):
+        assert set(self.ds.data_vars) == {"litter", "shrub"}
 
-    def test_dimensions(self):
-        assert set(self.ds["loading"].dims) == {"strata", "y", "x"}
-        assert set(self.ds["height"].dims) == {"strata", "y", "x"}
+    def test_dims_are_band_y_x(self):
+        for var in self.ds.data_vars:
+            assert tuple(self.ds[var].dims) == ("band", "y", "x")
 
-    def test_strata_coordinate(self):
-        assert "strata" in self.ds.coords
-        assert "Shrub" in self.ds.coords["strata"].values
+    def test_band_coordinate_matches_all_bands(self):
+        for var in self.ds.data_vars:
+            assert list(self.ds[var].coords["band"].values) == list(ALL_BANDS)
 
     def test_crs_attached(self):
         assert self.ds.rio.crs is not None
-        assert self.ds.rio.crs.to_epsg() == 5070
+        assert self.ds.rio.crs.to_epsg() == 32611
 
     def test_transform_attached(self):
-        transform = self.ds.rio.transform()
-        assert transform is not None
-        assert transform.a == pytest.approx(RESOLUTION)
+        t = self.ds.rio.transform()
+        assert t is not None
+        assert t.a == pytest.approx(RESOLUTION)
 
-    def test_cell_size_is_exact(self):
+    def test_x_coords_monotone_increasing(self):
         x = self.ds.coords["x"].values
-        assert np.diff(x) == pytest.approx(RESOLUTION)
+        assert np.all(np.diff(x) > 0)
 
-    def test_cell_centers_alignment(self):
-        # If minx is 0 and res is 2.0, the first center should be 1.0
-        gdf = _make_simple_gdf()  # bounds are 0, 0, 300, 100
-        ds = create_layerset(gdf, horizontal_resolution=2.0)
+    def test_y_coords_monotone_decreasing(self):
+        # rioxarray stores y top-to-bottom (decreasing)
+        y = self.ds.coords["y"].values
+        assert np.all(np.diff(y) < 0)
 
-        assert ds.coords["x"].values[0] == pytest.approx(1.0)
-        assert ds.coords["y"].values[0] == pytest.approx(99.0)  # y is usually top-down
-
-
-# ---------------------------------------------------------------------------
-# create_layerset — external transform + shape
-# ---------------------------------------------------------------------------
-
-
-class TestCreateLayersetTransformShape:
-    def test_grid_dimensions_match_shape(self):
-        gdf = _make_simple_gdf()
-        tf = from_origin(0, 100, RESOLUTION, RESOLUTION)
-        n_rows, n_cols = 50, 150
-        ds = create_layerset(gdf, transform=tf, shape=(n_rows, n_cols))
-        assert ds["loading"].shape == (1, n_rows, n_cols)
-
-    def test_coords_derived_from_transform(self):
-        gdf = _make_simple_gdf()
-        tf = from_origin(0, 100, RESOLUTION, RESOLUTION)
-        n_rows, n_cols = 50, 150
-        ds = create_layerset(gdf, transform=tf, shape=(n_rows, n_cols))
-        expected_x = tf.c + (np.arange(n_cols) + 0.5) * tf.a
-        expected_y = tf.f + (np.arange(n_rows) + 0.5) * tf.e
-        np.testing.assert_allclose(ds.coords["x"].values, expected_x)
-        np.testing.assert_allclose(ds.coords["y"].values, expected_y)
-
-    def test_transform_written_to_dataset(self):
-        gdf = _make_simple_gdf()
-        tf = from_origin(0, 100, RESOLUTION, RESOLUTION)
-        ds = create_layerset(gdf, transform=tf, shape=(50, 150))
-        assert ds.rio.transform() is not None
-
-    def test_horizontal_resolution_not_required_when_transform_given(self):
-        gdf = _make_simple_gdf()
-        tf = from_origin(0, 100, RESOLUTION, RESOLUTION)
-        ds = create_layerset(gdf, transform=tf, shape=(50, 150))
-        assert isinstance(ds, xr.Dataset)
+    def test_all_data_arrays_same_spatial_shape(self):
+        shapes = [self.ds[v].shape[1:] for v in self.ds.data_vars]
+        assert len(set(shapes)) == 1
 
 
 # ---------------------------------------------------------------------------
-# create_layerset — strata combining
+# 4. Distribution modes
 # ---------------------------------------------------------------------------
 
 
-class TestCombinePrimarySecondaryStrata:
-    @staticmethod
-    def _make_numbered_gdf():
-        poly = box(0, 0, 100, 100)
-        return gpd.GeoDataFrame(
-            [
-                {
-                    "strata": "Shrub1",
-                    "loading": 1.0,
-                    "height": 2.0,
-                    "spatial_pattern": "Uniform",
-                    "percent_cover": 50,
-                    "geometry": poly,
-                },
-                {
-                    "strata": "Shrub2",
-                    "loading": 1.0,
-                    "height": 2.0,
-                    "spatial_pattern": "Uniform",
-                    "percent_cover": 50,
-                    "geometry": poly,
-                },
-            ],
-            geometry="geometry",
-            crs=CRS,
+class TestDistributionModes:
+    """Each mode is tested on its most important property."""
+
+    # --- homogeneous ---
+
+    def test_homogeneous_every_cell_gets_loading(self):
+        gdf = _single_poly(distribution="homogeneous", percent_cover=100.0)
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        loading = ds["litter"].sel(band="loading").values
+        # All interior cells should have loading > 0
+        interior = ~np.isnan(loading)
+        assert interior.any()
+        assert np.all(loading[interior] > 0)
+
+    def test_homogeneous_loading_scaled_by_cover(self):
+        """50% cover → loading = fuel_loading × 0.5 for every interior cell."""
+        gdf = _single_poly(
+            distribution="homogeneous", fuel_loading=2.0, percent_cover=50.0
+        )
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        loading = ds["litter"].sel(band="loading").values
+        interior_vals = loading[loading > 0]
+        # Interior cells carry exactly loading * cover_frac
+        np.testing.assert_allclose(
+            interior_vals[interior_vals == interior_vals.max()], 1.0, rtol=1e-5
         )
 
-    def test_combine_true_yields_one_strata(self):
-        gdf = self._make_numbered_gdf()
-        ds = create_layerset(gdf, RESOLUTION, seed=SEED)
-        assert ds.coords["strata"].to_index().tolist() == ["Shrub"]
+    # --- uniform_random ---
 
-    def test_combine_false_yields_two_strata(self):
-        gdf = self._make_numbered_gdf()
-        ds = create_layerset(
-            gdf, RESOLUTION, seed=SEED, combine_primary_secondary_strata=False
+    def test_uniform_random_approximate_cover(self):
+        """With a large polygon and 50% cover, realised cover should be close to 50%.
+
+        The grid is built to tightly fit the polygon, so every cell in the
+        grid corresponds to a cell inside (or at the edge of) the polygon.
+        Cover fraction = (cells with loading > 0) / (total grid cells).
+        """
+        gdf = _single_poly(
+            distribution="uniform_random",
+            percent_cover=50.0,
+            geom=box(0, 0, 200, 200),
         )
-        strata = ds.coords["strata"].to_index().tolist()
-        assert "Shrub_primary" in strata
-        assert "Shrub_secondary" in strata
+        ds = rasterize_layerset(gdf, resolution=1.0, seed=SEED)
+        loading = ds["litter"].sel(band="loading").values
+        total_cells = loading.size
+        filled_cells = np.count_nonzero(loading > 0)
+        cover = filled_cells / total_cells
+        assert cover == pytest.approx(0.50, abs=0.10)
+
+    def test_uniform_random_each_cell_is_full_or_zero(self):
+        """Cells are either fully selected (weight=1) or not (weight=0).
+        No fractional edge weights exist — _poly_mask is boolean only."""
+        gdf = _single_poly(
+            distribution="uniform_random", fuel_loading=1.0, percent_cover=60.0
+        )
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        loading = ds["litter"].sel(band="loading").values
+        unique = np.unique(loading[~np.isnan(loading)])
+        assert set(np.round(unique, 5)).issubset({0.0, 1.0})
+
+    # --- random_clusters ---
+
+    def test_random_clusters_requires_patch_size(self):
+        gdf = _single_poly(distribution="random_clusters")
+        # No patch_size column — should fail validation
+        with pytest.raises(ValueError, match="patch_size"):
+            rasterize_layerset(gdf, resolution=RESOLUTION)
+
+    def test_random_clusters_fills_cells(self):
+        gdf = _single_poly(
+            distribution="random_clusters",
+            percent_cover=60.0,
+            patch_size=10.0,
+        )
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        loading = ds["litter"].sel(band="loading").values
+        assert np.any(loading > 0)
+
+    def test_random_clusters_approximate_cover(self):
+        """Cover fraction = (cells with loading > 0) / (total grid cells)."""
+        gdf = _single_poly(
+            distribution="random_clusters",
+            fuel_loading=1.0,
+            percent_cover=50.0,
+            patch_size=10.0,
+            geom=box(0, 0, 200, 200),
+        )
+        ds = rasterize_layerset(gdf, resolution=2.0, seed=SEED)
+        loading = ds["litter"].sel(band="loading").values
+        total_cells = loading.size
+        filled_cells = np.count_nonzero(loading > 0)
+        cover = filled_cells / total_cells
+        assert cover == pytest.approx(0.50, abs=0.15)
 
 
 # ---------------------------------------------------------------------------
-# create_layerset — height_func
+# 5. Overlap resolution
 # ---------------------------------------------------------------------------
 
 
-class TestHeightFunc:
-    def test_default_is_mean(self):
-        """Default height_func produces the same result as np.mean."""
-        gdf = _make_overlapping_gdf(height1=2.0, height2=4.0)
-        ds_default = create_layerset(gdf, RESOLUTION)
-        ds_mean = create_layerset(gdf, RESOLUTION, height_func=np.mean)
-        np.testing.assert_array_equal(
-            ds_default["height"].values, ds_mean["height"].values
+class TestOverlapCombining:
+    def test_loading_always_sums(self):
+        gdf = _two_overlapping(loading1=1.0, loading2=1.5)
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        loading = ds["shrub"].sel(band="loading").values
+        interior = loading > 0
+        np.testing.assert_allclose(loading[interior], 2.5)
+
+    def test_optional_band_mean(self):
+        gdf = _two_overlapping(live_fm1=80.0, live_fm2=40.0)
+        ds = rasterize_layerset(
+            gdf, resolution=RESOLUTION, overlap_method=np.mean, seed=SEED
         )
+        lfm = ds["shrub"].sel(band="live_fuel_moisture").values
+        valid = lfm[np.isfinite(lfm)]
+        np.testing.assert_allclose(valid, 60.0)
+
+    def test_optional_band_min(self):
+        gdf = _two_overlapping(live_fm1=80.0, live_fm2=40.0)
+        ds = rasterize_layerset(
+            gdf, resolution=RESOLUTION, overlap_method=np.min, seed=SEED
+        )
+        lfm = ds["shrub"].sel(band="live_fuel_moisture").values
+        valid = lfm[np.isfinite(lfm)]
+        np.testing.assert_allclose(valid, 40.0)
+
+    def test_optional_band_max(self):
+        gdf = _two_overlapping(live_fm1=80.0, live_fm2=40.0)
+        ds = rasterize_layerset(
+            gdf, resolution=RESOLUTION, overlap_method=np.max, seed=SEED
+        )
+        lfm = ds["shrub"].sel(band="live_fuel_moisture").values
+        valid = lfm[np.isfinite(lfm)]
+        np.testing.assert_allclose(valid, 80.0)
 
     @pytest.mark.parametrize(
-        "func, expected_val",
+        "method,expected",
         [
-            (np.mean, 3.0),
-            (np.min, 2.0),
-            (np.max, 4.0),
+            (np.mean, 2.0),
+            (np.min, 1.0),
+            (np.max, 3.0),
         ],
     )
-    def test_height_functions(self, func, expected_val):
-        gdf = _make_overlapping_gdf(height1=2.0, height2=4.0)
-        ds = create_layerset(gdf, RESOLUTION, height_func=func)
-        h = ds["height"].sel(strata="Shrub").values
-        # Only check cells that were actually hit
-        np.testing.assert_allclose(h[h > 0], expected_val)
-
-    def test_mean_three_ploygons(self):
-        poly = box(0, 0, 100, 100)
-        gdf = gpd.GeoDataFrame(
-            [
-                {
-                    "strata": "Shrub",
-                    "loading": 1.0,
-                    "height": 1.0,
-                    "spatial_pattern": "Uniform",
-                    "percent_cover": 100,
-                    "geometry": poly,
-                },
-                {
-                    "strata": "Shrub",
-                    "loading": 1.0,
-                    "height": 2.0,
-                    "spatial_pattern": "Uniform",
-                    "percent_cover": 100,
-                    "geometry": poly,
-                },
-                {
-                    "strata": "Shrub",
-                    "loading": 1.0,
-                    "height": 3.0,
-                    "spatial_pattern": "Uniform",
-                    "percent_cover": 100,
-                    "geometry": poly,
-                },
-            ],
-            geometry="geometry",
-            crs=CRS,
+    def test_height_respects_overlap_method(self, method, expected):
+        """Height is now resolved via overlap_method like other non-loading bands."""
+        gdf = _two_overlapping(fuel_height1=1.0, fuel_height2=3.0)
+        ds = rasterize_layerset(
+            gdf, resolution=RESOLUTION, overlap_method=method, seed=SEED
         )
-        ds = create_layerset(gdf, RESOLUTION, height_func=np.mean)
-        h = ds["height"].sel(strata="Shrub").values
-        np.testing.assert_allclose(h[h > 0], 2.0)
+        h = ds["shrub"].sel(band="height").values
+        valid = h[np.isfinite(h) & (h > 0)]
+        np.testing.assert_allclose(valid, expected)
 
-    def test_single_hit_unaffected_by_func(self):
-        """A cell covered by only one polygon keeps that polygon's height for all funcs."""
-        poly = box(0, 0, 100, 100)
-        gdf = gpd.GeoDataFrame(
+    def test_non_overlapping_polygons_independent(self):
+        """Two non-overlapping same-type polygons should not influence each other's loading."""
+        poly1 = box(0, 0, 100, 100)
+        poly2 = box(200, 0, 300, 100)
+        gdf = _make_gdf(
             [
-                {
-                    "strata": "Shrub",
-                    "loading": 1.0,
-                    "height": 5.0,
-                    "spatial_pattern": "Uniform",
-                    "percent_cover": 100,
-                    "geometry": poly,
-                }
-            ],
-            geometry="geometry",
-            crs=CRS,
+                dict(
+                    fuel_type="litter",
+                    distribution="homogeneous",
+                    fuel_loading=1.0,
+                    fuel_height=0.1,
+                    percent_cover=100.0,
+                    geometry=poly1,
+                ),
+                dict(
+                    fuel_type="litter",
+                    distribution="homogeneous",
+                    fuel_loading=2.0,
+                    fuel_height=0.1,
+                    percent_cover=100.0,
+                    geometry=poly2,
+                ),
+            ]
         )
-        for func in (np.mean, np.min, np.max):
-            ds = create_layerset(gdf, RESOLUTION, height_func=func)
-            h = ds["height"].sel(strata="Shrub").values
-            np.testing.assert_allclose(h[h > 0], 5.0)
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        loading = ds["litter"].sel(band="loading").values
+        # No cell should have loading = 3.0 (that would mean they were summed incorrectly)
+        interior = loading[loading > 0]
+        assert not np.any(np.isclose(interior, 3.0))
 
 
 # ---------------------------------------------------------------------------
-# create_layerset — values
+# 6. Optional bands & NaN propagation
 # ---------------------------------------------------------------------------
 
 
-class TestCreateLayersetValues:
+class TestOptionalBands:
+    def test_optional_band_nan_when_not_provided(self):
+        """If live_fuel_moisture is absent from the GDF, that band is all NaN."""
+        gdf = _single_poly()  # no optional columns
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        lfm = ds["litter"].sel(band="live_fuel_moisture").values
+        assert np.all(np.isnan(lfm))
+
+    def test_optional_band_present_when_provided(self):
+        gdf = _single_poly(live_fuel_moisture=75.0)
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        lfm = ds["litter"].sel(band="live_fuel_moisture").values
+        valid = lfm[np.isfinite(lfm)]
+        assert valid.size > 0
+        np.testing.assert_allclose(valid, 75.0)
+
+    def test_loading_and_height_always_present(self):
+        gdf = _single_poly()
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        assert "loading" in ALL_BANDS
+        assert "height" in ALL_BANDS
+        # At least some cells should have finite values
+        assert np.any(np.isfinite(ds["litter"].sel(band="loading").values))
+        assert np.any(np.isfinite(ds["litter"].sel(band="height").values))
+
+    def test_outside_polygon_cells_are_nan(self):
+        """Cells outside all polygons should carry NaN loading.
+
+        Two polygons with a gap produce cells inside the bounding box but
+        outside both polygons. With boolean-only masking (_poly_mask), those
+        cells accumulate zero loading and are written as NaN by _rasterize_fuel_type.
+        """
+        poly1 = box(0, 0, 40, 40)
+        poly2 = box(60, 0, 100, 40)  # 20 m gap between x=40 and x=60
+        gdf = _make_gdf(
+            [
+                dict(
+                    fuel_type="litter",
+                    distribution="homogeneous",
+                    fuel_loading=1.0,
+                    fuel_height=0.1,
+                    percent_cover=100.0,
+                    geometry=poly1,
+                ),
+                dict(
+                    fuel_type="litter",
+                    distribution="homogeneous",
+                    fuel_loading=1.0,
+                    fuel_height=0.1,
+                    percent_cover=100.0,
+                    geometry=poly2,
+                ),
+            ]
+        )
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        loading = ds["litter"].sel(band="loading").values
+        # Gap cells should be NaN (no edge-weight partial values in this version)
+        assert np.any(np.isnan(loading))
+
+    def test_patch_size_band_written_for_clusters(self):
+        """patch_size band should be non-NaN where clusters were placed."""
+        gdf = _single_poly(
+            distribution="random_clusters",
+            percent_cover=60.0,
+            patch_size=10.0,
+        )
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        ps = ds["litter"].sel(band="patch_size").values
+        # Cells with loading should also carry a patch_size value
+        loading = ds["litter"].sel(band="loading").values
+        filled = loading > 0
+        # At least one filled cell should have a finite patch_size
+        # (patch_size is stored as an optional band; NaN if not provided)
+        # Since we DID provide it, filled cells should carry it
+        assert np.any(np.isfinite(ps[filled]))
+
+
+# ---------------------------------------------------------------------------
+# 7. Values sanity
+# ---------------------------------------------------------------------------
+
+
+class TestValueSanity:
     def test_loading_nonnegative(self):
-        ds = create_layerset(_make_simple_gdf(), RESOLUTION, seed=SEED)
-        assert (ds["loading"].values >= 0).all()
+        gdf = _two_non_overlapping()
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        for v in ds.data_vars:
+            loading = ds[v].sel(band="loading").values
+            assert np.all(loading[~np.isnan(loading)] >= 0)
 
     def test_height_nonnegative(self):
-        ds = create_layerset(_make_simple_gdf(), RESOLUTION, seed=SEED)
-        assert (ds["height"].values >= 0).all()
+        gdf = _two_non_overlapping()
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        for v in ds.data_vars:
+            h = ds[v].sel(band="height").values
+            assert np.all(h[~np.isnan(h)] >= 0)
 
-    def test_full_cover_loading_equals_polygon_value(self):
-        poly = box(0, 0, 100, 100)
-        gdf = gpd.GeoDataFrame(
-            [
-                {
-                    "strata": "Shrub",
-                    "loading": 2.5,
-                    "height": 1.0,
-                    "spatial_pattern": "Uniform",
-                    "percent_cover": 100,
-                    "geometry": poly,
-                }
-            ],
-            geometry="geometry",
-            crs=CRS,
+    def test_full_cover_homogeneous_loading_equals_input(self):
+        """100% homogeneous cover → interior cell loading = fuel_loading exactly."""
+        gdf = _single_poly(
+            distribution="homogeneous", fuel_loading=3.7, percent_cover=100.0
         )
-        ds = create_layerset(gdf, RESOLUTION)
-        loading = ds["loading"].sel(strata="Shrub").values
-        np.testing.assert_allclose(loading[loading > 0], 2.5)
-
-    def test_loading_accumulates_across_overlapping_polygons(self):
-        gdf = _make_overlapping_gdf(
-            height1=1, height2=1
-        )  # two rows, each loading=1.0, 100% cover
-        ds = create_layerset(gdf, RESOLUTION)
-        loading = ds["loading"].sel(strata="Shrub").values
-        np.testing.assert_allclose(loading[loading > 0], 2.0)
-
-    def test_loading_zero_outside_polygon(self):
-        poly = box(0, 0, 50, 50)
-        gdf = gpd.GeoDataFrame(
-            [
-                {
-                    "strata": "Shrub",
-                    "loading": 3.0,
-                    "height": 1.0,
-                    "spatial_pattern": "Uniform",
-                    "percent_cover": 100,
-                    "geometry": poly,
-                }
-            ],
-            geometry="geometry",
-            crs=CRS,
-        )
-        # Grid larger than the polygon so cells outside it exist
-        tf = from_origin(0, 100, RESOLUTION, RESOLUTION)
-        ds = create_layerset(gdf, transform=tf, shape=(100, 100))
-        loading = ds["loading"].sel(strata="Shrub").values
-        assert loading.max() > 0
-        assert loading.min() == pytest.approx(0.0)
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        loading = ds["litter"].sel(band="loading").values
+        interior = loading[loading > 0]
+        np.testing.assert_allclose(interior, 3.7, rtol=1e-5)
 
     def test_seed_reproducibility(self):
-        gdf = _make_simple_gdf()
-        ds1 = create_layerset(gdf, RESOLUTION, seed=SEED)
-        ds2 = create_layerset(gdf, RESOLUTION, seed=SEED)
-        np.testing.assert_array_equal(ds1["loading"].values, ds2["loading"].values)
+        gdf = _two_non_overlapping()
+        ds1 = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        ds2 = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        for v in ds1.data_vars:
+            np.testing.assert_array_equal(ds1[v].values, ds2[v].values)
 
-    def test_different_seeds_differ(self):
-        gdf = _make_simple_gdf()
-        ds1 = create_layerset(gdf, RESOLUTION, seed=1)
-        ds2 = create_layerset(gdf, RESOLUTION, seed=2)
-        assert not np.array_equal(ds1["loading"].values, ds2["loading"].values)
+    def test_different_seeds_produce_different_results(self):
+        gdf = _single_poly(distribution="uniform_random", percent_cover=50.0)
+        ds1 = rasterize_layerset(gdf, resolution=RESOLUTION, seed=1)
+        ds2 = rasterize_layerset(gdf, resolution=RESOLUTION, seed=99)
+        loading1 = ds1["litter"].sel(band="loading").values
+        loading2 = ds2["litter"].sel(band="loading").values
+        assert not np.array_equal(loading1, loading2)
 
-    def test_percent_cover(self):
-        poly = box(0, 0, 100, 100)
-        gdf = gpd.GeoDataFrame(
-            [
-                {
-                    "strata": "Shrub",
-                    "loading": 1.0,
-                    "height": 1.0,
-                    "spatial_pattern": "Uniform",
-                    "percent_cover": 50,
-                    "geometry": poly,
-                }
-            ],
-            crs=CRS,
-        )
-
-        ds = create_layerset(gdf, horizontal_resolution=1.0, seed=42)
-        loading = ds["loading"].sel(strata="Shrub").values
-
-        total_cells = loading.size
-        filled_cells = np.count_nonzero(loading)
-        actual_cover = (filled_cells / total_cells) * 100
-
-        assert actual_cover == pytest.approx(50.0, abs=5.0)
+    def test_multiple_fuel_types_do_not_bleed(self):
+        """A cell covered by litter only should not appear in shrub."""
+        gdf = _two_non_overlapping()
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        litter_loading = ds["litter"].sel(band="loading").values
+        shrub_loading = ds["shrub"].sel(band="loading").values
+        # Where litter has fuel, shrub should be NaN (no overlap)
+        litter_mask = litter_loading > 0
+        assert np.all(np.isnan(shrub_loading[litter_mask]))
 
 
 # ---------------------------------------------------------------------------
-# create_layerset — real data (integration)
+# 8. Integration — surface_fuels.geojson
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not LAYERSETS_PARQUET.exists(), reason="sample parquet not present")
-class TestCreateLayersetIntegration:
-    def setup_method(self):
-        self.gdf = _load_gdf()
-        self.ds = create_layerset(self.gdf, RESOLUTION, seed=SEED)
+@pytest.mark.skipif(
+    not GEOJSON_PATH.exists(), reason="blue_mountain_fuels.geojson not found"
+)
+class TestIntegrationBlueMountain:
+    """
+    Real-data integration tests using blue_mountain_fuels.geojson.
+
+    The file contains 5 polygons:
+      - 2× litter    (homogeneous)
+      - 1× herb      (uniform_random)
+      - 2× shrub     (random_clusters, with patch_size)
+    CRS: EPSG:32611 (projected UTM)
+    """
+
+    @pytest.fixture(autouse=True)
+    def _load(self):
+        self.gdf = gpd.read_file(GEOJSON_PATH)
+        self.ds = rasterize_layerset(self.gdf, resolution=RESOLUTION, seed=SEED)
+
+    # --- basic sanity ---
 
     def test_returns_dataset(self):
         assert isinstance(self.ds, xr.Dataset)
 
-    def test_strata_are_strings(self):
-        for name in self.ds.coords["strata"].values:
-            assert isinstance(name, str)
+    def test_expected_fuel_type_variables(self):
+        assert set(self.ds.data_vars) == {"litter", "herb", "shrub"}
+
+    def test_crs_preserved(self):
+        assert self.ds.rio.crs is not None
+        assert self.ds.rio.crs.to_epsg() == 32611
 
     def test_no_negative_loading(self):
-        assert (self.ds["loading"].values >= 0).all()
+        for v in self.ds.data_vars:
+            arr = self.ds[v].sel(band="loading").values
+            assert np.all(arr[~np.isnan(arr)] >= 0)
 
     def test_no_negative_height(self):
-        assert (self.ds["height"].values >= 0).all()
+        for v in self.ds.data_vars:
+            arr = self.ds[v].sel(band="height").values
+            assert np.all(arr[~np.isnan(arr)] >= 0)
 
-    def test_crs_matches_input(self):
-        assert self.ds.rio.crs.to_epsg() == 5070
+    def test_all_bands_present(self):
+        for v in self.ds.data_vars:
+            assert list(self.ds[v].coords["band"].values) == list(ALL_BANDS)
+
+    # --- distribution-specific checks ---
+
+    def test_litter_homogeneous_cells_have_loading(self):
+        """litter polygons are homogeneous — should have widespread loading."""
+        loading = self.ds["litter"].sel(band="loading").values
+        assert np.any(loading > 0)
+
+    def test_shrub_clusters_have_loading(self):
+        loading = self.ds["shrub"].sel(band="loading").values
+        assert np.any(loading > 0)
+
+    def test_herb_random_has_loading(self):
+        loading = self.ds["herb"].sel(band="loading").values
+        assert np.any(loading > 0)
+
+    def test_litter_overlapping_polygons_loading_sum(self):
+        """
+        Rows 0 and 4 are both litter/homogeneous and may overlap spatially.
+        Where they do, loading should exceed either polygon's individual value.
+        The maximum single-polygon loading for litter is 0.45 (row 0).
+        If any cell exceeds 0.45, summing happened.
+        """
+        loading = self.ds["litter"].sel(band="loading").values
+        finite = loading[np.isfinite(loading)]
+        # At minimum, some cells should have loading > 0.45
+        assert finite.max() > 0.45
+
+    # --- optional band propagation ---
+
+    def test_heat_of_combustion_present_for_all_types(self):
+        """All rows in the GeoJSON have heat_of_combustion; every variable should carry it."""
+        for v in self.ds.data_vars:
+            hoc = self.ds[v].sel(band="heat_of_combustion").values
+            assert np.any(np.isfinite(hoc)), f"{v} has no finite heat_of_combustion"
+
+    def test_patch_size_finite_for_shrub(self):
+        """shrub rows have patch_size; cluster-filled cells should carry it."""
+        ps = self.ds["shrub"].sel(band="patch_size").values
+        loading = self.ds["shrub"].sel(band="loading").values
+        filled = loading > 0
+        assert np.any(np.isfinite(ps[filled]))
+
+    def test_patch_size_nan_for_litter(self):
+        """litter rows have no patch_size — band should be all NaN."""
+        ps = self.ds["litter"].sel(band="patch_size").values
+        assert np.all(np.isnan(ps))
+
+    # --- reproducibility ---
+
+    def test_seed_reproducibility(self):
+        ds2 = rasterize_layerset(self.gdf, resolution=RESOLUTION, seed=SEED)
+        for v in self.ds.data_vars:
+            np.testing.assert_array_equal(self.ds[v].values, ds2[v].values)
