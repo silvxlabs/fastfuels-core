@@ -1,0 +1,221 @@
+{
+  "type": "FeatureCollection",
+  "name": "blue_mountain_fuels",
+  "crs": {
+    "type": "name",
+    "properties": {
+      "name": "urn:ogc:def:crs:EPSG::32611"
+    }
+  },
+  "comment": "Example fuel polygons on the east-facing lower slopes of Blue Mountain, Missoula MT. Coordinates in UTM Zone 11N (EPSG:32611). Fuel types and values are illustrative but ecologically plausible for ponderosa pine / bunchgrass / shrub mosaic typical of this elevation (~1000-1200m).",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "fuel_type": "litter",
+        "distribution": "homogeneous",
+        "fuel_loading": 0.45,
+        "fuel_height": 0.04,
+        "percent_cover": 95.0,
+        "dead_fuel_moisture": 8.0,
+        "heat_of_combustion": 18500.0,
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              719600,
+              5190400
+            ],
+            [
+              720000,
+              5190400
+            ],
+            [
+              720000,
+              5190000
+            ],
+            [
+              719600,
+              5190000
+            ],
+            [
+              719600,
+              5190400
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "fuel_type": "herb",
+        "distribution": "uniform_random",
+        "fuel_loading": 0.28,
+        "fuel_height": 0.35,
+        "percent_cover": 65.0,
+        "live_fuel_moisture": 75.0,
+        "dead_fuel_moisture": 12.0,
+        "heat_of_combustion": 17800.0,
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              719650,
+              5190350
+            ],
+            [
+              719950,
+              5190350
+            ],
+            [
+              719950,
+              5190100
+            ],
+            [
+              719700,
+              5190050
+            ],
+            [
+              719650,
+              5190150
+            ],
+            [
+              719650,
+              5190350
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "fuel_type": "shrub",
+        "distribution": "random_clusters",
+        "fuel_loading": 0.65,
+        "fuel_height": 0.9,
+        "percent_cover": 40.0,
+        "patch_size": 8.0,
+        "live_fuel_moisture": 85.0,
+        "dead_fuel_moisture": 20.0,
+        "heat_of_combustion": 19200.0,
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              719620,
+              5190380
+            ],
+            [
+              719880,
+              5190380
+            ],
+            [
+              719900,
+              5190220
+            ],
+            [
+              719780,
+              5190160
+            ],
+            [
+              719620,
+              5190200
+            ],
+            [
+              719620,
+              5190380
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "fuel_type": "shrub",
+        "distribution": "random_clusters",
+        "fuel_loading": 0.5,
+        "fuel_height": 0.75,
+        "percent_cover": 30.0,
+        "patch_size": 6.0,
+        "live_fuel_moisture": 90.0,
+        "dead_fuel_moisture": 18.0,
+        "heat_of_combustion": 19000.0,
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              719760,
+              5190280
+            ],
+            [
+              719980,
+              5190280
+            ],
+            [
+              719980,
+              5190080
+            ],
+            [
+              719760,
+              5190080
+            ],
+            [
+              719760,
+              5190280
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "fuel_type": "litter",
+        "distribution": "homogeneous",
+        "fuel_loading": 0.3,
+        "fuel_height": 0.03,
+        "percent_cover": 80.0,
+        "dead_fuel_moisture": 10.0,
+        "heat_of_combustion": 18200.0,
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              719800,
+              5190300
+            ],
+            [
+              720000,
+              5190300
+            ],
+            [
+              720000,
+              5190000
+            ],
+            [
+              719800,
+              5190000
+            ],
+            [
+              719800,
+              5190300
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}
