@@ -43,7 +43,10 @@ def voxelize_tree(
 
     vr_subgrid = kwargs.get("vr_subgrid", 0.1)
     crown_profile_mask = discretize_crown_profile(
-        tree, horizontal_resolution, vertical_resolution, centering=centering,
+        tree,
+        horizontal_resolution,
+        vertical_resolution,
+        centering=centering,
         vr_subgrid=vr_subgrid,
     )
 
@@ -71,9 +74,7 @@ def discretize_crown_profile(
     # Validate that vr_subgrid divides evenly into vr
     ratio = vr / vr_subgrid
     if not math.isclose(ratio, round(ratio)):
-        raise ValueError(
-            f"vr_subgrid ({vr_subgrid}) must divide evenly into vr ({vr})"
-        )
+        raise ValueError(f"vr_subgrid ({vr_subgrid}) must divide evenly into vr ({vr})")
 
     # Get the horizontal and vertical coordinates of the tree crown
     horizontal_coords = _get_horizontal_tree_coords(
@@ -143,7 +144,13 @@ def _get_horizontal_tree_coords(
 
 
 def _discretize_crown_profile_quadrant(
-    tree: "Tree", x_pts, y_pts, z_pts, hr, vr, full_intersection=False,
+    tree: "Tree",
+    x_pts,
+    y_pts,
+    z_pts,
+    hr,
+    vr,
+    full_intersection=False,
     vr_subgrid=0.1,
 ):
     """

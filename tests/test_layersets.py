@@ -211,6 +211,29 @@ class TestValidation:
     def test_valid_gdf_does_not_raise(self):
         _validate_gdf(_single_poly())  # should not raise
 
+    def test_raises_on_empty_gdf(self):
+        gdf = gpd.GeoDataFrame(
+            {
+                "fuel_type": [],
+                "fuel_loading": [],
+                "fuel_height": [],
+                "percent_cover": [],
+                "distribution": [],
+                "geometry": [],
+            },
+            geometry="geometry",
+            crs=CRS_PROJECTED,
+        )
+        with pytest.raises(ValueError, match="empty"):
+            _validate_gdf(gdf)
+
+    @pytest.mark.parametrize("bad_value", [-5.0, 150.0])
+    def test_raises_on_percent_cover_out_of_range(self, bad_value):
+        gdf = _single_poly()
+        gdf["percent_cover"] = bad_value
+        with pytest.raises(ValueError, match="percent_cover"):
+            _validate_gdf(gdf)
+
     def test_raises_on_invalid_overlap_method(self):
         gdf = _single_poly()
         with pytest.raises(ValueError, match="overlap_method"):
@@ -637,15 +660,13 @@ class TestValueSanity:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    not GEOJSON_PATH.exists(), reason="blue_mountain_fuels.geojson not found"
-)
-class TestIntegrationBlueMountain:
+@pytest.mark.skipif(not GEOJSON_PATH.exists(), reason="surface_fuels.geojson not found")
+class TestIntegrationSurfaceFuels:
     """
-    Real-data integration tests using blue_mountain_fuels.geojson.
+    Real-data integration tests using surface_fuels.geojson.
 
     The file contains 5 polygons:
-      - 2× litter    (homogeneous)
+      - 2× litter    (homogeneous; rows 0 and 4 overlap by 60000 m²)
       - 1× herb      (uniform_random)
       - 2× shrub     (random_clusters, with patch_size)
     CRS: EPSG:32611 (projected UTM)
@@ -699,15 +720,15 @@ class TestIntegrationBlueMountain:
 
     def test_litter_overlapping_polygons_loading_sum(self):
         """
-        Rows 0 and 4 are both litter/homogeneous and may overlap spatially.
-        Where they do, loading should exceed either polygon's individual value.
-        The maximum single-polygon loading for litter is 0.45 (row 0).
-        If any cell exceeds 0.45, summing happened.
+        Rows 0 and 4 are both litter/homogeneous and overlap by 60000 m².
+        Where they overlap, loading should sum:
+          row 0: 0.45 × 0.95 = 0.4275
+          row 4: 0.30 × 0.80 = 0.2400
+          sum:                 0.6675
         """
         loading = self.ds["litter"].sel(band="loading").values
         finite = loading[np.isfinite(loading)]
-        # At minimum, some cells should have loading > 0.45
-        assert finite.max() > 0.45
+        np.testing.assert_allclose(finite.max(), 0.6675, atol=1e-4)
 
     # --- optional band propagation ---
 

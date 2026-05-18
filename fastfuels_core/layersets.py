@@ -32,8 +32,9 @@ homogeneous
     percent_cover / 100.
 
 uniform_random
-    Cells inside the polygon are randomly selected until the requested
-    cover fraction is reached; selected cells get weight 1.0.
+    Each in-polygon cell is independently selected with probability
+    percent_cover / 100; selected cells get weight 1.0. Realized cover
+    matches the target in expectation; variance shrinks with polygon size.
 
 random_clusters
     Circular patches of diameter patch_size are placed at uniformly random
@@ -206,10 +207,19 @@ def _validate_gdf(gdf: gpd.GeoDataFrame) -> None:
     if missing:
         raise ValueError(f"GeoDataFrame is missing required columns: {missing}")
 
+    if len(gdf) == 0:
+        raise ValueError("GeoDataFrame is empty; nothing to rasterize.")
+
     for col in ("fuel_loading", "fuel_height", "percent_cover"):
         missing = gdf[col].isna()
         if missing.any():
             raise ValueError(f"{missing.sum()} row(s) are missing a value for '{col}'.")
+
+    out_of_range = ~gdf["percent_cover"].between(0, 100)
+    if out_of_range.any():
+        raise ValueError(
+            f"{out_of_range.sum()} row(s) have percent_cover outside [0, 100]."
+        )
 
     if gdf["distribution"].isna().any():
         raise ValueError(
