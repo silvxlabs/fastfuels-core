@@ -1,17 +1,129 @@
-from typing import List, Dict, Any
-from numpy.random import Generator
+from __future__ import annotations
 
-import pytest
+import threading
+import time
+from pathlib import Path
+from typing import Any, Callable, Dict, List
+
+import dask
+import dask.dataframe as dd
+import matplotlib.pyplot as plt
 import numpy as np
-import xarray as xr
-from rasterio.transform import from_origin
+import pandas as pd
+import pytest
 import rioxarray  # noqa: F401
+import xarray as xr
+from dask.callbacks import Callback
+from numpy.random import Generator
+import rasterio as rio
+from rasterio.transform import from_origin
 
-
+import fastfuels_core.itd.local_maxima_filter as local_maxima_filter
 from fastfuels_core.itd.local_maxima_filter import (
-    variable_window_filter,
+    _extract_block_candidates,
+    _union_find_merge,
     fixed_window_filter,
+    variable_window_filter,
 )
+from tests.itd.reference_local_maxima_filter import (
+    fixed_window_filter_reference,
+    variable_window_filter_reference,
+)
+
+FIGURES_PATH = Path(__file__).parent / "figures"
+
+# Toggle to True to save/show diagnostic plots during test runs
+SAVE_FIG = True
+SHOW_FIG = False
+
+
+def _get_extent(chm_da: xr.DataArray) -> list[float]:
+    """Calculate real-world extent [min_x, max_x, min_y, max_y] for imshow."""
+    transform = chm_da.rio.transform()
+    width, height = chm_da.shape[1], chm_da.shape[0]
+    min_x = transform.c
+    max_y = transform.f
+    max_x = min_x + (width * transform.a)
+    min_y = max_y + (height * transform.e)
+    return [min_x, max_x, min_y, max_y]
+
+
+def _plot_chm_with_treetops(
+    ax,
+    chm_da: xr.DataArray,
+    treetops: pd.DataFrame,
+    *,
+    title: str = "",
+    ground_truth: list[dict] | None = None,
+) -> None:
+    """Plot a CHM with detected treetops overlaid."""
+    extent = _get_extent(chm_da)
+    ax.imshow(chm_da.values, extent=extent, cmap="viridis", origin="upper")
+    if ground_truth:
+        gt_x = [t["x"] for t in ground_truth]
+        gt_y = [t["y"] for t in ground_truth]
+        ax.scatter(
+            gt_x,
+            gt_y,
+            facecolors="none",
+            edgecolors="lime",
+            s=150,
+            linewidths=2,
+            label="Ground Truth",
+        )
+    ax.scatter(
+        treetops["x"],
+        treetops["y"],
+        c="red",
+        marker="x",
+        s=60,
+        linewidths=1.5,
+        label=f"Detected ({len(treetops)})",
+    )
+    ax.set_title(title)
+    ax.legend(loc="upper right", fontsize=8)
+    ax.set_xlabel("Easting (X)")
+    ax.set_ylabel("Northing (Y)")
+
+
+def _plot_chunked_comparison(
+    chm_da: xr.DataArray,
+    results: dict[str, pd.DataFrame],
+    *,
+    chunk_boundaries: list[tuple[str, list[float]]] | None = None,
+    suptitle: str = "",
+    filename: str = "",
+) -> None:
+    """Plot side-by-side comparison of results from different chunk layouts."""
+    n = len(results)
+    fig, axes = plt.subplots(1, n, figsize=(6 * n, 6), squeeze=False)
+    axes = axes[0]
+    extent = _get_extent(chm_da)
+
+    for ax, (label, df) in zip(axes, results.items()):
+        ax.imshow(chm_da.values, extent=extent, cmap="viridis", origin="upper")
+        ax.scatter(
+            df["x"],
+            df["y"],
+            c="red",
+            marker="x",
+            s=80,
+            linewidths=2,
+            label=f"Detected ({len(df)})",
+        )
+        ax.set_title(f"{label}\n{len(df)} treetops", fontsize=10)
+        ax.legend(loc="upper right", fontsize=8)
+        ax.set_xlabel("Easting (X)")
+
+    if suptitle:
+        fig.suptitle(suptitle, fontsize=13, fontweight="bold")
+    fig.tight_layout()
+    if SAVE_FIG and filename:
+        FIGURES_PATH.mkdir(parents=True, exist_ok=True)
+        fig.savefig(FIGURES_PATH / filename, dpi=150)
+    if SHOW_FIG:
+        plt.show()
+    plt.close(fig)
 
 
 # --- SHARED GENERATOR HELPERS ---
@@ -37,20 +149,34 @@ def _plant_conical_tree(
     row: int,
     col: int,
     max_height: float,
-    sigma: float,
+    sigma: float | np.ndarray,
     tree_type: str,
     pixel_size: float,
     origin_x: float,
     origin_y: float,
 ) -> None:
-    """Helper to mathematically stamp a 2D Gaussian tree into the canopy surface and log its ground truth."""
+    """Stamp a 2D Gaussian tree into the canopy surface and log its ground truth.
+
+    ``sigma`` controls the crown shape:
+    - scalar: isotropic circular crown (σ_row = σ_col = sigma, no rotation).
+    - 2x2 array: full covariance matrix, enabling elliptical and rotated crowns.
+    """
     height, width = canopy_surface.shape
     y_grid, x_grid = np.ogrid[:height, :width]
 
-    dist_sq = (x_grid - col) ** 2 + (y_grid - row) ** 2
-    tree_footprint = max_height * np.exp(-dist_sq / (2 * sigma**2))
+    dy = y_grid - row
+    dx = x_grid - col
+    cov = np.atleast_2d(sigma)
+    if cov.shape == (1, 1):
+        cov = np.array([[sigma**2, 0.0], [0.0, sigma**2]])
+    inv_cov = np.linalg.inv(cov)
+    mahal = (
+        inv_cov[0, 0] * dy**2
+        + (inv_cov[0, 1] + inv_cov[1, 0]) * dy * dx
+        + inv_cov[1, 1] * dx**2
+    )
+    tree_footprint = max_height * np.exp(-0.5 * mahal)
 
-    # Simulating the LiDAR top-hit surface (np.maximum modifies the array in place safely here)
     np.maximum(canopy_surface, tree_footprint, out=canopy_surface)
 
     x_coord = origin_x + (col * pixel_size) + (pixel_size / 2)
@@ -230,6 +356,98 @@ def generate_mixed_morphology_chm() -> xr.DataArray:
     da.attrs["ground_truth"] = ground_truth
 
     return da
+
+
+def generate_asymmetric_crown_chm() -> xr.DataArray:
+    """Generates a CHM with elliptical and rotated tree crowns.
+
+    Contains three groups of trees whose crowns are non-circular:
+    - 5 axis-aligned elliptical crowns (wider in the column direction)
+    - 5 axis-aligned elliptical crowns (wider in the row direction)
+    - 5 rotated elliptical crowns (45-degree tilt)
+    All trees have a single well-defined peak at the Gaussian center.
+    """
+    pixel_size = 0.5
+    width, height = 200, 200
+    origin_x, origin_y = 500000.0, 4000000.0
+    transform = from_origin(origin_x, origin_y, pixel_size, pixel_size)
+
+    rng = np.random.default_rng(seed=555)
+    chm_array = rng.normal(loc=1.0, scale=0.1, size=(height, width))
+    canopy_surface = np.zeros((height, width))
+
+    ground_truth_trees: List[Dict[str, Any]] = []
+    existing_centers: List = []
+
+    # 1. Column-elongated elliptical crowns (σ_row=2, σ_col=6)
+    cov_col_wide = np.array([[4.0, 0.0], [0.0, 36.0]])
+    for _ in range(5):
+        r, c = _get_valid_location(20, rng, existing_centers, height, width)
+        _plant_conical_tree(
+            canopy_surface,
+            ground_truth_trees,
+            r,
+            c,
+            rng.uniform(18.0, 25.0),
+            cov_col_wide,
+            "elliptical_col",
+            pixel_size,
+            origin_x,
+            origin_y,
+        )
+        existing_centers.append((r, c))
+
+    # 2. Row-elongated elliptical crowns (σ_row=6, σ_col=2)
+    cov_row_wide = np.array([[36.0, 0.0], [0.0, 4.0]])
+    for _ in range(5):
+        r, c = _get_valid_location(20, rng, existing_centers, height, width)
+        _plant_conical_tree(
+            canopy_surface,
+            ground_truth_trees,
+            r,
+            c,
+            rng.uniform(18.0, 25.0),
+            cov_row_wide,
+            "elliptical_row",
+            pixel_size,
+            origin_x,
+            origin_y,
+        )
+        existing_centers.append((r, c))
+
+    # 3. Rotated elliptical crowns (45-degree tilt)
+    theta = np.pi / 4
+    R = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+    cov_rotated = R @ np.diag([4.0, 36.0]) @ R.T
+    for _ in range(5):
+        r, c = _get_valid_location(20, rng, existing_centers, height, width)
+        _plant_conical_tree(
+            canopy_surface,
+            ground_truth_trees,
+            r,
+            c,
+            rng.uniform(18.0, 25.0),
+            cov_rotated,
+            "elliptical_rotated",
+            pixel_size,
+            origin_x,
+            origin_y,
+        )
+        existing_centers.append((r, c))
+
+    final_chm = np.maximum(chm_array, canopy_surface)
+
+    da = xr.DataArray(final_chm, dims=["y", "x"])
+    da.rio.write_crs("EPSG:32611", inplace=True)
+    da.rio.write_transform(transform, inplace=True)
+    da.attrs["ground_truth"] = ground_truth_trees
+
+    return da
+
+
+@pytest.fixture
+def asymmetric_crown_chm() -> xr.DataArray:
+    return generate_asymmetric_crown_chm()
 
 
 @pytest.fixture
@@ -473,3 +691,1333 @@ def test_mixed_morphology_extraction(mixed_morphology_chm: xr.DataArray):
 
     # We planted exactly 12 conical + 6 L-shapes = 18 trees
     assert len(df) == 18, "Algorithm failed to accurately count mixed morphologies."
+
+
+# ---------------------------------------------------------------------------
+# Asymmetric crown tests
+# ---------------------------------------------------------------------------
+
+
+def test_vwf_detects_all_asymmetric_crowns(asymmetric_crown_chm: xr.DataArray):
+    """VWF must detect every planted tree regardless of crown ellipticity or rotation."""
+    ground_truth = asymmetric_crown_chm.attrs["ground_truth"]
+    dask_df = variable_window_filter(
+        chm_da=asymmetric_crown_chm,
+        min_height=2.0,
+        spatial_resolution=0.5,
+        crown_ratio=0.10,
+        crown_offset=1.0,
+    )
+    df = dask_df.compute()
+    valid_trees = df[df["height"] > 5.0]
+
+    assert len(valid_trees) == len(
+        ground_truth
+    ), f"Expected {len(ground_truth)} trees, found {len(valid_trees)}"
+
+    if SAVE_FIG or SHOW_FIG:
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        _plot_chm_with_treetops(
+            ax,
+            asymmetric_crown_chm,
+            valid_trees,
+            title=f"VWF on Asymmetric Crowns — {len(valid_trees)} treetops",
+            ground_truth=ground_truth,
+        )
+        fig.tight_layout()
+        if SAVE_FIG:
+            FIGURES_PATH.mkdir(parents=True, exist_ok=True)
+            fig.savefig(FIGURES_PATH / "itd_asymmetric_vwf.png", dpi=150)
+        if SHOW_FIG:
+            plt.show()
+        plt.close(fig)
+
+
+def test_fwf_detects_asymmetric_crowns(asymmetric_crown_chm: xr.DataArray):
+    """Fixed window filter must detect every asymmetric crown."""
+    ground_truth = asymmetric_crown_chm.attrs["ground_truth"]
+    dask_df = fixed_window_filter(
+        chm_da=asymmetric_crown_chm,
+        min_height=2.0,
+        spatial_resolution=0.5,
+        window_size_meters=3.0,
+    )
+    df = dask_df.compute()
+    valid_trees = df[df["height"] > 5.0]
+
+    assert len(valid_trees) == len(
+        ground_truth
+    ), f"Expected {len(ground_truth)} trees, found {len(valid_trees)}"
+
+    if SAVE_FIG or SHOW_FIG:
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        _plot_chm_with_treetops(
+            ax,
+            asymmetric_crown_chm,
+            valid_trees,
+            title=f"FWF on Asymmetric Crowns — {len(valid_trees)} treetops",
+            ground_truth=ground_truth,
+        )
+        fig.tight_layout()
+        if SAVE_FIG:
+            FIGURES_PATH.mkdir(parents=True, exist_ok=True)
+            fig.savefig(FIGURES_PATH / "itd_asymmetric_fwf.png", dpi=150)
+        if SHOW_FIG:
+            plt.show()
+        plt.close(fig)
+
+
+def test_asymmetric_crown_coordinate_accuracy(asymmetric_crown_chm: xr.DataArray):
+    """Detected treetop positions must land at the planted Gaussian center."""
+    ground_truth = asymmetric_crown_chm.attrs["ground_truth"]
+    dask_df = variable_window_filter(
+        chm_da=asymmetric_crown_chm,
+        min_height=2.0,
+        spatial_resolution=0.5,
+        crown_ratio=0.10,
+        crown_offset=1.0,
+    )
+    df = dask_df.compute()
+
+    for tree in ground_truth:
+        dx = df["x"] - tree["x"]
+        dy = df["y"] - tree["y"]
+        distances = np.sqrt(dx**2 + dy**2)
+        closest = df.iloc[distances.argmin()]
+
+        assert np.isclose(closest["x"], tree["x"]), (
+            f"{tree['type']} tree at ({tree['x']:.2f}, {tree['y']:.2f}): "
+            f"x drift = {abs(closest['x'] - tree['x']):.4f}"
+        )
+        assert np.isclose(closest["y"], tree["y"]), (
+            f"{tree['type']} tree at ({tree['x']:.2f}, {tree['y']:.2f}): "
+            f"y drift = {abs(closest['y'] - tree['y']):.4f}"
+        )
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+def test_asymmetric_crowns_chunk_invariant(
+    filter_name: str,
+    asymmetric_crown_chm: xr.DataArray,
+):
+    """Asymmetric crowns must produce identical results across chunk layouts."""
+    reference = _run_reference(filter_name, asymmetric_crown_chm)
+    square = _run_filter(
+        filter_name, _chunk_chm(asymmetric_crown_chm, {"y": 100, "x": 100})
+    )
+    asymmetric = _run_filter(
+        filter_name, _chunk_chm(asymmetric_crown_chm, {"y": 50, "x": 200})
+    )
+
+    _assert_same_output(reference, square)
+    _assert_same_output(reference, asymmetric)
+
+    if SAVE_FIG or SHOW_FIG:
+        _plot_chunked_comparison(
+            asymmetric_crown_chm,
+            {
+                "Reference (eager)": reference,
+                "4 chunks (100x100)": square,
+                "Asymmetric (50x200)": asymmetric,
+            },
+            suptitle=f"Asymmetric Crowns Chunk Invariance: {filter_name}",
+            filename=f"itd_asymmetric_chunk_invariance_{filter_name}.png",
+        )
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+def test_asymmetric_crowns_match_reference(
+    filter_name: str,
+    asymmetric_crown_chm: xr.DataArray,
+):
+    """Dask implementation must match eager scipy reference for asymmetric crowns."""
+    reference = _run_reference(filter_name, asymmetric_crown_chm)
+    result = _run_filter(filter_name, asymmetric_crown_chm)
+    _assert_same_output(result, reference)
+
+    if SAVE_FIG or SHOW_FIG:
+        ground_truth = asymmetric_crown_chm.attrs.get("ground_truth")
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), sharex=True, sharey=True)
+        _plot_chm_with_treetops(
+            ax1,
+            asymmetric_crown_chm,
+            reference,
+            title=f"Reference (eager scipy) — {len(reference)} treetops",
+            ground_truth=ground_truth,
+        )
+        _plot_chm_with_treetops(
+            ax2,
+            asymmetric_crown_chm,
+            result,
+            title=f"New (dask-image) — {len(result)} treetops",
+            ground_truth=ground_truth,
+        )
+        fig.suptitle(
+            f"Asymmetric Crowns: Reference vs New ({filter_name})",
+            fontsize=13,
+            fontweight="bold",
+        )
+        fig.tight_layout()
+        if SAVE_FIG:
+            FIGURES_PATH.mkdir(parents=True, exist_ok=True)
+            fig.savefig(
+                FIGURES_PATH / f"itd_asymmetric_ref_vs_new_{filter_name}.png", dpi=150
+            )
+        if SHOW_FIG:
+            plt.show()
+        plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Helpers for new chunked-correctness tests
+# ---------------------------------------------------------------------------
+
+
+def _sort_output(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame(columns=["x", "y", "height"])
+    return df.sort_values(["x", "y", "height"]).reset_index(drop=True)
+
+
+def _assert_same_output(left: pd.DataFrame, right: pd.DataFrame) -> None:
+    pd.testing.assert_frame_equal(
+        _sort_output(left),
+        _sort_output(right),
+        check_exact=False,
+        atol=1e-9,
+        rtol=1e-9,
+    )
+
+
+def _chunk_chm(chm_da: xr.DataArray, chunking: dict[str, int]) -> xr.DataArray:
+    return chm_da.chunk(chunking)
+
+
+def _run_filter(filter_name: str, chm_da: xr.DataArray) -> pd.DataFrame:
+    if filter_name == "fixed":
+        return fixed_window_filter(
+            chm_da=chm_da,
+            min_height=2.0,
+            spatial_resolution=0.5,
+            window_size_meters=3.0,
+        ).compute()
+    if filter_name == "variable":
+        return variable_window_filter(
+            chm_da=chm_da,
+            min_height=2.0,
+            spatial_resolution=0.5,
+            crown_ratio=0.10,
+            crown_offset=1.0,
+        ).compute()
+    raise ValueError(f"Unsupported filter: {filter_name}")
+
+
+def _run_reference(filter_name: str, chm_da: xr.DataArray) -> pd.DataFrame:
+    if filter_name == "fixed":
+        return fixed_window_filter_reference(
+            chm_da=chm_da,
+            min_height=2.0,
+            spatial_resolution=0.5,
+            window_size_meters=3.0,
+        )
+    if filter_name == "variable":
+        return variable_window_filter_reference(
+            chm_da=chm_da,
+            min_height=2.0,
+            spatial_resolution=0.5,
+            crown_ratio=0.10,
+            crown_offset=1.0,
+        )
+    raise ValueError(f"Unsupported filter: {filter_name}")
+
+
+# ---------------------------------------------------------------------------
+# Fixtures for boundary and benchmark tests
+# ---------------------------------------------------------------------------
+
+
+def rio_coords(transform, row: int, col: int) -> tuple[float, float]:
+    import rasterio
+
+    x, y = rasterio.transform.xy(transform, [row], [col])
+    return float(x[0]), float(y[0])
+
+
+def generate_boundary_plateau_chm(
+    row_slice: slice,
+    col_slice: slice,
+    *,
+    width: int = 64,
+    height: int = 64,
+    pixel_size: float = 1.0,
+) -> xr.DataArray:
+    origin_x, origin_y = 1000.0, 2000.0
+    transform = from_origin(origin_x, origin_y, pixel_size, pixel_size)
+    chm_array = np.zeros((height, width), dtype=np.float64)
+    chm_array[row_slice, col_slice] = 20.0
+
+    chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+    chm_da.rio.write_crs("EPSG:32611", inplace=True)
+    chm_da.rio.write_transform(transform, inplace=True)
+    expected_x, expected_y = rio_coords(transform, row_slice.start, col_slice.start)
+    chm_da.attrs["expected_x"] = expected_x
+    chm_da.attrs["expected_y"] = expected_y
+    return chm_da
+
+
+def generate_benchmark_chm(size: int = 1024, pixel_size: float = 1.0) -> xr.DataArray:
+    origin_x, origin_y = 250000.0, 4100000.0
+    transform = from_origin(origin_x, origin_y, pixel_size, pixel_size)
+    chm_array = np.full((size, size), 0.25, dtype=np.float64)
+    y_grid, x_grid = np.ogrid[:size, :size]
+    for row, col, ht, sigma in [
+        (size // 4, size // 4, 24.0, 9.0),
+        (size // 4, (3 * size) // 4, 22.0, 8.0),
+        ((3 * size) // 4, size // 4, 21.0, 10.0),
+        ((3 * size) // 4, (3 * size) // 4, 23.0, 7.0),
+        (size // 2, size // 2, 28.0, 12.0),
+    ]:
+        dist_sq = (x_grid - col) ** 2 + (y_grid - row) ** 2
+        canopy = ht * np.exp(-dist_sq / (2 * sigma**2))
+        np.maximum(chm_array, canopy, out=chm_array)
+
+    chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+    chm_da.rio.write_crs("EPSG:32611", inplace=True)
+    chm_da.rio.write_transform(transform, inplace=True)
+    return chm_da
+
+
+@pytest.fixture
+def boundary_split_half_chm() -> xr.DataArray:
+    return generate_boundary_plateau_chm(slice(28, 32), slice(30, 34))
+
+
+@pytest.fixture
+def boundary_split_three_quarters_chm() -> xr.DataArray:
+    return generate_boundary_plateau_chm(slice(28, 32), slice(29, 33))
+
+
+@pytest.fixture
+def corner_split_chm() -> xr.DataArray:
+    return generate_boundary_plateau_chm(slice(30, 34), slice(30, 34))
+
+
+# ---------------------------------------------------------------------------
+# Chunked correctness tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+def test_new_implementation_matches_eager_reference(
+    filter_name: str,
+    complex_synthetic_chm: xr.DataArray,
+):
+    """New dask-image implementation matches the old eager scipy reference."""
+    reference = _run_reference(filter_name, complex_synthetic_chm)
+    result = _run_filter(filter_name, complex_synthetic_chm)
+    _assert_same_output(result, reference)
+
+    if SAVE_FIG or SHOW_FIG:
+        ground_truth = complex_synthetic_chm.attrs.get("ground_truth")
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), sharex=True, sharey=True)
+        _plot_chm_with_treetops(
+            ax1,
+            complex_synthetic_chm,
+            reference,
+            title=f"Reference (eager scipy) — {len(reference)} treetops",
+            ground_truth=ground_truth,
+        )
+        _plot_chm_with_treetops(
+            ax2,
+            complex_synthetic_chm,
+            result,
+            title=f"New (dask-image) — {len(result)} treetops",
+            ground_truth=ground_truth,
+        )
+        fig.suptitle(
+            f"Reference vs New: {filter_name} filter", fontsize=13, fontweight="bold"
+        )
+        fig.tight_layout()
+        if SAVE_FIG:
+            FIGURES_PATH.mkdir(parents=True, exist_ok=True)
+            fig.savefig(
+                FIGURES_PATH / f"itd_reference_vs_new_{filter_name}.png", dpi=150
+            )
+        if SHOW_FIG:
+            plt.show()
+        plt.close(fig)
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+def test_output_is_identical_across_chunk_layouts(
+    filter_name: str,
+    mixed_morphology_chm: xr.DataArray,
+):
+    """Results must be identical whether CHM is 1, 2, or 4 chunks."""
+    one_chunk = _run_filter(
+        filter_name, _chunk_chm(mixed_morphology_chm, {"y": 200, "x": 200})
+    )
+    two_chunks = _run_filter(
+        filter_name, _chunk_chm(mixed_morphology_chm, {"y": 200, "x": 100})
+    )
+    four_chunks = _run_filter(
+        filter_name, _chunk_chm(mixed_morphology_chm, {"y": 100, "x": 100})
+    )
+
+    _assert_same_output(one_chunk, two_chunks)
+    _assert_same_output(one_chunk, four_chunks)
+
+    if SAVE_FIG or SHOW_FIG:
+        _plot_chunked_comparison(
+            mixed_morphology_chm,
+            {
+                "1 chunk (200×200)": one_chunk,
+                "2 chunks (200×100)": two_chunks,
+                "4 chunks (100×100)": four_chunks,
+            },
+            suptitle=f"Chunk Layout Invariance: {filter_name} filter",
+            filename=f"itd_chunk_invariance_{filter_name}.png",
+        )
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+@pytest.mark.parametrize(
+    "fixture_name",
+    [
+        "boundary_split_half_chm",
+        "boundary_split_three_quarters_chm",
+        "corner_split_chm",
+    ],
+)
+def test_boundary_straddle_plateaus_emit_one_treetop(
+    filter_name: str,
+    fixture_name: str,
+    request: pytest.FixtureRequest,
+):
+    """A flat plateau straddling a chunk boundary must produce exactly 1 treetop."""
+    boundary_chm = request.getfixturevalue(fixture_name)
+    one_chunk = _chunk_chm(boundary_chm, {"y": 64, "x": 64})
+    chunked = _chunk_chm(boundary_chm, {"y": 32, "x": 32})
+
+    reference = _run_filter(filter_name, one_chunk)
+    result = _run_filter(filter_name, chunked)
+
+    assert len(result) == 1
+    _assert_same_output(result, reference)
+
+    if SAVE_FIG or SHOW_FIG:
+        extent = _get_extent(boundary_chm)
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5), sharex=True, sharey=True)
+        for ax, df, label in [
+            (ax1, reference, "1 chunk (64×64)"),
+            (ax2, result, "4 chunks (32×32)"),
+        ]:
+            ax.imshow(
+                boundary_chm.values, extent=extent, cmap="viridis", origin="upper"
+            )
+            ax.scatter(
+                df["x"],
+                df["y"],
+                c="red",
+                marker="x",
+                s=120,
+                linewidths=2,
+                label=f"Detected ({len(df)})",
+            )
+            # Draw chunk boundaries
+            mid_x = extent[0] + (extent[1] - extent[0]) / 2
+            mid_y = extent[2] + (extent[3] - extent[2]) / 2
+            ax.axhline(mid_y, color="white", linestyle="--", alpha=0.5, linewidth=0.8)
+            ax.axvline(mid_x, color="white", linestyle="--", alpha=0.5, linewidth=0.8)
+            ax.set_title(f"{label}", fontsize=10)
+            ax.legend(loc="upper right", fontsize=8)
+        fig.suptitle(
+            f"Boundary Plateau: {fixture_name} / {filter_name}",
+            fontsize=11,
+            fontweight="bold",
+        )
+        fig.tight_layout()
+        if SAVE_FIG:
+            FIGURES_PATH.mkdir(parents=True, exist_ok=True)
+            fig.savefig(
+                FIGURES_PATH / f"itd_boundary_{fixture_name}_{filter_name}.png", dpi=150
+            )
+        if SHOW_FIG:
+            plt.show()
+        plt.close(fig)
+
+
+def test_returned_dataframe_is_lazy(
+    mixed_morphology_chm: xr.DataArray,
+):
+    """Graph construction must not trigger computation."""
+    chunked = _chunk_chm(mixed_morphology_chm, {"y": 100, "x": 100})
+
+    class TaskCounter(Callback):
+        def __init__(self) -> None:
+            super().__init__()
+            self.task_count = 0
+
+        def _pretask(self, key, dsk, state) -> None:  # noqa: ANN001
+            self.task_count += 1
+
+    callback = TaskCounter()
+    with callback:
+        ddf = fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=0.5,
+            window_size_meters=3.0,
+        )
+
+    assert callback.task_count == 0
+    assert isinstance(ddf, dd.DataFrame)
+
+
+def test_variable_window_caller_supplied_unique_windows_matches_auto(
+    complex_synthetic_chm: xr.DataArray,
+):
+    """When the caller passes a superset of the actual window sizes,
+    variable_window_filter must produce the same output as the auto path."""
+    chunked = _chunk_chm(complex_synthetic_chm, {"y": 100, "x": 100})
+
+    auto = variable_window_filter(
+        chm_da=chunked,
+        min_height=2.0,
+        spatial_resolution=0.5,
+        crown_ratio=0.10,
+        crown_offset=1.0,
+    ).compute()
+
+    # Generous superset of odd sizes up through what the CHM could plausibly produce.
+    supplied = variable_window_filter(
+        chm_da=chunked,
+        min_height=2.0,
+        spatial_resolution=0.5,
+        crown_ratio=0.10,
+        crown_offset=1.0,
+        unique_windows=[1, 3, 5, 7, 9, 11, 13, 15],
+    ).compute()
+
+    _assert_same_output(auto, supplied)
+
+
+def test_variable_window_caller_supplied_unique_windows_makes_graph_lazy(
+    complex_synthetic_chm: xr.DataArray,
+):
+    """With caller-supplied unique_windows, VWF graph construction must fire
+    zero tasks — no synchronous da.unique compute."""
+    chunked = _chunk_chm(complex_synthetic_chm, {"y": 100, "x": 100})
+
+    class TaskCounter(Callback):
+        def __init__(self) -> None:
+            super().__init__()
+            self.task_count = 0
+
+        def _pretask(self, key, dsk, state) -> None:  # noqa: ANN001
+            self.task_count += 1
+
+    callback = TaskCounter()
+    with callback:
+        ddf = variable_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=0.5,
+            crown_ratio=0.10,
+            crown_offset=1.0,
+            unique_windows=[1, 3, 5, 7, 9, 11],
+        )
+
+    assert callback.task_count == 0
+    assert isinstance(ddf, dd.DataFrame)
+
+
+def test_graph_contains_more_tasks_for_multi_chunk_inputs(
+    boundary_split_half_chm: xr.DataArray,
+):
+    """More chunks should produce a larger task graph."""
+    one_chunk = fixed_window_filter(
+        chm_da=_chunk_chm(boundary_split_half_chm, {"y": 64, "x": 64}),
+        min_height=2.0,
+        spatial_resolution=1.0,
+        window_size_meters=3.0,
+    )
+    four_chunks = fixed_window_filter(
+        chm_da=_chunk_chm(boundary_split_half_chm, {"y": 32, "x": 32}),
+        min_height=2.0,
+        spatial_resolution=1.0,
+        window_size_meters=3.0,
+    )
+
+    graph_one = len(one_chunk.__dask_graph__())
+    graph_four = len(four_chunks.__dask_graph__())
+
+    assert graph_four > graph_one
+
+
+def test_plateau_coords_are_centroid_not_first_pixel():
+    """Pins a behavioral change from main: a flat plateau's coordinate is now
+    the centroid of all pixels in the plateau, not the first pixel (in
+    C-order) returned by scipy.ndimage.maximum_position.
+
+    Rationale: per-chunk labelling makes `maximum_position` order-dependent
+    (the "first pixel" depends on which chunk the plateau started in), so it
+    would produce different coordinates for different chunk layouts. The
+    centroid is order-invariant and satisfies the chunk-invariance tests.
+
+    This test would fail if someone reverted to maximum_position semantics
+    without also updating the chunk-invariance contract.
+    """
+    from scipy.ndimage import label as scipy_label, maximum_position
+
+    pixel_size = 1.0
+    chm_array = np.zeros((64, 64), dtype=np.float64)
+    # 4x4 flat plateau at rows 20..23, cols 30..33.
+    chm_array[20:24, 30:34] = 20.0
+
+    chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+    chm_da.rio.write_crs("EPSG:32611", inplace=True)
+    transform = from_origin(0, 0, pixel_size, pixel_size)
+    chm_da.rio.write_transform(transform, inplace=True)
+
+    # main's behavior: maximum_position picks the first C-order pixel of the
+    # plateau — (row=20, col=30) — i.e. the top-left.
+    labeled, _ = scipy_label(chm_array == 20.0)
+    main_row, main_col = maximum_position(chm_array, labels=labeled, index=[1])[0]
+    main_x, main_y = rio.transform.xy(transform, [main_row], [main_col])
+
+    result = fixed_window_filter(
+        chm_da=chm_da,
+        min_height=2.0,
+        spatial_resolution=pixel_size,
+        window_size_meters=3.0,
+    ).compute()
+
+    assert len(result) == 1
+
+    # New behavior: centroid of the plateau (row=21.5, col=31.5).
+    expected_x, expected_y = rio.transform.xy(transform, [21.5], [31.5])
+    assert result.iloc[0]["x"] == pytest.approx(expected_x[0])
+    assert result.iloc[0]["y"] == pytest.approx(expected_y[0])
+
+    # The centroid coordinate differs from main's first-pixel coordinate,
+    # proving the divergence is real and not just a documentation claim.
+    assert result.iloc[0]["x"] != pytest.approx(main_x[0])
+    assert result.iloc[0]["y"] != pytest.approx(main_y[0])
+
+
+# ---------------------------------------------------------------------------
+# Tests: interior/boundary split correctness
+# ---------------------------------------------------------------------------
+
+
+class TestBoundaryFlagClassification:
+    """Unit tests for is_boundary flag in _extract_block_candidates."""
+
+    @staticmethod
+    def _call(chm_block, mask_block, **kwargs):
+        """Helper: call _extract_block_candidates and return the candidates df."""
+        result_tuple = _extract_block_candidates(
+            chm_block,
+            mask_block,
+            row_offset=kwargs.get("row_offset", 0),
+            col_offset=kwargs.get("col_offset", 0),
+            label_offset=kwargs.get("label_offset", 0),
+        )
+        return result_tuple[0]  # candidates DataFrame
+
+    def test_interior_label_flagged_false(self):
+        """A label entirely inside the block (no edge pixels) is is_boundary=False."""
+        mask = np.zeros((10, 10), dtype=bool)
+        mask[4:6, 4:6] = True
+
+        chm_block = np.zeros((10, 10), dtype=np.float64)
+        chm_block[4:6, 4:6] = 20.0
+
+        result = self._call(chm_block, mask)
+        assert len(result) == 1
+        assert result.iloc[0]["is_boundary"] == False  # noqa: E712
+
+    def test_edge_touching_label_flagged_true(self):
+        """A label touching the top row of the block is is_boundary=True."""
+        mask = np.zeros((10, 10), dtype=bool)
+        mask[0, 4:6] = True
+
+        chm_block = np.zeros((10, 10), dtype=np.float64)
+        chm_block[0, 4:6] = 15.0
+
+        result = self._call(chm_block, mask)
+        assert len(result) == 1
+        assert result.iloc[0]["is_boundary"] == True  # noqa: E712
+
+    def test_corner_label_flagged_true(self):
+        """A label touching a corner pixel is is_boundary=True."""
+        mask = np.zeros((10, 10), dtype=bool)
+        mask[0, 0] = True
+
+        chm_block = np.zeros((10, 10), dtype=np.float64)
+        chm_block[0, 0] = 12.0
+
+        result = self._call(chm_block, mask)
+        assert len(result) == 1
+        assert result.iloc[0]["is_boundary"] == True  # noqa: E712
+
+    def test_mixed_interior_and_boundary_labels(self):
+        """Multiple disconnected labels: some interior, some boundary."""
+        mask = np.zeros((10, 10), dtype=bool)
+        mask[5, 5] = True  # interior
+        mask[0, 5] = True  # boundary (top edge)
+        mask[9, 5] = True  # boundary (bottom edge)
+        mask[5, 0] = True  # boundary (left edge)
+        mask[5, 9] = True  # boundary (right edge)
+        mask[3, 3] = True  # interior
+
+        chm_block = np.ones((10, 10), dtype=np.float64) * 10.0
+
+        result = self._call(chm_block, mask)
+        n_interior = (result["is_boundary"] == False).sum()  # noqa: E712
+        n_boundary = (result["is_boundary"] == True).sum()  # noqa: E712
+
+        assert len(result) == 6
+        assert n_interior == 2
+        assert n_boundary == 4
+
+    def test_label_spanning_edge_and_interior_flagged_true(self):
+        """A connected component spanning edge and interior is is_boundary=True."""
+        mask = np.zeros((10, 10), dtype=bool)
+        mask[0, 5] = True
+        mask[1, 5] = True
+        mask[2, 5] = True  # connected, extends from edge
+
+        chm_block = np.zeros((10, 10), dtype=np.float64)
+        chm_block[0:3, 5] = 15.0
+
+        result = self._call(chm_block, mask)
+        assert len(result) == 1
+        assert result.iloc[0]["is_boundary"] == True  # noqa: E712
+        centroid_row = (
+            result.iloc[0]["centroid_row_sum"] / result.iloc[0]["centroid_count"]
+        )
+        centroid_col = (
+            result.iloc[0]["centroid_col_sum"] / result.iloc[0]["centroid_count"]
+        )
+        assert centroid_row == pytest.approx(1.0)
+        assert centroid_col == pytest.approx(5.0)
+
+    def test_empty_block_returns_empty_with_is_boundary_column(self):
+        """An empty mask returns an empty DataFrame with is_boundary column."""
+        mask = np.zeros((10, 10), dtype=bool)
+        chm_block = np.zeros((10, 10), dtype=np.float64)
+
+        result = self._call(chm_block, mask)
+        assert len(result) == 0
+        assert "is_boundary" in result.columns
+
+    def test_returns_edge_label_arrays(self):
+        """_extract_block_candidates returns 4 edge label arrays."""
+        mask = np.zeros((10, 10), dtype=bool)
+        mask[0, 5] = True  # top edge
+        mask[9, 3] = True  # bottom edge
+
+        chm_block = np.ones((10, 10), dtype=np.float64) * 20.0
+
+        _, bottom, right, top, left = _extract_block_candidates(
+            chm_block,
+            mask,
+            row_offset=0,
+            col_offset=0,
+            label_offset=0,
+        )
+        assert top[5] > 0  # label at top edge col 5
+        assert bottom[3] > 0  # label at bottom edge col 3
+        assert len(top) == 10
+        assert len(bottom) == 10
+        assert len(left) == 10
+        assert len(right) == 10
+
+
+class TestUnionFindMerge:
+    """Unit tests for _union_find_merge."""
+
+    def test_single_candidate_no_merges(self):
+        """A single boundary candidate with no merge pairs passes through."""
+        candidates = pd.DataFrame(
+            {
+                "label": [1],
+                "height": [25.0],
+                "centroid_row_sum": [10.0],
+                "centroid_col_sum": [20.0],
+                "centroid_count": [1],
+                "is_boundary": [True],
+            }
+        )
+        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
+        result = _union_find_merge(candidates, [], transform)
+
+        assert len(result) == 1
+        assert list(result.columns) == ["x", "y", "height"]
+        assert result.iloc[0]["height"] == 25.0
+
+    def test_merge_pair_combines_centroids(self):
+        """Two candidates linked by a merge pair: centroids are combined."""
+        candidates = pd.DataFrame(
+            {
+                "label": [1, 2],
+                "height": [20.0, 20.0],
+                "centroid_row_sum": [10.0, 14.0],
+                "centroid_col_sum": [40.0, 60.0],
+                "centroid_count": [4, 4],
+                "is_boundary": [True, True],
+            }
+        )
+        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
+        result = _union_find_merge(candidates, [(1, 2)], transform)
+
+        assert len(result) == 1
+        expected_x, expected_y = rio.transform.xy(transform, [3.0], [12.5])
+        assert result.iloc[0]["x"] == pytest.approx(expected_x[0])
+        assert result.iloc[0]["y"] == pytest.approx(expected_y[0])
+
+    def test_transitive_merge_three_labels(self):
+        """Three labels linked transitively: A-B and B-C merges all three."""
+        candidates = pd.DataFrame(
+            {
+                "label": [1, 2, 3],
+                "height": [20.0, 20.0, 20.0],
+                "centroid_row_sum": [6.0, 10.0, 14.0],
+                "centroid_col_sum": [20.0, 30.0, 40.0],
+                "centroid_count": [2, 2, 2],
+                "is_boundary": [True, True, True],
+            }
+        )
+        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
+        result = _union_find_merge(candidates, [(1, 2), (2, 3)], transform)
+
+        assert len(result) == 1
+        # centroid: row=(6+10+14)/6=5.0, col=(20+30+40)/6=15.0
+        expected_x, expected_y = rio.transform.xy(transform, [5.0], [15.0])
+        assert result.iloc[0]["x"] == pytest.approx(expected_x[0])
+        assert result.iloc[0]["y"] == pytest.approx(expected_y[0])
+
+    def test_independent_labels_stay_separate(self):
+        """Two unlinked boundary labels are not merged."""
+        candidates = pd.DataFrame(
+            {
+                "label": [1, 2],
+                "height": [20.0, 15.0],
+                "centroid_row_sum": [5.0, 30.0],
+                "centroid_col_sum": [10.0, 50.0],
+                "centroid_count": [2, 5],
+                "is_boundary": [True, True],
+            }
+        )
+        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
+        result = _union_find_merge(candidates, [], transform)
+
+        assert len(result) == 2
+
+    def test_empty_input_returns_empty_output(self):
+        """Empty input returns empty DataFrame with correct columns."""
+        candidates = pd.DataFrame(
+            columns=[
+                "label",
+                "height",
+                "centroid_row_sum",
+                "centroid_col_sum",
+                "centroid_count",
+                "is_boundary",
+            ]
+        )
+        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
+        result = _union_find_merge(candidates, [], transform)
+
+        assert len(result) == 0
+        assert list(result.columns) == ["x", "y", "height"]
+
+
+class TestInteriorBoundarySplit:
+    """Integration tests verifying the interior/boundary split in the full pipeline."""
+
+    def test_output_has_more_partitions_than_one(self):
+        """Multi-chunk input produces multi-partition output (not single-partition)."""
+        chm_da = generate_boundary_plateau_chm(
+            slice(28, 32), slice(30, 34), width=64, height=64
+        )
+        chunked = _chunk_chm(chm_da, {"y": 32, "x": 32})
+
+        ddf = fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=1.0,
+            window_size_meters=3.0,
+        )
+        assert ddf.npartitions > 1
+
+    def test_interior_only_chm_routes_one_tree_per_partition(self):
+        """When each chunk contains exactly one interior tree, the output has
+        one partition per chunk and each partition holds exactly that chunk's
+        tree (spatial routing contract)."""
+        chm_array = np.zeros((128, 128), dtype=np.float64)
+        # One Gaussian tree per quadrant, well away from chunk boundaries.
+        for r, c in [(32, 32), (32, 96), (96, 32), (96, 96)]:
+            y_grid, x_grid = np.ogrid[:128, :128]
+            dist_sq = (x_grid - c) ** 2 + (y_grid - r) ** 2
+            canopy = 20.0 * np.exp(-dist_sq / (2 * 3.0**2))
+            np.maximum(chm_array, canopy, out=chm_array)
+
+        chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+        chm_da.rio.write_crs("EPSG:32611", inplace=True)
+        chm_da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
+        chunked = _chunk_chm(chm_da, {"y": 64, "x": 64})  # 2x2 = 4 chunks
+
+        ddf = fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=1.0,
+            window_size_meters=3.0,
+        )
+        assert ddf.npartitions == 4
+        result = ddf.compute()
+        assert len(result) == 4
+
+        # Each partition holds exactly one tree (its chunk's interior tree).
+        for k in range(ddf.npartitions):
+            part = ddf.get_partition(k).compute()
+            assert len(part) == 1
+
+    def test_boundary_treetop_routed_to_owning_chunk(
+        self,
+        boundary_split_half_chm: xr.DataArray,
+    ):
+        """A plateau that straddles chunk boundaries is merged and routed to
+        the partition whose chunk contains the merged centroid pixel."""
+        # CHM: plateau at rows 28-31, cols 30-33 in a 64x64 grid.
+        # 32x32 chunks → 4 chunks. Plateau straddles row boundary (31/32)
+        # and col boundary (31/32). Centroid at (29.5, 31.5):
+        #   row 29 → chunk row 0 (rows 0-31), col 31 → chunk col 0 (cols 0-31)
+        # so the merged treetop must land in partition 0 (k = 0*2 + 0).
+        chunked = _chunk_chm(boundary_split_half_chm, {"y": 32, "x": 32})
+
+        ddf = fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=1.0,
+            window_size_meters=3.0,
+        )
+        assert ddf.npartitions == 4
+        result = ddf.compute()
+        assert len(result) == 1
+
+        # Partition 0 owns the centroid; the other 3 are empty.
+        owner = ddf.get_partition(0).compute()
+        assert len(owner) == 1
+        for k in range(1, ddf.npartitions):
+            other = ddf.get_partition(k).compute()
+            assert len(other) == 0
+
+    @pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+    def test_each_partition_holds_only_its_chunks_treetops(
+        self,
+        filter_name: str,
+    ):
+        """Spatial routing contract: every treetop in partition k must fall
+        within the spatial bounds of CHM chunk k.
+
+        This replaces the prior "boundary partition is a small fraction" test
+        — that test inspected a dedicated last partition, which no longer
+        exists after spatial routing.  The memory-safety property of the
+        boundary dedup is still verified by ``test_memory_bounded_execution``.
+        """
+        rng = np.random.default_rng(777)
+        arr = rng.uniform(0, 30, (256, 256)).astype(np.float64)
+        chm_da = xr.DataArray(arr, dims=["y", "x"])
+        chm_da.rio.write_crs("EPSG:32611", inplace=True)
+        chm_da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
+        chunk_size = 64
+        chunked = _chunk_chm(chm_da, {"y": chunk_size, "x": chunk_size})  # 4x4
+
+        ddf = (
+            fixed_window_filter(
+                chm_da=chunked,
+                min_height=2.0,
+                spatial_resolution=1.0,
+                window_size_meters=3.0,
+            )
+            if filter_name == "fixed"
+            else variable_window_filter(
+                chm_da=chunked,
+                min_height=2.0,
+                spatial_resolution=1.0,
+                crown_ratio=0.10,
+                crown_offset=1.0,
+            )
+        )
+
+        n_row_chunks = 256 // chunk_size
+        n_col_chunks = 256 // chunk_size
+        assert ddf.npartitions == n_row_chunks * n_col_chunks
+
+        transform = chm_da.rio.transform()
+        for k in range(ddf.npartitions):
+            part = ddf.get_partition(k).compute()
+            if part.empty:
+                continue
+            i, j = divmod(k, n_col_chunks)
+            row_lo, row_hi = i * chunk_size, (i + 1) * chunk_size
+            col_lo, col_hi = j * chunk_size, (j + 1) * chunk_size
+            # Convert chunk pixel bounds to spatial bounds.
+            x_min, y_max = rio.transform.xy(transform, [row_lo], [col_lo])
+            x_max, y_min = rio.transform.xy(transform, [row_hi], [col_hi])
+            # rio.transform.xy returns pixel centers; pad by half a pixel.
+            x_lo, x_hi = min(x_min[0], x_max[0]) - 0.5, max(x_min[0], x_max[0]) + 0.5
+            y_lo, y_hi = min(y_min[0], y_max[0]) - 0.5, max(y_min[0], y_max[0]) + 0.5
+            assert (part["x"] >= x_lo).all() and (
+                part["x"] <= x_hi
+            ).all(), f"partition {k} has x outside chunk bounds [{x_lo}, {x_hi}]"
+            assert (part["y"] >= y_lo).all() and (
+                part["y"] <= y_hi
+            ).all(), f"partition {k} has y outside chunk bounds [{y_lo}, {y_hi}]"
+
+    @pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+    def test_split_matches_reference_on_dense_random_chm(
+        self,
+        filter_name: str,
+    ):
+        """Interior + boundary paths combined must match the eager reference
+        on a dense random CHM where both paths are exercised."""
+        rng = np.random.default_rng(12345)
+        arr = rng.uniform(0, 30, (128, 128)).astype(np.float64)
+        chm_da = xr.DataArray(arr, dims=["y", "x"])
+        chm_da.rio.write_crs("EPSG:32611", inplace=True)
+        chm_da.rio.write_transform(from_origin(0, 0, 0.5, 0.5), inplace=True)
+        chunked = _chunk_chm(chm_da, {"y": 32, "x": 32})
+
+        reference = _run_reference(filter_name, chm_da)
+        result = _run_filter(filter_name, chunked)
+
+        _assert_same_output(result, reference)
+
+    def test_all_zeros_chm_produces_empty_output(self):
+        """A CHM with all zero values produces empty output from both paths."""
+        chm_array = np.zeros((64, 64), dtype=np.float64)
+        chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+        chm_da.rio.write_crs("EPSG:32611", inplace=True)
+        chm_da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
+        chunked = _chunk_chm(chm_da, {"y": 32, "x": 32})
+
+        result = fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=1.0,
+            window_size_meters=3.0,
+        ).compute()
+        assert len(result) == 0
+        assert list(result.columns) == ["x", "y", "height"]
+
+    def test_all_below_min_height_produces_empty_output(self):
+        """A CHM with all values below min_height produces empty output."""
+        rng = np.random.default_rng(99)
+        chm_array = rng.uniform(0.1, 1.5, (64, 64)).astype(np.float64)
+        chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+        chm_da.rio.write_crs("EPSG:32611", inplace=True)
+        chm_da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
+        chunked = _chunk_chm(chm_da, {"y": 32, "x": 32})
+
+        result = fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=1.0,
+            window_size_meters=3.0,
+        ).compute()
+        assert len(result) == 0
+
+    def test_small_chunks_mostly_boundary_still_correct(self):
+        """With small chunks where most labels touch an edge, the pipeline
+        must still produce correct results via the boundary dedup path."""
+        rng = np.random.default_rng(42)
+        arr = rng.uniform(0, 30, (64, 64)).astype(np.float64)
+        chm_da = xr.DataArray(arr, dims=["y", "x"])
+        chm_da.rio.write_crs("EPSG:32611", inplace=True)
+        chm_da.rio.write_transform(from_origin(0, 0, 0.5, 0.5), inplace=True)
+        chunked = _chunk_chm(chm_da, {"y": 16, "x": 16})  # 16 chunks
+
+        reference = _run_reference("fixed", chm_da)
+        result = _run_filter("fixed", chunked)
+
+        _assert_same_output(result, reference)
+
+
+# ---------------------------------------------------------------------------
+# Input validation tests
+# ---------------------------------------------------------------------------
+
+
+class TestInputValidation:
+    """Tests for input validation in public API functions."""
+
+    def test_fixed_window_rejects_negative_min_height(self, simple_chm: xr.DataArray):
+        with pytest.raises(ValueError, match="min_height cannot be negative"):
+            fixed_window_filter(
+                chm_da=simple_chm, min_height=-1.0, spatial_resolution=0.5
+            )
+
+    def test_fixed_window_rejects_zero_spatial_resolution(
+        self, simple_chm: xr.DataArray
+    ):
+        with pytest.raises(ValueError, match="spatial_resolution must be positive"):
+            fixed_window_filter(
+                chm_da=simple_chm, min_height=2.0, spatial_resolution=0.0
+            )
+
+    def test_fixed_window_rejects_negative_spatial_resolution(
+        self, simple_chm: xr.DataArray
+    ):
+        with pytest.raises(ValueError, match="spatial_resolution must be positive"):
+            fixed_window_filter(
+                chm_da=simple_chm, min_height=2.0, spatial_resolution=-1.0
+            )
+
+    def test_variable_window_rejects_negative_min_height(
+        self, simple_chm: xr.DataArray
+    ):
+        with pytest.raises(ValueError, match="min_height cannot be negative"):
+            variable_window_filter(
+                chm_da=simple_chm, min_height=-1.0, spatial_resolution=0.5
+            )
+
+    def test_variable_window_rejects_zero_spatial_resolution(
+        self, simple_chm: xr.DataArray
+    ):
+        with pytest.raises(ValueError, match="spatial_resolution must be positive"):
+            variable_window_filter(
+                chm_da=simple_chm, min_height=2.0, spatial_resolution=0.0
+            )
+
+    def test_prepare_chm_rejects_non_2d_input(self):
+        arr = np.zeros((10, 10, 3))
+        da = xr.DataArray(arr, dims=["y", "x", "band"])
+        da.rio.write_crs("EPSG:32611", inplace=True)
+        da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
+        with pytest.raises(ValueError, match="CHM must be a 2D DataArray"):
+            fixed_window_filter(chm_da=da, min_height=2.0, spatial_resolution=1.0)
+
+    def test_variable_window_rejects_empty_unique_windows(
+        self, simple_chm: xr.DataArray
+    ):
+        with pytest.raises(ValueError, match="must not be empty"):
+            variable_window_filter(
+                chm_da=simple_chm,
+                min_height=2.0,
+                spatial_resolution=0.5,
+                unique_windows=[],
+            )
+
+    def test_variable_window_rejects_even_unique_windows(
+        self, simple_chm: xr.DataArray
+    ):
+        with pytest.raises(ValueError, match="must be odd"):
+            variable_window_filter(
+                chm_da=simple_chm,
+                min_height=2.0,
+                spatial_resolution=0.5,
+                unique_windows=[3, 4, 5],
+            )
+
+    def test_variable_window_rejects_nonpositive_unique_windows(
+        self, simple_chm: xr.DataArray
+    ):
+        with pytest.raises(ValueError, match="must be >= 1"):
+            variable_window_filter(
+                chm_da=simple_chm,
+                min_height=2.0,
+                spatial_resolution=0.5,
+                unique_windows=[-1, 3],
+            )
+
+    def test_fixed_window_small_window_floors_to_three(self):
+        """A window_size_meters that resolves to < 3 pixels is floored to 3."""
+        pixel_size = 1.0
+        chm_array = np.zeros((50, 50), dtype=np.float64)
+        chm_array[25, 25] = 20.0
+        chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+        chm_da.rio.write_crs("EPSG:32611", inplace=True)
+        chm_da.rio.write_transform(
+            from_origin(0, 0, pixel_size, pixel_size), inplace=True
+        )
+
+        result = fixed_window_filter(
+            chm_da=chm_da,
+            min_height=2.0,
+            spatial_resolution=pixel_size,
+            window_size_meters=1.0,  # 1.0 / 1.0 = 1 pixel, floored to 3
+        ).compute()
+        assert len(result) == 1
+
+
+# ---------------------------------------------------------------------------
+# Asymmetric chunk layout test
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+def test_asymmetric_chunk_layout(
+    filter_name: str,
+    mixed_morphology_chm: xr.DataArray,
+):
+    """Results must be identical with non-square (asymmetric) chunk layouts."""
+    reference = _run_reference(filter_name, mixed_morphology_chm)
+    tall_chunks = _run_filter(
+        filter_name, _chunk_chm(mixed_morphology_chm, {"y": 200, "x": 50})
+    )
+    wide_chunks = _run_filter(
+        filter_name, _chunk_chm(mixed_morphology_chm, {"y": 50, "x": 200})
+    )
+
+    _assert_same_output(reference, tall_chunks)
+    _assert_same_output(reference, wide_chunks)
+
+
+# ---------------------------------------------------------------------------
+# Benchmark and parallel execution tests (gated by env vars)
+# ---------------------------------------------------------------------------
+
+
+# @pytest.mark.skipif(
+#     os.getenv("RUN_HEAVY_ITD_BENCHMARK") != "1",
+#     reason="Set RUN_HEAVY_ITD_BENCHMARK=1 to run the ITD benchmark suite.",
+# )
+def test_memory_bounded_execution():
+    """Peak memory during chunked execution must be bounded by chunk size,
+    not by the full CHM size.  This is acceptance criterion 2 from issue #70."""
+    import tracemalloc
+
+    size = 4096
+    chunk_size = 512
+    rng = np.random.default_rng(42)
+    arr = rng.normal(1.0, 0.1, (size, size)).astype(np.float64)
+    for r, c in [(500, 500), (500, 3500), (3500, 500), (3500, 3500), (2048, 2048)]:
+        y_grid, x_grid = np.ogrid[:size, :size]
+        canopy = 25.0 * np.exp(-((x_grid - c) ** 2 + (y_grid - r) ** 2) / (2 * 8**2))
+        np.maximum(arr, canopy, out=arr)
+
+    chm_da = xr.DataArray(arr, dims=["y", "x"])
+    chm_da.rio.write_crs("EPSG:32611", inplace=True)
+    chm_da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
+    chunked = _chunk_chm(chm_da, {"y": chunk_size, "x": chunk_size})
+
+    full_array_bytes = arr.nbytes  # 128 MB
+    chunk_bytes = chunk_size * chunk_size * arr.itemsize  # 2 MB
+
+    import dask
+
+    tracemalloc.start()
+    with dask.config.set(scheduler="synchronous"):
+        result = fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=1.0,
+            window_size_meters=5.0,
+        ).compute()
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    assert len(result) == 5
+    # Peak memory must be well below the full array size.
+    # Allow a generous bound: 10 chunks worth of memory for concurrent
+    # intermediate arrays (overlap buffers, mask, labels, etc.)
+    memory_bound = 10 * chunk_bytes
+    print(
+        f"Peak memory: {peak / 1024**2:.1f} MB, "
+        f"bound: {memory_bound / 1024**2:.1f} MB, "
+        f"full array: {full_array_bytes / 1024**2:.1f} MB"
+    )
+    assert peak < memory_bound, (
+        f"Peak memory {peak / 1024**2:.1f} MB exceeds bound "
+        f"{memory_bound / 1024**2:.1f} MB (full array is "
+        f"{full_array_bytes / 1024**2:.1f} MB)"
+    )
+
+
+# @pytest.mark.skipif(
+#     os.getenv("RUN_HEAVY_ITD_BENCHMARK") != "1",
+#     reason="Set RUN_HEAVY_ITD_BENCHMARK=1 to run the ITD benchmark suite.",
+# )
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+def test_benchmark_old_vs_new_chunked(filter_name: str):
+    benchmark_chm = generate_benchmark_chm(size=1024)
+
+    def measure(label: str, runner: Callable[[], pd.DataFrame]) -> pd.DataFrame:
+        start = time.perf_counter()
+        result = runner()
+        elapsed = time.perf_counter() - start
+        print(f"{filter_name} {label}: elapsed={elapsed:.4f}s")
+        return result
+
+    reference = measure(
+        label="reference",
+        runner=lambda: _run_reference(filter_name, benchmark_chm),
+    )
+    one_chunk = measure(
+        label="new_one_chunk",
+        runner=lambda: _run_filter(
+            filter_name, _chunk_chm(benchmark_chm, {"y": 1024, "x": 1024})
+        ),
+    )
+    four_chunks = measure(
+        label="new_four_chunks",
+        runner=lambda: _run_filter(
+            filter_name, _chunk_chm(benchmark_chm, {"y": 512, "x": 512})
+        ),
+    )
+
+    _assert_same_output(reference, one_chunk)
+    _assert_same_output(one_chunk, four_chunks)
+
+
+# @pytest.mark.skipif(
+#     os.getenv("RUN_HEAVY_ITD_PARALLEL") != "1",
+#     reason="Set RUN_HEAVY_ITD_PARALLEL=1 to run the ITD parallel-execution proof.",
+# )
+def test_maximum_filter_blocks_execute_in_parallel():
+    benchmark_chm = generate_benchmark_chm(size=128)
+    chunked = _chunk_chm(benchmark_chm, {"y": 32, "x": 32})
+
+    records: list[tuple[float, float, int]] = []
+    lock = threading.Lock()
+
+    import scipy.ndimage
+
+    original_scipy_mf = scipy.ndimage.maximum_filter
+
+    def wrapped_scipy_mf(*args, **kwargs):
+        start = time.perf_counter()
+        thread_id = threading.get_ident()
+        time.sleep(0.05)
+        result = original_scipy_mf(*args, **kwargs)
+        end = time.perf_counter()
+        with lock:
+            records.append((start, end, thread_id))
+        return result
+
+    import unittest.mock
+
+    with (
+        unittest.mock.patch.object(
+            local_maxima_filter, "scipy_maximum_filter", wrapped_scipy_mf
+        ),
+        dask.config.set(scheduler="threads", num_workers=4),
+    ):
+        fixed_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=1.0,
+            window_size_meters=3.0,
+        ).compute()
+
+    assert len(records) >= 4
+    assert len({thread_id for _, _, thread_id in records}) > 1
+    assert any(
+        start_a < end_b and start_b < end_a
+        for index, (start_a, end_a, _) in enumerate(records)
+        for start_b, end_b, _ in records[index + 1 :]
+    )
