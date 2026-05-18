@@ -1175,6 +1175,64 @@ def test_returned_dataframe_is_lazy(
     assert isinstance(ddf, dd.DataFrame)
 
 
+def test_variable_window_caller_supplied_unique_windows_matches_auto(
+    complex_synthetic_chm: xr.DataArray,
+):
+    """When the caller passes a superset of the actual window sizes,
+    variable_window_filter must produce the same output as the auto path."""
+    chunked = _chunk_chm(complex_synthetic_chm, {"y": 100, "x": 100})
+
+    auto = variable_window_filter(
+        chm_da=chunked,
+        min_height=2.0,
+        spatial_resolution=0.5,
+        crown_ratio=0.10,
+        crown_offset=1.0,
+    ).compute()
+
+    # Generous superset of odd sizes up through what the CHM could plausibly produce.
+    supplied = variable_window_filter(
+        chm_da=chunked,
+        min_height=2.0,
+        spatial_resolution=0.5,
+        crown_ratio=0.10,
+        crown_offset=1.0,
+        unique_windows=[1, 3, 5, 7, 9, 11, 13, 15],
+    ).compute()
+
+    _assert_same_output(auto, supplied)
+
+
+def test_variable_window_caller_supplied_unique_windows_makes_graph_lazy(
+    complex_synthetic_chm: xr.DataArray,
+):
+    """With caller-supplied unique_windows, VWF graph construction must fire
+    zero tasks — no synchronous da.unique compute."""
+    chunked = _chunk_chm(complex_synthetic_chm, {"y": 100, "x": 100})
+
+    class TaskCounter(Callback):
+        def __init__(self) -> None:
+            super().__init__()
+            self.task_count = 0
+
+        def _pretask(self, key, dsk, state) -> None:  # noqa: ANN001
+            self.task_count += 1
+
+    callback = TaskCounter()
+    with callback:
+        ddf = variable_window_filter(
+            chm_da=chunked,
+            min_height=2.0,
+            spatial_resolution=0.5,
+            crown_ratio=0.10,
+            crown_offset=1.0,
+            unique_windows=[1, 3, 5, 7, 9, 11],
+        )
+
+    assert callback.task_count == 0
+    assert isinstance(ddf, dd.DataFrame)
+
+
 def test_graph_contains_more_tasks_for_multi_chunk_inputs(
     boundary_split_half_chm: xr.DataArray,
 ):
@@ -1196,6 +1254,57 @@ def test_graph_contains_more_tasks_for_multi_chunk_inputs(
     graph_four = len(four_chunks.__dask_graph__())
 
     assert graph_four > graph_one
+
+
+def test_plateau_coords_are_centroid_not_first_pixel():
+    """Pins a behavioral change from main: a flat plateau's coordinate is now
+    the centroid of all pixels in the plateau, not the first pixel (in
+    C-order) returned by scipy.ndimage.maximum_position.
+
+    Rationale: per-chunk labelling makes `maximum_position` order-dependent
+    (the "first pixel" depends on which chunk the plateau started in), so it
+    would produce different coordinates for different chunk layouts. The
+    centroid is order-invariant and satisfies the chunk-invariance tests.
+
+    This test would fail if someone reverted to maximum_position semantics
+    without also updating the chunk-invariance contract.
+    """
+    from scipy.ndimage import label as scipy_label, maximum_position
+
+    pixel_size = 1.0
+    chm_array = np.zeros((64, 64), dtype=np.float64)
+    # 4x4 flat plateau at rows 20..23, cols 30..33.
+    chm_array[20:24, 30:34] = 20.0
+
+    chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+    chm_da.rio.write_crs("EPSG:32611", inplace=True)
+    transform = from_origin(0, 0, pixel_size, pixel_size)
+    chm_da.rio.write_transform(transform, inplace=True)
+
+    # main's behavior: maximum_position picks the first C-order pixel of the
+    # plateau — (row=20, col=30) — i.e. the top-left.
+    labeled, _ = scipy_label(chm_array == 20.0)
+    (main_row, main_col) = maximum_position(chm_array, labels=labeled, index=[1])[0]
+    main_x, main_y = rio.transform.xy(transform, [main_row], [main_col])
+
+    result = fixed_window_filter(
+        chm_da=chm_da,
+        min_height=2.0,
+        spatial_resolution=pixel_size,
+        window_size_meters=3.0,
+    ).compute()
+
+    assert len(result) == 1
+
+    # New behavior: centroid of the plateau (row=21.5, col=31.5).
+    expected_x, expected_y = rio.transform.xy(transform, [21.5], [31.5])
+    assert result.iloc[0]["x"] == pytest.approx(expected_x[0])
+    assert result.iloc[0]["y"] == pytest.approx(expected_y[0])
+
+    # The centroid coordinate differs from main's first-pixel coordinate,
+    # proving the divergence is real and not just a documentation claim.
+    assert result.iloc[0]["x"] != pytest.approx(main_x[0])
+    assert result.iloc[0]["y"] != pytest.approx(main_y[0])
 
 
 # ---------------------------------------------------------------------------
@@ -1445,14 +1554,12 @@ class TestInteriorBoundarySplit:
         )
         assert ddf.npartitions > 1
 
-    def test_interior_only_chm_has_empty_boundary_partition(self):
-        """When all treetops are interior to their chunks, the boundary partition
-        should be empty and the result should still be correct."""
-        # Place a single tree well inside a chunk (center of a 64x64 block,
-        # chunked as a single 64x64 chunk — all labels touch the "boundary"
-        # of the one chunk). Instead, use a large chunk so trees are interior.
+    def test_interior_only_chm_routes_one_tree_per_partition(self):
+        """When each chunk contains exactly one interior tree, the output has
+        one partition per chunk and each partition holds exactly that chunk's
+        tree (spatial routing contract)."""
         chm_array = np.zeros((128, 128), dtype=np.float64)
-        # Place Gaussian trees far from any chunk boundary (chunk size 128)
+        # One Gaussian tree per quadrant, well away from chunk boundaries.
         for r, c in [(32, 32), (32, 96), (96, 32), (96, 96)]:
             y_grid, x_grid = np.ogrid[:128, :128]
             dist_sq = (x_grid - c) ** 2 + (y_grid - r) ** 2
@@ -1462,8 +1569,7 @@ class TestInteriorBoundarySplit:
         chm_da = xr.DataArray(chm_array, dims=["y", "x"])
         chm_da.rio.write_crs("EPSG:32611", inplace=True)
         chm_da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
-        # Chunk so each tree is well within its chunk
-        chunked = _chunk_chm(chm_da, {"y": 64, "x": 64})
+        chunked = _chunk_chm(chm_da, {"y": 64, "x": 64})  # 2x2 = 4 chunks
 
         ddf = fixed_window_filter(
             chm_da=chunked,
@@ -1471,22 +1577,26 @@ class TestInteriorBoundarySplit:
             spatial_resolution=1.0,
             window_size_meters=3.0,
         )
+        assert ddf.npartitions == 4
         result = ddf.compute()
         assert len(result) == 4
 
-        # The last partition is the boundary dedup partition — should be empty
-        boundary_partition = ddf.get_partition(ddf.npartitions - 1).compute()
-        assert len(boundary_partition) == 0
+        # Each partition holds exactly one tree (its chunk's interior tree).
+        for k in range(ddf.npartitions):
+            part = ddf.get_partition(k).compute()
+            assert len(part) == 1
 
-    def test_boundary_partition_contains_only_boundary_labels(
+    def test_boundary_treetop_routed_to_owning_chunk(
         self,
         boundary_split_half_chm: xr.DataArray,
     ):
-        """The boundary dedup partition should contain only labels that
-        straddled chunk edges, not interior labels."""
-        # This CHM has a single plateau at rows 28-31, cols 30-33
-        # in a 64x64 grid. With 32x32 chunks, the plateau straddles
-        # the row boundary (row 31/32) and col boundary (col 31/32).
+        """A plateau that straddles chunk boundaries is merged and routed to
+        the partition whose chunk contains the merged centroid pixel."""
+        # CHM: plateau at rows 28-31, cols 30-33 in a 64x64 grid.
+        # 32x32 chunks → 4 chunks. Plateau straddles row boundary (31/32)
+        # and col boundary (31/32). Centroid at (29.5, 31.5):
+        #   row 29 → chunk row 0 (rows 0-31), col 31 → chunk col 0 (cols 0-31)
+        # so the merged treetop must land in partition 0 (k = 0*2 + 0).
         chunked = _chunk_chm(boundary_split_half_chm, {"y": 32, "x": 32})
 
         ddf = fixed_window_filter(
@@ -1495,37 +1605,37 @@ class TestInteriorBoundarySplit:
             spatial_resolution=1.0,
             window_size_meters=3.0,
         )
+        assert ddf.npartitions == 4
         result = ddf.compute()
         assert len(result) == 1
 
-        # The single treetop should come from the boundary partition (last one)
-        boundary_partition = ddf.get_partition(ddf.npartitions - 1).compute()
-        assert len(boundary_partition) == 1
-
-        # Interior partitions should all be empty (no interior trees in this CHM)
-        for i in range(ddf.npartitions - 1):
-            interior_part = ddf.get_partition(i).compute()
-            assert len(interior_part) == 0
+        # Partition 0 owns the centroid; the other 3 are empty.
+        owner = ddf.get_partition(0).compute()
+        assert len(owner) == 1
+        for k in range(1, ddf.npartitions):
+            other = ddf.get_partition(k).compute()
+            assert len(other) == 0
 
     @pytest.mark.parametrize("filter_name", ["fixed", "variable"])
-    def test_boundary_materialization_is_small_fraction(
+    def test_each_partition_holds_only_its_chunks_treetops(
         self,
         filter_name: str,
     ):
-        """The boundary partition should be a small fraction of total treetops.
+        """Spatial routing contract: every treetop in partition k must fall
+        within the spatial bounds of CHM chunk k.
 
-        This is the core memory-safety property: only O(perimeter) candidates
-        are materialized for dedup, not O(area).
-
-        Uses a dense random CHM so that treetops are uniformly distributed
-        across each chunk's interior, not concentrated at chunk boundaries.
+        This replaces the prior "boundary partition is a small fraction" test
+        — that test inspected a dedicated last partition, which no longer
+        exists after spatial routing.  The memory-safety property of the
+        boundary dedup is still verified by ``test_memory_bounded_execution``.
         """
         rng = np.random.default_rng(777)
         arr = rng.uniform(0, 30, (256, 256)).astype(np.float64)
         chm_da = xr.DataArray(arr, dims=["y", "x"])
         chm_da.rio.write_crs("EPSG:32611", inplace=True)
         chm_da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
-        chunked = _chunk_chm(chm_da, {"y": 64, "x": 64})  # 16 chunks
+        chunk_size = 64
+        chunked = _chunk_chm(chm_da, {"y": chunk_size, "x": chunk_size})  # 4x4
 
         ddf = (
             fixed_window_filter(
@@ -1544,18 +1654,30 @@ class TestInteriorBoundarySplit:
             )
         )
 
-        total = len(ddf)
-        boundary_count = len(ddf.get_partition(ddf.npartitions - 1))
+        n_row_chunks = 256 // chunk_size
+        n_col_chunks = 256 // chunk_size
+        assert ddf.npartitions == n_row_chunks * n_col_chunks
 
-        assert total > 0, "Test expects a non-empty result"
-        boundary_fraction = boundary_count / total
-        # Boundary labels should be a small fraction of total.
-        # For 64x64 chunks, perimeter/area = 4*64 / 64^2 ≈ 6%.
-        # In practice, boundary labels are typically 2-8% of total.
-        assert boundary_fraction < 0.15, (
-            f"Boundary fraction {boundary_fraction:.1%} is too high — "
-            f"dedup materialization may not be bounded"
-        )
+        transform = chm_da.rio.transform()
+        for k in range(ddf.npartitions):
+            part = ddf.get_partition(k).compute()
+            if part.empty:
+                continue
+            i, j = divmod(k, n_col_chunks)
+            row_lo, row_hi = i * chunk_size, (i + 1) * chunk_size
+            col_lo, col_hi = j * chunk_size, (j + 1) * chunk_size
+            # Convert chunk pixel bounds to spatial bounds.
+            x_min, y_max = rio.transform.xy(transform, [row_lo], [col_lo])
+            x_max, y_min = rio.transform.xy(transform, [row_hi], [col_hi])
+            # rio.transform.xy returns pixel centers; pad by half a pixel.
+            x_lo, x_hi = min(x_min[0], x_max[0]) - 0.5, max(x_min[0], x_max[0]) + 0.5
+            y_lo, y_hi = min(y_min[0], y_max[0]) - 0.5, max(y_min[0], y_max[0]) + 0.5
+            assert (part["x"] >= x_lo).all() and (part["x"] <= x_hi).all(), (
+                f"partition {k} has x outside chunk bounds [{x_lo}, {x_hi}]"
+            )
+            assert (part["y"] >= y_lo).all() and (part["y"] <= y_hi).all(), (
+                f"partition {k} has y outside chunk bounds [{y_lo}, {y_hi}]"
+            )
 
     @pytest.mark.parametrize("filter_name", ["fixed", "variable"])
     def test_split_matches_reference_on_dense_random_chm(
@@ -1679,6 +1801,39 @@ class TestInputValidation:
         da.rio.write_transform(from_origin(0, 0, 1.0, 1.0), inplace=True)
         with pytest.raises(ValueError, match="CHM must be a 2D DataArray"):
             fixed_window_filter(chm_da=da, min_height=2.0, spatial_resolution=1.0)
+
+    def test_variable_window_rejects_empty_unique_windows(
+        self, simple_chm: xr.DataArray
+    ):
+        with pytest.raises(ValueError, match="must not be empty"):
+            variable_window_filter(
+                chm_da=simple_chm,
+                min_height=2.0,
+                spatial_resolution=0.5,
+                unique_windows=[],
+            )
+
+    def test_variable_window_rejects_even_unique_windows(
+        self, simple_chm: xr.DataArray
+    ):
+        with pytest.raises(ValueError, match="must be odd"):
+            variable_window_filter(
+                chm_da=simple_chm,
+                min_height=2.0,
+                spatial_resolution=0.5,
+                unique_windows=[3, 4, 5],
+            )
+
+    def test_variable_window_rejects_nonpositive_unique_windows(
+        self, simple_chm: xr.DataArray
+    ):
+        with pytest.raises(ValueError, match="must be >= 1"):
+            variable_window_filter(
+                chm_da=simple_chm,
+                min_height=2.0,
+                spatial_resolution=0.5,
+                unique_windows=[-1, 3],
+            )
 
     def test_fixed_window_small_window_floors_to_three(self):
         """A window_size_meters that resolves to < 3 pixels is floored to 3."""

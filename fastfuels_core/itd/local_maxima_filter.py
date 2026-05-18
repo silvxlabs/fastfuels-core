@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import dask
 import dask.array as da
 import dask.dataframe as dd
@@ -207,20 +209,28 @@ def _find_edge_merge_pairs(
     return pairs
 
 
-def _union_find_merge(
+_BOUNDARY_PIXEL_META = pd.DataFrame(
+    {
+        "centroid_row": pd.Series(dtype="float64"),
+        "centroid_col": pd.Series(dtype="float64"),
+        "height": pd.Series(dtype="float64"),
+    }
+)
+
+
+def _union_find_merge_to_pixels(
     all_candidates: pd.DataFrame,
     merge_pairs: list[tuple[int, int]],
-    transform: rio.Affine,
 ) -> pd.DataFrame:
-    """Merge boundary candidates whose labels are transitively connected.
+    """Merge boundary candidates and return pixel-space coordinates.
 
-    Uses union-find to group labels, then combines centroid components
-    within each group.  Returns spatial (x, y, height) output.
+    Same logic as ``_union_find_merge`` but defers the affine transform so
+    callers can first route each merged treetop to the chunk that owns its
+    centroid pixel.
     """
     if all_candidates.empty:
-        return _OUTPUT_META.copy()
+        return _BOUNDARY_PIXEL_META.copy()
 
-    # Union-find
     parent: dict[int, int] = {}
 
     def find(x: int) -> int:
@@ -237,7 +247,6 @@ def _union_find_merge(
     for a, b in merge_pairs:
         union(a, b)
 
-    # Map every boundary label to its root
     all_candidates = all_candidates.copy()
     all_candidates["group"] = all_candidates["label"].map(lambda lbl: find(lbl))
 
@@ -254,7 +263,101 @@ def _union_find_merge(
         .reset_index()
     )
 
-    return _candidates_to_spatial(combined, transform)
+    return pd.DataFrame(
+        {
+            "centroid_row": combined["centroid_row_sum"].values
+            / combined["centroid_count"].values,
+            "centroid_col": combined["centroid_col_sum"].values
+            / combined["centroid_count"].values,
+            "height": combined["height"].values.astype(np.float64),
+        }
+    )
+
+
+def _union_find_merge(
+    all_candidates: pd.DataFrame,
+    merge_pairs: list[tuple[int, int]],
+    transform: rio.Affine,
+) -> pd.DataFrame:
+    """Merge boundary candidates and return spatial (x, y, height) output.
+
+    Thin wrapper around ``_union_find_merge_to_pixels`` that applies the affine
+    transform.  Kept for direct callers/tests that want the merged spatial
+    output in one step.
+    """
+    pixels = _union_find_merge_to_pixels(all_candidates, merge_pairs)
+    if pixels.empty:
+        return _OUTPUT_META.copy()
+
+    xs, ys = rio.transform.xy(
+        transform, pixels["centroid_row"].tolist(), pixels["centroid_col"].tolist()
+    )
+    return pd.DataFrame(
+        {
+            "x": np.asarray(xs, dtype=np.float64),
+            "y": np.asarray(ys, dtype=np.float64),
+            "height": pixels["height"].values.astype(np.float64),
+        }
+    )
+
+
+def _slice_boundary_to_chunk_and_transform(
+    merged_boundary_pixels: pd.DataFrame,
+    row_lo: int,
+    row_hi: int,
+    col_lo: int,
+    col_hi: int,
+    transform: rio.Affine,
+) -> pd.DataFrame:
+    """Filter merged boundary treetops to a single chunk's pixel bounds.
+
+    A merged treetop belongs to chunk ``[row_lo, row_hi) × [col_lo, col_hi)``
+    iff ``floor(centroid_row)`` falls in the row range and ``floor(centroid_col)``
+    falls in the column range.  This is a total assignment: each merged
+    treetop lands in exactly one chunk's partition.
+    """
+    if merged_boundary_pixels.empty:
+        return _OUTPUT_META.copy()
+
+    rows = merged_boundary_pixels["centroid_row"].values
+    cols = merged_boundary_pixels["centroid_col"].values
+    floor_rows = np.floor(rows).astype(int)
+    floor_cols = np.floor(cols).astype(int)
+    mask = (
+        (floor_rows >= row_lo)
+        & (floor_rows < row_hi)
+        & (floor_cols >= col_lo)
+        & (floor_cols < col_hi)
+    )
+    if not mask.any():
+        return _OUTPUT_META.copy()
+
+    sel_rows = rows[mask]
+    sel_cols = cols[mask]
+    heights = merged_boundary_pixels["height"].values[mask]
+
+    xs, ys = rio.transform.xy(transform, sel_rows.tolist(), sel_cols.tolist())
+    return pd.DataFrame(
+        {
+            "x": np.asarray(xs, dtype=np.float64),
+            "y": np.asarray(ys, dtype=np.float64),
+            "height": heights.astype(np.float64),
+        }
+    )
+
+
+def _concat_interior_boundary(
+    interior: pd.DataFrame, boundary: pd.DataFrame
+) -> pd.DataFrame:
+    """Concat the interior treetops with the boundary slice belonging to the
+    same chunk.  Returns an empty meta frame when both inputs are empty."""
+    if interior.empty and boundary.empty:
+        return _OUTPUT_META.copy()
+    if interior.empty:
+        return boundary.reset_index(drop=True)
+    if boundary.empty:
+        return interior.reset_index(drop=True)
+    return pd.concat([interior, boundary], ignore_index=True)
 
 
 def _extract_treetops(
@@ -343,7 +446,9 @@ def _extract_treetops(
         _process_interior_candidates, transform, meta=_OUTPUT_META
     )
 
-    # Step 6b: boundary labels — collect, merge via union-find, convert
+    # Step 6b: boundary labels — collect and merge via union-find. Defer the
+    # transform so we can first route each merged treetop to the chunk that
+    # owns it.
     boundary_candidates = candidates.map_partitions(
         lambda part: part[part["is_boundary"]], meta=_CANDIDATE_META
     )
@@ -356,14 +461,33 @@ def _extract_treetops(
 
     all_merge_pairs = dask.delayed(_collect_merge_pairs)(*edge_merge_delayed)
 
-    boundary_output = dd.from_delayed(
-        dask.delayed(_union_find_merge)(
-            boundary_candidates, all_merge_pairs, transform
-        ),
-        meta=_OUTPUT_META,
+    merged_boundary_pixels = dask.delayed(_union_find_merge_to_pixels)(
+        boundary_candidates, all_merge_pairs
     )
 
-    return dd.concat([interior_output, boundary_output])
+    # Step 7: route each merged boundary treetop to the chunk that contains it,
+    # then concat with that chunk's interior partition. Output has exactly
+    # ``n_chunks`` partitions, each spatially aligned with its CHM chunk.
+    interior_delayeds = interior_output.to_delayed()
+
+    combined_delayeds = []
+    for i in range(n_row_chunks):
+        for j in range(n_col_chunks):
+            k = i * n_col_chunks + j
+            row_lo = int(row_starts[i])
+            row_hi = row_lo + int(chm.chunks[0][i])
+            col_lo = int(col_starts[j])
+            col_hi = col_lo + int(chm.chunks[1][j])
+            boundary_slice = dask.delayed(_slice_boundary_to_chunk_and_transform)(
+                merged_boundary_pixels, row_lo, row_hi, col_lo, col_hi, transform
+            )
+            combined_delayeds.append(
+                dask.delayed(_concat_interior_boundary)(
+                    interior_delayeds[k], boundary_slice
+                )
+            )
+
+    return dd.from_delayed(combined_delayeds, meta=_OUTPUT_META)
 
 
 def variable_window_filter(
@@ -372,7 +496,7 @@ def variable_window_filter(
     spatial_resolution: float,
     crown_ratio: float = 0.10,
     crown_offset: float = 1.0,
-    max_height: float | None = None,
+    unique_windows: Sequence[int] | None = None,
 ) -> dd.DataFrame:
     """Finds treetops from a CHM using a Variable Window Filter (VWF).
 
@@ -392,8 +516,15 @@ def variable_window_filter(
         crown_ratio (float): The multiplier for tree height to estimate crown width.
             Defaults to 0.10 (10%).
         crown_offset (float): The base crown width in meters. Defaults to 1.0m.
-        max_height (float | None): Maximum canopy height in meters. Determines
-            the largest search window. If None, computed from the CHM.
+        unique_windows: Optional caller-supplied list of odd, positive window
+            sizes (in pixels) to iterate.  When provided, skips the internal
+            ``da.unique`` scan over the CHM — this is the only synchronous
+            reduction in VWF, so passing this argument makes graph
+            construction fully lazy.  The caller is responsible for supplying
+            a superset of the window sizes that actually appear in the data;
+            sizes missing from the list will silently produce no treetops at
+            the corresponding pixels.  Extra sizes are safe but cost one
+            ``map_overlap`` pass each at compute time.
 
     Returns:
         dd.DataFrame: Detected treetops with explicit 'x', 'y', and 'height' columns.
@@ -403,31 +534,29 @@ def variable_window_filter(
     if spatial_resolution <= 0:
         raise ValueError("spatial_resolution must be positive")
 
+    if unique_windows is not None:
+        windows_to_use = _validate_unique_windows(unique_windows)
+    else:
+        windows_to_use = None
+
     chm, transform = _prepare_chm(chm_da)
 
-    if max_height is None:
-        max_height = float(chm.max().compute())
-
-    # Window sizes must be odd (centered kernel). Derive the range of odd
-    # sizes from min_height and max_height.
-    min_w = int((min_height * crown_ratio + crown_offset) / spatial_resolution)
-    max_w = int((max_height * crown_ratio + crown_offset) / spatial_resolution)
-    if min_w % 2 == 0:
-        min_w -= 1
-    if max_w % 2 == 0:
-        max_w += 1
-    min_w = max(min_w, 1)
-    unique_windows = range(min_w, max_w + 2, 2)
-
-    # Per-pixel window size (lazy)
+    # Per-pixel window size (lazy).
     crown_width_meters = (chm * crown_ratio) + crown_offset
     required_windows = (crown_width_meters / spatial_resolution).astype(int)
     required_windows = da.where(
         required_windows % 2 == 0, required_windows + 1, required_windows
     )
 
+    if windows_to_use is None:
+        # Iterate only the window sizes that actually occur in the data. `da.unique`
+        # is a tree reduction (per-chunk np.unique, merged pairwise up the tree) —
+        # bounded memory, never materializes the full required_windows array.
+        # This is the one synchronous step in VWF; pass `unique_windows` to skip it.
+        windows_to_use = np.asarray(da.unique(required_windows).compute())
+
     vw_max = da.zeros_like(chm)
-    for w in unique_windows:
+    for w in windows_to_use:
         w = int(w)
         if w <= 1:
             vw_max = da.where(required_windows == w, chm, vw_max)
@@ -437,6 +566,31 @@ def variable_window_filter(
         vw_max = da.where(required_windows == w, filtered, vw_max)
 
     return _extract_treetops(chm, vw_max, transform, min_height)
+
+
+def _validate_unique_windows(unique_windows: Sequence[int]) -> np.ndarray:
+    """Validate a caller-supplied ``unique_windows`` argument and return a
+    sorted, deduplicated ``np.ndarray[int]``.
+
+    Each entry must be a positive odd integer (the VWF kernel is a centered
+    circular footprint).
+    """
+    materialized = list(unique_windows)
+    if not materialized:
+        raise ValueError("unique_windows must not be empty")
+    validated: list[int] = []
+    for raw in materialized:
+        w = int(raw)
+        if w < 1:
+            raise ValueError(
+                f"unique_windows entries must be >= 1, got {w}"
+            )
+        if w % 2 == 0:
+            raise ValueError(
+                f"unique_windows entries must be odd, got {w}"
+            )
+        validated.append(w)
+    return np.asarray(sorted(set(validated)), dtype=int)
 
 
 def fixed_window_filter(
