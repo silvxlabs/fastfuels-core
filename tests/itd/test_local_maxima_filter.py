@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import threading
 import time
 from pathlib import Path
@@ -1284,7 +1283,7 @@ def test_plateau_coords_are_centroid_not_first_pixel():
     # main's behavior: maximum_position picks the first C-order pixel of the
     # plateau — (row=20, col=30) — i.e. the top-left.
     labeled, _ = scipy_label(chm_array == 20.0)
-    (main_row, main_col) = maximum_position(chm_array, labels=labeled, index=[1])[0]
+    main_row, main_col = maximum_position(chm_array, labels=labeled, index=[1])[0]
     main_x, main_y = rio.transform.xy(transform, [main_row], [main_col])
 
     result = fixed_window_filter(
@@ -1672,12 +1671,12 @@ class TestInteriorBoundarySplit:
             # rio.transform.xy returns pixel centers; pad by half a pixel.
             x_lo, x_hi = min(x_min[0], x_max[0]) - 0.5, max(x_min[0], x_max[0]) + 0.5
             y_lo, y_hi = min(y_min[0], y_max[0]) - 0.5, max(y_min[0], y_max[0]) + 0.5
-            assert (part["x"] >= x_lo).all() and (part["x"] <= x_hi).all(), (
-                f"partition {k} has x outside chunk bounds [{x_lo}, {x_hi}]"
-            )
-            assert (part["y"] >= y_lo).all() and (part["y"] <= y_hi).all(), (
-                f"partition {k} has y outside chunk bounds [{y_lo}, {y_hi}]"
-            )
+            assert (part["x"] >= x_lo).all() and (
+                part["x"] <= x_hi
+            ).all(), f"partition {k} has x outside chunk bounds [{x_lo}, {x_hi}]"
+            assert (part["y"] >= y_lo).all() and (
+                part["y"] <= y_hi
+            ).all(), f"partition {k} has y outside chunk bounds [{y_lo}, {y_hi}]"
 
     @pytest.mark.parametrize("filter_name", ["fixed", "variable"])
     def test_split_matches_reference_on_dense_random_chm(

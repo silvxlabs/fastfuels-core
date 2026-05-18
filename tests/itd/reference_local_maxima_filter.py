@@ -4,6 +4,7 @@ This module is a frozen copy of the original scipy-based implementation prior to
 the dask-image refactor. It is used exclusively in tests to verify that the new
 chunked implementation produces identical results.
 """
+
 from __future__ import annotations
 
 import numpy as np

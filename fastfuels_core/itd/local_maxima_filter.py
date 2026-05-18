@@ -417,7 +417,7 @@ def _extract_treetops(
                 k_below = (i + 1) * n_col_chunks + j
                 edge_merge_delayed.append(
                     dask.delayed(_find_edge_merge_pairs)(
-                        chunk_results[k][1],       # bottom edge
+                        chunk_results[k][1],  # bottom edge
                         chunk_results[k_below][3],  # top edge
                     )
                 )
@@ -426,7 +426,7 @@ def _extract_treetops(
                 k_right = k + 1
                 edge_merge_delayed.append(
                     dask.delayed(_find_edge_merge_pairs)(
-                        chunk_results[k][2],       # right edge
+                        chunk_results[k][2],  # right edge
                         chunk_results[k_right][4],  # left edge
                     )
                 )
@@ -582,13 +582,9 @@ def _validate_unique_windows(unique_windows: Sequence[int]) -> np.ndarray:
     for raw in materialized:
         w = int(raw)
         if w < 1:
-            raise ValueError(
-                f"unique_windows entries must be >= 1, got {w}"
-            )
+            raise ValueError(f"unique_windows entries must be >= 1, got {w}")
         if w % 2 == 0:
-            raise ValueError(
-                f"unique_windows entries must be odd, got {w}"
-            )
+            raise ValueError(f"unique_windows entries must be odd, got {w}")
         validated.append(w)
     return np.asarray(sorted(set(validated)), dtype=int)
 
