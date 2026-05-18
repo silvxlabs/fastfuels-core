@@ -12,7 +12,7 @@ Coverage
 - Overlap resolution: loading sums, optional bands via mean/min/max
 - Optional-band NaN propagation
 - Seed reproducibility
-- Integration test with blue_mountain_fuels.geojson (all three modes)
+- Integration test with surface_fuels.geojson (all three modes)
 """
 
 from __future__ import annotations
@@ -64,6 +64,7 @@ def _single_poly(
     fuel_height: float = 0.5,
     percent_cover: float = 100.0,
     patch_size: float | None = None,
+    patch_std_dev: float | None = None,
     live_fuel_moisture: float | None = None,
     dead_fuel_moisture: float | None = None,
     heat_of_combustion: float | None = None,
@@ -83,6 +84,8 @@ def _single_poly(
     )
     if patch_size is not None:
         row["patch_size"] = patch_size
+    if patch_std_dev is not None:
+        row["patch_std_dev"] = patch_std_dev
     if live_fuel_moisture is not None:
         row["live_fuel_moisture"] = live_fuel_moisture
     if dead_fuel_moisture is not None:
@@ -376,11 +379,14 @@ class TestDistributionModes:
         with pytest.raises(ValueError, match="patch_size"):
             rasterize_layerset(gdf, resolution=RESOLUTION)
 
-    def test_random_clusters_fills_cells(self):
+    @pytest.mark.parametrize("patch_std_dev", [None, 2.0])
+    def test_random_clusters_fills_cells(self, patch_std_dev):
+        """Clusters fill cells whether or not patch_std_dev is provided."""
         gdf = _single_poly(
             distribution="random_clusters",
             percent_cover=60.0,
             patch_size=10.0,
+            patch_std_dev=patch_std_dev,
         )
         ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
         loading = ds["litter"].sel(band="loading").values
@@ -401,6 +407,19 @@ class TestDistributionModes:
         filled_cells = np.count_nonzero(loading > 0)
         cover = filled_cells / total_cells
         assert cover == pytest.approx(0.50, abs=0.15)
+
+    def test_random_clusters_with_std_dev_fills_cells(self):
+        """patch_std_dev provided — clusters should still fill cells."""
+        gdf = _single_poly(
+            distribution="random_clusters",
+            percent_cover=60.0,
+            patch_size=10.0,
+            patch_std_dev=2.0,
+            geom=box(0, 0, 200, 200),
+        )
+        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
+        loading = ds["litter"].sel(band="loading").values
+        assert np.any(loading > 0)
 
 
 # ---------------------------------------------------------------------------
@@ -556,23 +575,6 @@ class TestOptionalBands:
         # Gap cells should be NaN (no edge-weight partial values in this version)
         assert np.any(np.isnan(loading))
 
-    def test_patch_size_band_written_for_clusters(self):
-        """patch_size band should be non-NaN where clusters were placed."""
-        gdf = _single_poly(
-            distribution="random_clusters",
-            percent_cover=60.0,
-            patch_size=10.0,
-        )
-        ds = rasterize_layerset(gdf, resolution=RESOLUTION, seed=SEED)
-        ps = ds["litter"].sel(band="patch_size").values
-        # Cells with loading should also carry a patch_size value
-        loading = ds["litter"].sel(band="loading").values
-        filled = loading > 0
-        # At least one filled cell should have a finite patch_size
-        # (patch_size is stored as an optional band; NaN if not provided)
-        # Since we DID provide it, filled cells should carry it
-        assert np.any(np.isfinite(ps[filled]))
-
 
 # ---------------------------------------------------------------------------
 # 7. Values sanity
@@ -714,18 +716,6 @@ class TestIntegrationBlueMountain:
         for v in self.ds.data_vars:
             hoc = self.ds[v].sel(band="heat_of_combustion").values
             assert np.any(np.isfinite(hoc)), f"{v} has no finite heat_of_combustion"
-
-    def test_patch_size_finite_for_shrub(self):
-        """shrub rows have patch_size; cluster-filled cells should carry it."""
-        ps = self.ds["shrub"].sel(band="patch_size").values
-        loading = self.ds["shrub"].sel(band="loading").values
-        filled = loading > 0
-        assert np.any(np.isfinite(ps[filled]))
-
-    def test_patch_size_nan_for_litter(self):
-        """litter rows have no patch_size — band should be all NaN."""
-        ps = self.ds["litter"].sel(band="patch_size").values
-        assert np.all(np.isnan(ps))
 
     # --- reproducibility ---
 

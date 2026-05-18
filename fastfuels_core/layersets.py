@@ -21,6 +21,9 @@ Optional
     live_fuel_moisture  float  — %
     dead_fuel_moisture  float  — %
     heat_of_combustion  float  — kJ/kg
+    patch_std_dev       float  — m; std dev used to vary patch diameters in
+                                 random_clusters. If omitted, all patches are
+                                 exactly patch_size (no variation).
 
 DISTRIBUTION MODES
 ------------------
@@ -34,8 +37,9 @@ uniform_random
 
 random_clusters
     Circular patches of diameter patch_size are placed at uniformly random
-    centers until percent_cover is reached. Patch diameters vary around
-    patch_size with a 10% coefficient of variation.
+    centers until percent_cover is reached. If patch_std_dev is provided,
+    patch diameters are drawn from N(patch_size, patch_std_dev); otherwise
+    every patch is exactly patch_size.
 
 OVERLAP RESOLUTION (same fuel_type, multiple polygons)
 -------------------------------------------------------
@@ -48,7 +52,7 @@ xarray.Dataset with:
   • one DataArray per fuel type, named by fuel_type string
   • dims:  (band, y, x)
   • coords: band = ["loading","height","live_fuel_moisture",
-                    "dead_fuel_moisture","heat_of_combustion","patch_size"]
+                    "dead_fuel_moisture","heat_of_combustion"]
             y, x = cell-center coordinates in the input CRS
   • spatial_ref stored via rioxarray conventions
   • NoData = NaN for optional bands where no value was provided
@@ -76,7 +80,6 @@ OPTIONAL_BANDS = (
     "live_fuel_moisture",
     "dead_fuel_moisture",
     "heat_of_combustion",
-    "patch_size",
 )
 ALL_BANDS = ("loading", "height") + OPTIONAL_BANDS
 DISTRIBUTION_MODES = ("homogeneous", "uniform_random", "random_clusters")
@@ -277,6 +280,11 @@ def _rasterize_fuel_type(
             if "patch_size" in row.index and not np.isnan(row.patch_size)
             else None
         )
+        patch_std_dev = (
+            row.patch_std_dev
+            if "patch_std_dev" in row.index and not np.isnan(row.patch_std_dev)
+            else None
+        )
 
         in_poly = _poly_mask(geom, transform, ny, nx)
         if not np.any(in_poly):
@@ -286,6 +294,7 @@ def _rasterize_fuel_type(
             distribution=distribution,
             cover_frac=cover_frac,
             patch_size=patch_size,
+            patch_std_dev=patch_std_dev,
             in_poly=in_poly,
             resolution=resolution,
             rng=rng,
@@ -329,12 +338,12 @@ def _rasterize_fuel_type(
         [np.where(any_fuel, loading_acc, np.nan).astype(np.float32)]
         + [_resolve(opt[c]) for c in ("height",) + OPTIONAL_BANDS],
         axis=0,
-    )  # (6, ny, nx)
+    )  # (5, ny, nx)
 
     da = xr.DataArray(
         band_arrays,
         dims=["band", "y", "x"],
-        coords={"band": list(ALL_BANDS), "y": ys, "x": xs},  # 6 bands
+        coords={"band": list(ALL_BANDS), "y": ys, "x": xs},  # 5 bands
     )
     da.rio.write_nodata(np.nan, inplace=True)
     return da
@@ -366,6 +375,7 @@ def _build_horizontal_distribution(
     distribution: str,
     cover_frac: Optional[float],
     patch_size: Optional[float],
+    patch_std_dev: Optional[float],
     in_poly: np.ndarray,
     resolution: float,
     rng: np.random.Generator,
@@ -385,7 +395,7 @@ def _build_horizontal_distribution(
         return _dist_uniform_random(hd, in_poly, cover_frac, rng)
     if distribution == "random_clusters":
         return _dist_random_clusters(
-            hd, in_poly, cover_frac, patch_size, resolution, rng
+            hd, in_poly, cover_frac, patch_size, patch_std_dev, resolution, rng
         )
     raise ValueError(f"Unknown distribution: {distribution!r}")
 
@@ -416,13 +426,17 @@ def _dist_random_clusters(
     in_poly: np.ndarray,
     cover_frac: float,
     patch_size: float,
+    patch_std_dev: Optional[float],
     resolution: float,
     rng: np.random.Generator,
 ) -> np.ndarray:
     """
     Place circular patches inside the polygon until cover_frac is reached.
-    Patch diameters vary around patch_size with a 10% coefficient of variation.
-    Centers are drawn uniformly at random, matching the original STANDFIRE behavior.
+    If patch_std_dev is provided, patch diameters are drawn from
+    N(patch_size, patch_std_dev) (clipped to at least one cell).
+    If patch_std_dev is None, every patch is exactly patch_size
+    (clipped to at least one cell). Centers are drawn uniformly
+    at random, matching the original STANDFIRE behavior.
     """
     ny, nx = hd.shape
     cells_in_poly = int(np.count_nonzero(in_poly))
@@ -432,8 +446,11 @@ def _dist_random_clusters(
 
     def _stamp(cx: float, cy: float) -> bool:
         nonlocal current_cells
-        # draw a patch radius with 10% CV around the nominal patch size
-        actual_patch_size = max(resolution, rng.normal(patch_size, patch_size * 0.1))
+        if patch_std_dev is not None:
+            actual_patch_size = rng.normal(patch_size, patch_std_dev)
+        else:
+            actual_patch_size = patch_size
+        actual_patch_size = max(resolution, actual_patch_size)
         ray = 0.5 * actual_patch_size / resolution
 
         # bounding box of the circle in cell indices
