@@ -10,7 +10,7 @@ from fastfuels_core.treatments import TreatmentProtocol
 from fastfuels_core.crown_profile_models.abc import CrownProfileModel
 from fastfuels_core.crown_profile_models.purves import PurvesCrownProfile
 from fastfuels_core.crown_profile_models.beta import BetaCrownProfile
-from fastfuels_core.ref_data import REF_SPECIES, REF_JENKINS
+from fastfuels_core.ref_data import REF_SPECIES, REF_JENKINS, REF_TRY_DB_LEAF
 
 # External Imports
 import numpy as np
@@ -379,6 +379,20 @@ class Tree:
         the Jenkins species group and come from personal correspondence with the Jolly team at the Missoula Fire Lab.
         """
         return REF_JENKINS.loc[self.jenkins_species_group]["FOLIAGE_SAV"]
+    
+    @property
+    def specific_leaf_area(self) -> float:
+        """
+        Returns specific leaf area (SLA) in mm^2/mg, petiole excluded. These are the mean values per species from the TRY database.
+        """
+        return REF_TRY_DB_LEAF.loc[self.species_code]["SLA_PETIOLE_EXCLUDED"] # Q: Should I convert into per kg?
+    
+    @property
+    def mean_leaf_angle(self) -> float:
+        """
+        Returns mean leaf angle in degrees. These are the mean values per species from the TRY database.
+        """
+        return REF_TRY_DB_LEAF.loc[self.species_code]["LEAF_ANGLE_DEG"] # Q: Should I convert to radians?
 
     def voxelize(
         self,
