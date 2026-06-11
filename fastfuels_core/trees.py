@@ -379,20 +379,52 @@ class Tree:
         the Jenkins species group and come from personal correspondence with the Jolly team at the Missoula Fire Lab.
         """
         return REF_JENKINS.loc[self.jenkins_species_group]["FOLIAGE_SAV"]
-    
+
     @property
     def specific_leaf_area(self) -> float:
         """
-        Returns specific leaf area (SLA) in mm^2/mg, petiole excluded. These are the mean values per species from the TRY database.
+        Returns specific leaf area (SLA) in m^2/kg, petiole excluded. These are the mean values per species from the TRY database.
         """
-        return REF_TRY_DB_LEAF.loc[self.species_code]["SLA_PETIOLE_EXCLUDED"] # Q: Should I convert into per kg?
-    
+        try:
+            sla = REF_TRY_DB_LEAF.loc[self.species_code]["SLA_PETIOLE_EXCLUDED"][
+                0
+            ]  # There will only ever be 1, SPCD is unique
+        except KeyError:
+            sla = np.nan
+
+        if np.isnan(sla):
+            jenkins_group_vals = REF_TRY_DB_LEAF.loc[
+                REF_TRY_DB_LEAF["JENKINS_SPGRPCD"] == self.jenkins_species_group,
+                "SLA_PETIOLE_EXCLUDED",
+            ]
+            sla = float(
+                jenkins_group_vals.dropna().mean()
+            )  # Mean of Jenkin's group values
+
+        return sla
+
     @property
     def mean_leaf_angle(self) -> float:
         """
-        Returns mean leaf angle in degrees. These are the mean values per species from the TRY database.
+        Returns mean leaf angle in radians. These are the mean values per species from the TRY database.
         """
-        return REF_TRY_DB_LEAF.loc[self.species_code]["LEAF_ANGLE_DEG"] # Q: Should I convert to radians?
+        try:
+            mla = REF_TRY_DB_LEAF.loc[self.species_code]["LEAF_ANGLE"][
+                0
+            ]  # There will only ever be 1, SPCD is unique
+        except KeyError:
+            mla = np.nan
+
+        if np.isnan(mla):
+            jenkins_group_vals = REF_TRY_DB_LEAF.loc[
+                REF_TRY_DB_LEAF["JENKINS_SPGRPCD"] == self.jenkins_species_group,
+                "LEAF_ANGLE",
+            ]
+            mla = float(
+                jenkins_group_vals.dropna().mean()
+            )  # Mean of Jenkin's group values
+
+        return mla
 
     def voxelize(
         self,

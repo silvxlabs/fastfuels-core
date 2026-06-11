@@ -38,6 +38,6 @@ REF_TRY_DB_LEAF = pd.read_csv(
         "SLA_PETIOLE_EXCLUDED",
         "SLA_PETIOLE_INCLUDED",
         "SLA_PETIOLE_INDETERMINATE",
-        "LEAF_ANGLE_DEG"
-    ]
+        "LEAF_ANGLE",
+    ],
 )
