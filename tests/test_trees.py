@@ -9,6 +9,7 @@ from fastfuels_core.trees import (
     NSVBEquations,
     REF_SPECIES,
     REF_JENKINS,
+    REF_TRY_DB_LEAF,
 )
 from fastfuels_core.crown_profile_models.beta import BetaCrownProfile
 from tests.utils import make_random_tree
@@ -290,6 +291,26 @@ def test_foliage_sav(jenkins_species_group):
 
     tree = make_random_tree(species_code=random_spcd)
     assert tree.foliage_sav > 0
+
+
+@pytest.mark.parametrize("spcd", REF_TRY_DB_LEAF.index.dropna())
+def test_specific_leaf_area(spcd):
+    """
+    tests that the specific leaf area property is available for all SPCDs
+    """
+
+    tree = make_random_tree(species_code=spcd)
+    assert tree.specific_leaf_area > 0
+
+
+@pytest.mark.parametrize("spcd", REF_TRY_DB_LEAF.index.dropna())
+def test_mean_leaf_angle(spcd):
+    """
+    tests that the mean leaf angle property is either available or set to nan for all SPCDs
+    """
+
+    tree = make_random_tree(species_code=spcd)
+    assert not np.isinf(tree.mean_leaf_angle)
 
 
 def test_tree():

@@ -10,7 +10,7 @@ from fastfuels_core.treatments import TreatmentProtocol
 from fastfuels_core.crown_profile_models.abc import CrownProfileModel
 from fastfuels_core.crown_profile_models.purves import PurvesCrownProfile
 from fastfuels_core.crown_profile_models.beta import BetaCrownProfile
-from fastfuels_core.ref_data import REF_SPECIES, REF_JENKINS
+from fastfuels_core.ref_data import REF_SPECIES, REF_JENKINS, REF_TRY_DB_LEAF
 
 # External Imports
 import numpy as np
@@ -379,6 +379,72 @@ class Tree:
         the Jenkins species group and come from personal correspondence with the Jolly team at the Missoula Fire Lab.
         """
         return REF_JENKINS.loc[self.jenkins_species_group]["FOLIAGE_SAV"]
+
+    @property
+    def specific_leaf_area(self) -> float:
+        """
+        Returns specific leaf area (SLA) in m^2/kg, petiole excluded. These are the mean values per species from the TRY database.
+        """
+        try:
+            sla = REF_TRY_DB_LEAF.loc[self.species_code]["SLA_PETIOLE_EXCLUDED"]
+        except KeyError:
+            sla = np.nan
+
+        # Fallback to genus
+        if np.isnan(sla):
+            genus = REF_TRY_DB_LEAF[
+                REF_TRY_DB_LEAF["JENKINS_SPGRPCD"] == self.jenkins_species_group
+            ]["GENUS"].iloc[0]
+            genus_vals = REF_TRY_DB_LEAF.loc[
+                REF_TRY_DB_LEAF["GENUS"] == genus,
+                "SLA_PETIOLE_EXCLUDED",
+            ]
+            sla = float(genus_vals.dropna().mean())
+
+        # Fallback to Jenkin's group
+        if np.isnan(sla):
+            jenkins_group_vals = REF_TRY_DB_LEAF.loc[
+                REF_TRY_DB_LEAF["JENKINS_SPGRPCD"] == self.jenkins_species_group,
+                "SLA_PETIOLE_EXCLUDED",
+            ]
+            sla = float(
+                jenkins_group_vals.dropna().mean()
+            )  # Mean of Jenkin's group values
+
+        return sla
+
+    @property
+    def mean_leaf_angle(self) -> float:
+        """
+        Returns mean leaf angle in radians. These are the mean values per species from the TRY database.
+        """
+        try:
+            mla = REF_TRY_DB_LEAF.loc[self.species_code]["LEAF_ANGLE"]
+        except KeyError:
+            mla = np.nan
+
+        # Fallback to genus
+        if np.isnan(mla):
+            genus = REF_TRY_DB_LEAF[
+                REF_TRY_DB_LEAF["JENKINS_SPGRPCD"] == self.jenkins_species_group
+            ]["GENUS"].iloc[0]
+            genus_vals = REF_TRY_DB_LEAF.loc[
+                REF_TRY_DB_LEAF["GENUS"] == genus,
+                "LEAF_ANGLE",
+            ]
+            mla = float(genus_vals.dropna().mean())
+
+        # Fallback to Jenkins
+        if np.isnan(mla):
+            jenkins_group_vals = REF_TRY_DB_LEAF.loc[
+                REF_TRY_DB_LEAF["JENKINS_SPGRPCD"] == self.jenkins_species_group,
+                "LEAF_ANGLE",
+            ]
+            mla = float(
+                jenkins_group_vals.dropna().mean()
+            )  # Mean of Jenkin's group values
+
+        return mla
 
     def voxelize(
         self,
