@@ -3,6 +3,7 @@ Tests for the inhomogeneous Poisson point process functions.
 """
 
 # Core imports
+import os
 from pathlib import Path
 
 # Internal imports
@@ -38,6 +39,8 @@ from shapely.geometry import Point
 TEST_PATH = Path(__file__).parent
 TEST_DATA_PATH = TEST_PATH / "data"
 FIGURES_PATH = TEST_PATH / "figures"
+_TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
+SAVE_FIG = os.environ.get("FASTFUELS_SAVE_TEST_FIGURES", "").lower() in _TRUE_ENV_VALUES
 
 
 @pytest.fixture
@@ -122,7 +125,7 @@ class TestInterpolateDataToGrid:
 
 
 class TestInterpolateTreeDensityToGrid:
-    save_fig = True
+    save_fig = SAVE_FIG
 
     def test_interpolate_tree_density(self, real_data):
         roi, trees, plots = real_data
@@ -580,7 +583,7 @@ class TestRunPointProcess:
 
 
 class TestEndToEnd:
-    save_fig = True
+    save_fig = SAVE_FIG
 
     def test_returns_dask_dataframe(self, real_data):
         import dask.dataframe as dd
@@ -695,7 +698,7 @@ class TestEndToEnd:
 
 
 class TestChunkedProcessing:
-    save_fig = True
+    save_fig = SAVE_FIG
 
     def test_multiple_partitions(self, real_data):
         roi, trees, plots = real_data

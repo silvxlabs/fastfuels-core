@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 import time
 from pathlib import Path
@@ -32,9 +33,16 @@ from tests.itd.reference_local_maxima_filter import (
 
 FIGURES_PATH = Path(__file__).parent / "figures"
 
-# Toggle to True to save/show diagnostic plots during test runs
-SAVE_FIG = True
-SHOW_FIG = False
+_TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").lower() in _TRUE_ENV_VALUES
+
+
+# Enable diagnostic plots only when explicitly requested.
+SAVE_FIG = _env_flag("FASTFUELS_SAVE_TEST_FIGURES")
+SHOW_FIG = _env_flag("FASTFUELS_SHOW_TEST_FIGURES")
 
 
 def _get_extent(chm_da: xr.DataArray) -> list[float]:
