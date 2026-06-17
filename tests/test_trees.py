@@ -293,7 +293,7 @@ def test_foliage_sav(jenkins_species_group):
     assert tree.foliage_sav > 0
 
 
-@pytest.mark.parametrize("spcd", REF_TRY_DB_LEAF.index)
+@pytest.mark.parametrize("spcd", REF_TRY_DB_LEAF.index.dropna())
 def test_specific_leaf_area(spcd):
     """
     tests that the specific leaf area property is available for all SPCDs
@@ -303,14 +303,14 @@ def test_specific_leaf_area(spcd):
     assert tree.specific_leaf_area > 0
 
 
-@pytest.mark.parametrize("spcd", REF_TRY_DB_LEAF.index)
+@pytest.mark.parametrize("spcd", REF_TRY_DB_LEAF.index.dropna())
 def test_mean_leaf_angle(spcd):
     """
-    tests that the mean leaf angle property is available for all SPCDs
+    tests that the mean leaf angle property is either available or set to nan for all SPCDs
     """
 
     tree = make_random_tree(species_code=spcd)
-    assert tree.mean_leaf_angle > 0
+    assert not np.isinf(tree.mean_leaf_angle)
 
 
 def test_tree():

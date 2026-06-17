@@ -386,12 +386,22 @@ class Tree:
         Returns specific leaf area (SLA) in m^2/kg, petiole excluded. These are the mean values per species from the TRY database.
         """
         try:
-            sla = REF_TRY_DB_LEAF.loc[self.species_code]["SLA_PETIOLE_EXCLUDED"][
-                0
-            ]  # There will only ever be 1, SPCD is unique
+            sla = REF_TRY_DB_LEAF.loc[self.species_code]["SLA_PETIOLE_EXCLUDED"]
         except KeyError:
             sla = np.nan
 
+        # Fallback to genus
+        if np.isnan(sla):
+            genus = REF_TRY_DB_LEAF[
+                REF_TRY_DB_LEAF["JENKINS_SPGRPCD"] == self.jenkins_species_group
+            ]["GENUS"].iloc[0]
+            genus_vals = REF_TRY_DB_LEAF.loc[
+                REF_TRY_DB_LEAF["GENUS"] == genus,
+                "SLA_PETIOLE_EXCLUDED",
+            ]
+            sla = float(genus_vals.dropna().mean())
+
+        # Fallback to Jenkin's group
         if np.isnan(sla):
             jenkins_group_vals = REF_TRY_DB_LEAF.loc[
                 REF_TRY_DB_LEAF["JENKINS_SPGRPCD"] == self.jenkins_species_group,
@@ -409,12 +419,22 @@ class Tree:
         Returns mean leaf angle in radians. These are the mean values per species from the TRY database.
         """
         try:
-            mla = REF_TRY_DB_LEAF.loc[self.species_code]["LEAF_ANGLE"][
-                0
-            ]  # There will only ever be 1, SPCD is unique
+            mla = REF_TRY_DB_LEAF.loc[self.species_code]["LEAF_ANGLE"]
         except KeyError:
             mla = np.nan
 
+        # Fallback to genus
+        if np.isnan(mla):
+            genus = REF_TRY_DB_LEAF[
+                REF_TRY_DB_LEAF["JENKINS_SPGRPCD"] == self.jenkins_species_group
+            ]["GENUS"].iloc[0]
+            genus_vals = REF_TRY_DB_LEAF.loc[
+                REF_TRY_DB_LEAF["GENUS"] == genus,
+                "LEAF_ANGLE",
+            ]
+            mla = float(genus_vals.dropna().mean())
+
+        # Fallback to Jenkins
         if np.isnan(mla):
             jenkins_group_vals = REF_TRY_DB_LEAF.loc[
                 REF_TRY_DB_LEAF["JENKINS_SPGRPCD"] == self.jenkins_species_group,

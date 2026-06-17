@@ -35,6 +35,8 @@ REF_TRY_DB_LEAF = pd.read_csv(
     index_col="SPCD",
     usecols=[
         "SPCD",
+        "JENKINS_SPGRPCD",
+        "GENUS",
         "SLA_PETIOLE_EXCLUDED",
         "SLA_PETIOLE_INCLUDED",
         "SLA_PETIOLE_INDETERMINATE",
