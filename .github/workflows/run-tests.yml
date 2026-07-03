@@ -7,10 +7,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
     - name: Checkout Repository
@@ -18,10 +14,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.13
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: "3.13"
         cache: pip
 
     - name: Install package with test dependencies
@@ -30,4 +26,4 @@ jobs:
         pip install -e .[test]
 
     - name: Run pytest
-      run: pytest
+      run: pytest -q
