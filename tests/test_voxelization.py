@@ -7,9 +7,15 @@ from pathlib import Path
 from tests.utils import make_random_tree
 from fastfuels_core.trees import Tree
 from fastfuels_core.voxelization import (
+    discretize_crown_profile,
+    voxelize_tree,
+)
+from fastfuels_core.voxelization._coords import (
     _get_horizontal_tree_coords,
     _get_vertical_tree_coords,
     _resample_coords_grid_to_subgrid,
+)
+from fastfuels_core.voxelization.marching_squares import (
     _compute_circle_segment_area,
     _calculate_case_1_area,
     _calculate_case_3_area,
@@ -20,12 +26,12 @@ from fastfuels_core.voxelization import (
     _compute_intersection_area_by_case,
     _sum_area_along_axis,
     _align_quadrants,
-    discretize_crown_profile,
+)
+from fastfuels_core.voxelization.sampling import (
     _compute_horizontal_probability,
     _compute_vertical_probability,
     _compute_joint_probability,
     _sample_voxels_from_probability_grid,
-    voxelize_tree,
 )
 
 # External imports
