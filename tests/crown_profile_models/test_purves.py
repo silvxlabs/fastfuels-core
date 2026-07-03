@@ -280,3 +280,21 @@ class TestGetRadiusAtHeight:
         assert np.all(radii >= 0.0)
         assert np.all(radii <= max_radii.reshape(-1, 1))
         assert np.any(radii > 0.0)
+
+
+class TestGetMaxRadiusHeight:
+    def test_returns_crown_base_height(self):
+        # Purves is monotonic, widest at the crown base.
+        # species 122, height=15, crown_ratio=0.5 -> crown_base_height = 7.5
+        model = PurvesCrownProfile(
+            species_code=122, dbh=25.0, height=15.0, crown_ratio=0.5
+        )
+        assert model.get_max_radius_height() == pytest.approx(7.5)
+
+    def test_coincides_with_argmax(self):
+        model = PurvesCrownProfile(
+            species_code=122, dbh=25.0, height=15.0, crown_ratio=0.5
+        )
+        z = np.linspace(7.5, 15.0, 10001)
+        r = model.get_radius_at_height(z)
+        assert z[np.argmax(r)] == pytest.approx(model.get_max_radius_height(), abs=0.01)

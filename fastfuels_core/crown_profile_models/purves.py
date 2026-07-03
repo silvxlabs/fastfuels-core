@@ -9,7 +9,6 @@ from fastfuels_core.crown_profile_models.abc import CrownProfileModel
 import numpy as np
 from numpy.typing import NDArray
 
-
 # See Purves et al. (2007) Table S2 in Supporting Information
 C0_R0 = 0.503
 C1_R0 = 3.126
@@ -178,6 +177,17 @@ class PurvesCrownProfile(CrownProfileModel):
         """
         max_radius = self.get_radius_at_height(self.crown_base_height)
         return max_radius if isinstance(max_radius, float) else max_radius.reshape(-1)
+
+    def get_max_radius_height(self) -> float | np.ndarray:
+        """
+        Returns the height (m) of maximum crown radius. The Purves profile
+        decreases monotonically from the crown base upward, so the maximum
+        radius is attained at the crown base height.
+
+        Returns a scalar with scalar input, a vector with vector input.
+        """
+        result = self.crown_base_height
+        return result.item() if result.size == 1 else result.reshape(-1)
 
     def _get_purves_shape_param(self):
         """

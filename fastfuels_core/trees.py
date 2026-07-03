@@ -10,6 +10,10 @@ from fastfuels_core.treatments import TreatmentProtocol
 from fastfuels_core.crown_profile_models.abc import CrownProfileModel
 from fastfuels_core.crown_profile_models.purves import PurvesCrownProfile
 from fastfuels_core.crown_profile_models.beta import BetaCrownProfile
+from fastfuels_core.crown_profile_models.cone import ConeCrownProfile
+from fastfuels_core.crown_profile_models.cylinder import CylinderCrownProfile
+from fastfuels_core.crown_profile_models.paraboloid import ParaboloidCrownProfile
+from fastfuels_core.crown_profile_models.ellipsoid import EllipsoidCrownProfile
 from fastfuels_core.ref_data import REF_SPECIES, REF_JENKINS, REF_TRY_DB_LEAF
 
 # External Imports
@@ -18,6 +22,11 @@ import pandas as pd
 from numpy import ndarray
 from nsvb.estimators import total_foliage_dry_weight
 from pandera.pandas import DataFrameSchema, Column, Check, Index
+
+# Geometric crown profiles. These require a mandatory max_crown_radius; the
+# paraboloid and ellipsoid additionally accept max_crown_diameter_height.
+_GEOMETRIC_PROFILE_TYPES = ("cone", "cylinder", "paraboloid", "ellipsoid")
+_VALID_PROFILE_TYPES = ("purves", "beta") + _GEOMETRIC_PROFILE_TYPES
 
 TREE_SCHEMA_COLS = {
     "TREE_ID": Column(int),
@@ -208,10 +217,16 @@ class Tree:
     y : float
         Y coordinate of the tree in a projected coordinate system. Units: m.
     max_crown_radius : float, optional
-        Measured maximum crown radius (m). When provided, the allometric crown
-        profile shape is preserved but scaled so that the maximum radius matches
-        this value. If None (default), the crown radius is computed entirely
-        from allometric equations based on species and diameter.
+        Measured maximum crown radius (m). For the allometric profiles ('purves',
+        'beta'), when provided the crown profile shape is preserved but scaled so
+        that the maximum radius matches this value; if None (default) the crown
+        radius is computed entirely from allometric equations. For the geometric
+        profiles ('cone', 'cylinder', 'paraboloid', 'ellipsoid') it is the
+        defining crown radius and is required.
+    max_crown_diameter_height : float, optional
+        Height (m) of maximum crown diameter. Used only by the 'paraboloid' and
+        'ellipsoid' profiles to place their peak; ignored by the other profiles.
+        Defaults to the crown midpoint when not provided.
     crown_fuel_load : float, optional
         Pre-computed crown foliage biomass (kg). When provided, this value is
         returned directly by the foliage_biomass property instead of computing
@@ -239,6 +254,7 @@ class Tree:
         crown_profile_model_type="purves",
         biomass_allometry_model_type="NSVB",
         max_crown_radius=None,
+        max_crown_diameter_height=None,
         crown_fuel_load=None,
     ):
         # TODO: Species code needs to be valid
@@ -260,9 +276,18 @@ class Tree:
         # Optional parameters
         self._jenkins_species_group = jenkins_species_group
 
-        if crown_profile_model_type not in ["beta", "purves"]:
+        if crown_profile_model_type not in _VALID_PROFILE_TYPES:
             raise ValueError(
-                "The crown profile model must be one of the following: 'beta' or 'purves'"
+                "The crown profile model must be one of the following: "
+                f"{', '.join(_VALID_PROFILE_TYPES)}"
+            )
+        if (
+            crown_profile_model_type in _GEOMETRIC_PROFILE_TYPES
+            and max_crown_radius is None
+        ):
+            raise ValueError(
+                "max_crown_radius is required for geometric crown profiles "
+                f"({', '.join(_GEOMETRIC_PROFILE_TYPES)})."
             )
         self._crown_profile_model_type = crown_profile_model_type
 
@@ -276,6 +301,7 @@ class Tree:
         self._biomass_allometry_model_type = biomass_allometry_model_type
 
         self._max_crown_radius_override = max_crown_radius
+        self._max_crown_diameter_height = max_crown_diameter_height
         self._crown_fuel_load_override = crown_fuel_load
 
     @property
@@ -318,6 +344,28 @@ class Tree:
         elif self._crown_profile_model_type == "purves":
             return PurvesCrownProfile(
                 self.species_code, self.diameter, self.height, self.crown_ratio
+            )
+        elif self._crown_profile_model_type == "cone":
+            return ConeCrownProfile(
+                self.crown_base_height, self.height, self._max_crown_radius_override
+            )
+        elif self._crown_profile_model_type == "cylinder":
+            return CylinderCrownProfile(
+                self.crown_base_height, self.height, self._max_crown_radius_override
+            )
+        elif self._crown_profile_model_type == "paraboloid":
+            return ParaboloidCrownProfile(
+                self.crown_base_height,
+                self.height,
+                self._max_crown_radius_override,
+                self._max_crown_diameter_height,
+            )
+        elif self._crown_profile_model_type == "ellipsoid":
+            return EllipsoidCrownProfile(
+                self.crown_base_height,
+                self.height,
+                self._max_crown_radius_override,
+                self._max_crown_diameter_height,
             )
 
     @property

@@ -58,6 +58,24 @@ class BetaCrownProfile(CrownProfileModel):
         result = normalized_max_radius * self.crown_length
         return result.item() if result.size == 1 else result
 
+    def get_max_radius_height(self) -> float | np.ndarray:
+        """
+        Returns the absolute height (m) at which the crown attains its maximum
+        radius: the mode of the beta distribution expressed in tree
+        coordinates, crown_base_height + z_max * crown_length, where
+        z_max = (a - 1) / (a + b - 2).
+
+        This is the quantity LANL Trees uses to place the peak of its
+        double-paraboloid crown (its "height to max crown diameter"). Pass the
+        result as max_crown_diameter_height to a ParaboloidCrownProfile or
+        EllipsoidCrownProfile to reproduce that geometry.
+
+        Returns a scalar with scalar input, a vector with vector input.
+        """
+        z_max = (self.a - 1) / (self.a + self.b - 2)
+        result = self.crown_base_height + z_max * self.crown_length
+        return result.item() if result.size == 1 else result.reshape(-1)
+
     def get_radius_at_height(self, height) -> float | np.ndarray:
         """
         Returns the radius of the crown at a given height using the beta
