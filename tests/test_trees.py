@@ -12,6 +12,10 @@ from fastfuels_core.trees import (
     REF_TRY_DB_LEAF,
 )
 from fastfuels_core.crown_profile_models.beta import BetaCrownProfile
+from fastfuels_core.crown_profile_models.cone import ConeCrownProfile
+from fastfuels_core.crown_profile_models.cylinder import CylinderCrownProfile
+from fastfuels_core.crown_profile_models.paraboloid import ParaboloidCrownProfile
+from fastfuels_core.crown_profile_models.ellipsoid import EllipsoidCrownProfile
 from tests.utils import make_random_tree
 
 # External imports
@@ -668,3 +672,97 @@ class TestFromRowDataFrame:
             tree = Tree.from_row(row)
             assert tree.foliage_biomass == 10.0
             assert tree.max_crown_radius == 3.5
+
+
+class TestGeometricCrownProfiles:
+    """Tests for the geometric crown profile types on Tree (issue #76)."""
+
+    TREE_KWARGS = dict(
+        species_code=122, status_code=1, diameter=25.0, height=15.0, crown_ratio=0.5
+    )
+    # crown_base_height = 15 - 15*0.5 = 7.5; height = 15; midpoint = 11.25
+    HB, HT, MID = 7.5, 15.0, 11.25
+
+    GEOMETRIC = [
+        ("cone", ConeCrownProfile),
+        ("cylinder", CylinderCrownProfile),
+        ("paraboloid", ParaboloidCrownProfile),
+        ("ellipsoid", EllipsoidCrownProfile),
+    ]
+
+    @pytest.mark.parametrize("profile_type,cls", GEOMETRIC)
+    def test_factory_builds_expected_model(self, profile_type, cls):
+        tree = Tree(
+            **self.TREE_KWARGS,
+            crown_profile_model_type=profile_type,
+            max_crown_radius=3.0,
+        )
+        assert isinstance(tree.crown_profile_model, cls)
+
+    @pytest.mark.parametrize("profile_type,_cls", GEOMETRIC)
+    def test_requires_max_crown_radius(self, profile_type, _cls):
+        with pytest.raises(ValueError):
+            Tree(**self.TREE_KWARGS, crown_profile_model_type=profile_type)
+
+    def test_invalid_type_raises(self):
+        with pytest.raises(ValueError):
+            Tree(**self.TREE_KWARGS, crown_profile_model_type="pyramid")
+
+    @pytest.mark.parametrize("profile_type,_cls", GEOMETRIC)
+    def test_max_crown_radius_used_directly(self, profile_type, _cls):
+        tree = Tree(
+            **self.TREE_KWARGS,
+            crown_profile_model_type=profile_type,
+            max_crown_radius=3.0,
+        )
+        assert tree.max_crown_radius == pytest.approx(3.0)
+        assert tree._crown_radius_scale_factor == pytest.approx(1.0)
+
+    @pytest.mark.parametrize("profile_type,_cls", GEOMETRIC)
+    def test_get_crown_radius_matches_profile(self, profile_type, _cls):
+        tree = Tree(
+            **self.TREE_KWARGS,
+            crown_profile_model_type=profile_type,
+            max_crown_radius=3.0,
+        )
+        z = np.linspace(0.0, 16.0, 40)
+        assert np.allclose(
+            tree.get_crown_radius_at_height(z),
+            tree.crown_profile_model.get_radius_at_height(z),
+        )
+
+    def test_max_crown_diameter_height_defaults_to_midpoint(self):
+        tree = Tree(
+            **self.TREE_KWARGS,
+            crown_profile_model_type="paraboloid",
+            max_crown_radius=3.0,
+        )
+        assert tree.get_crown_radius_at_height(self.MID) == pytest.approx(3.0)
+
+    def test_max_crown_diameter_height_moves_peak(self):
+        hd = 9.0
+        tree = Tree(
+            **self.TREE_KWARGS,
+            crown_profile_model_type="ellipsoid",
+            max_crown_radius=3.0,
+            max_crown_diameter_height=hd,
+        )
+        assert tree.get_crown_radius_at_height(hd) == pytest.approx(3.0)
+        assert tree.get_crown_radius_at_height(self.MID) < 3.0
+
+    def test_lanl_reproduction_recipe(self):
+        # Decoupled, opt-in: derive Hd from the beta profile mode and pass it in.
+        cbh = self.HT - self.HT * 0.5
+        cl = self.HT * 0.5
+        beta = BetaCrownProfile(
+            species_code=122, crown_base_height=cbh, crown_length=cl
+        )
+        hd = beta.get_max_radius_height()
+        assert cbh <= hd <= cbh + cl
+        tree = Tree(
+            **self.TREE_KWARGS,
+            crown_profile_model_type="paraboloid",
+            max_crown_radius=3.0,
+            max_crown_diameter_height=hd,
+        )
+        assert tree.get_crown_radius_at_height(hd) == pytest.approx(3.0)

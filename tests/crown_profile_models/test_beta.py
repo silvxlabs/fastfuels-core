@@ -153,6 +153,33 @@ class TestGetMaxRadius:
         assert np.all(max_crown_radius > 0.0)
 
 
+class TestGetMaxRadiusHeight:
+    def test_returns_scalar_in_crown(self, model):
+        # model: crown_base_height=10, crown_length=10 -> crown spans [10, 20]
+        hd = model.get_max_radius_height()
+        assert isinstance(hd, float)
+        assert 10.0 <= hd <= 20.0
+
+    def test_coincides_with_argmax(self, model):
+        z = np.linspace(10.0, 20.0, 10001)
+        r = model.get_radius_at_height(z)
+        assert z[np.argmax(r)] == pytest.approx(model.get_max_radius_height(), abs=0.01)
+
+    @pytest.mark.parametrize("spcd", LIST_SPCDS)
+    def test_vector_input(self, spcd):
+        cbh = np.array([5.0, 10.0, 2.0])
+        cl = np.array([10.0, 8.0, 15.0])
+        beta_model = BetaCrownProfile(
+            species_code=np.array([spcd, spcd, spcd]),
+            crown_base_height=cbh,
+            crown_length=cl,
+        )
+        hd = beta_model.get_max_radius_height()
+        assert isinstance(hd, np.ndarray)
+        assert hd.shape == (3,)
+        assert np.all(hd >= cbh) and np.all(hd <= cbh + cl)
+
+
 class TestGetRadiusAtHeight:
     @pytest.mark.parametrize("spcd", LIST_SPCDS)
     def test_scalar_height_input(self, spcd):
