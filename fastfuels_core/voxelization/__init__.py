@@ -8,6 +8,13 @@ discretization), ``sampling`` (stochastic occupancy realization), and
 
 from fastfuels_core.voxelization._coords import CenteringMode
 from fastfuels_core.voxelization.marching_squares import discretize_crown_profile
+from fastfuels_core.voxelization.mass_distribution import (
+    DensityField,
+    GradientDensity,
+    LinearHeightQuadraticRadialDensity,
+    UniformDensity,
+)
+from fastfuels_core.voxelization.sampling import sample_occupied_cells
 from fastfuels_core.voxelization.tree import VoxelizedTree, voxelize_tree
 
 __all__ = [
@@ -15,4 +22,9 @@ __all__ = [
     "voxelize_tree",
     "CenteringMode",
     "discretize_crown_profile",
+    "sample_occupied_cells",
+    "DensityField",
+    "UniformDensity",
+    "GradientDensity",
+    "LinearHeightQuadraticRadialDensity",
 ]

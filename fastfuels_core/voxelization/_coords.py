@@ -10,13 +10,24 @@ from numpy import ndarray
 CenteringMode = Literal["cell", "vertex"]
 
 
-def _get_vertical_tree_coords(step, tree_height, crown_base_height):
+def _get_vertical_tree_coords(step, tree_height, crown_base_height, z_origin=None):
     """
-    Returns a grid of coordinates for a tree of height, height, with a spacing
-    step. The grid is returned as a 1D array.
+    Returns the z cell-center coordinates spanning the crown, spacing ``step``.
+
+    ``z_origin`` controls where the grid is anchored:
+
+    * ``None`` (default): the crown base sits at the *center* of the first cell
+      (cells at ``crown_base_height + k*step``). Self-anchored per tree.
+    * a float: cell *boundaries* align to ``z_origin + k*step`` (centers at
+      ``z_origin + (k + 0.5)*step``), so the crown base falls wherever it lands
+      inside a cell. Use this to register the crown to a shared domain grid
+      (e.g. ``z_origin=ground_elevation``).
     """
-    grid = np.arange(crown_base_height, tree_height + step, step)
-    return grid
+    if z_origin is None:
+        return np.arange(crown_base_height, tree_height + step, step)
+    k_lo = int(np.floor((crown_base_height - z_origin) / step))
+    k_hi = int(np.floor((tree_height - z_origin) / step))
+    return z_origin + (np.arange(k_lo, k_hi + 1) + 0.5) * step
 
 
 def _get_horizontal_tree_coords(
@@ -54,16 +65,16 @@ def _get_horizontal_tree_coords(
 
 
 def _resample_coords_grid_to_subgrid(
-    grid: ndarray, grid_spacing: float, new_spacing: float
+    grid: ndarray, grid_spacing: float, n_subgrid: int
 ) -> ndarray:
     """
-    Resamples grid with spacing grid_spacing to a subgrid with spacing
-    new_spacing.
-    """
-    subgrid = np.arange(
-        grid[0] - grid_spacing / 2 + new_spacing / 2,
-        grid[-1] + grid_spacing / 2,
-        new_spacing,
-    )
+    Split each cell (centered on a point in ``grid``, of width ``grid_spacing``)
+    into ``n_subgrid`` equal subcells and return their centers.
 
-    return subgrid
+    Exact by construction: the result always has ``len(grid) * n_subgrid``
+    points, so it is robust to counts whose implied spacing has no clean float
+    representation (e.g. 3 subcells of 1/3 m).
+    """
+    grid = np.asarray(grid)
+    offsets = (np.arange(n_subgrid) + 0.5) / n_subgrid * grid_spacing - grid_spacing / 2
+    return (grid[:, None] + offsets[None, :]).ravel()

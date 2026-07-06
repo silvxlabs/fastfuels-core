@@ -355,56 +355,57 @@ class TestGetVerticalTreeCoords:
 
 class TestResampleCoordsGridToSubgrid:
     def test_resample(self):
+        # Third arg is now a subcell COUNT, not a spacing (count = spacing / spacing).
         original_pts = np.array([0.5])
         original_spacing = 1
-        new_spacing = 0.5
+        n_subgrid = 2  # was new_spacing=0.5
         expected_pts_1 = np.array([0.25, 0.75])
         resampled_pts_1 = _resample_coords_grid_to_subgrid(
-            original_pts, original_spacing, new_spacing
+            original_pts, original_spacing, n_subgrid
         )
         assert np.allclose(resampled_pts_1, expected_pts_1)
 
         original_pts = np.array([0.5])
         original_spacing = 1
-        new_spacing = 0.25
+        n_subgrid = 4  # was new_spacing=0.25
         expected_pts_2 = np.array([0.125, 0.375, 0.625, 0.875])
         resampled_pts_2 = _resample_coords_grid_to_subgrid(
-            original_pts, original_spacing, new_spacing
+            original_pts, original_spacing, n_subgrid
         )
         assert np.allclose(resampled_pts_2, expected_pts_2)
 
         original_pts = np.array([0.5])
         original_spacing = 1
-        new_spacing = 0.1
+        n_subgrid = 10  # was new_spacing=0.1
         expected_pts_3 = np.array(
             [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
         )
         resampled_pts_3 = _resample_coords_grid_to_subgrid(
-            original_pts, original_spacing, new_spacing
+            original_pts, original_spacing, n_subgrid
         )
         assert np.allclose(resampled_pts_3, expected_pts_3)
 
         original_pts = np.array([0.5, 1.5])
         original_spacing = 1
-        new_spacing = 0.5
+        n_subgrid = 2
         expected_pts_4 = np.array([0.25, 0.75, 1.25, 1.75])
         resampled_pts_4 = _resample_coords_grid_to_subgrid(
-            original_pts, original_spacing, new_spacing
+            original_pts, original_spacing, n_subgrid
         )
         assert np.allclose(resampled_pts_4, expected_pts_4)
 
         original_pts = np.array([0.5, 1.5, 2.5])
         original_spacing = 1
-        new_spacing = 0.5
+        n_subgrid = 2
         expected_pts_5 = np.array([0.25, 0.75, 1.25, 1.75, 2.25, 2.75])
         resampled_pts_5 = _resample_coords_grid_to_subgrid(
-            original_pts, original_spacing, new_spacing
+            original_pts, original_spacing, n_subgrid
         )
         assert np.allclose(resampled_pts_5, expected_pts_5)
 
         original_pts = np.array([0.5, 1.5, 2.5])
         original_spacing = 1
-        new_spacing = 0.25
+        n_subgrid = 4
         expected_pts_6 = np.array(
             [
                 0.125,
@@ -422,88 +423,22 @@ class TestResampleCoordsGridToSubgrid:
             ]
         )
         resampled_pts_6 = _resample_coords_grid_to_subgrid(
-            original_pts, original_spacing, new_spacing
+            original_pts, original_spacing, n_subgrid
         )
         assert np.allclose(resampled_pts_6, expected_pts_6)
 
-        original_pts = np.array([0.5, 1.5, 2.5])
-        original_spacing = 1
-        new_spacing = 0.1
-        expected_pts_7 = np.array(
-            [
-                0.05,
-                0.15,
-                0.25,
-                0.35,
-                0.45,
-                0.55,
-                0.65,
-                0.75,
-                0.85,
-                0.95,
-                1.05,
-                1.15,
-                1.25,
-                1.35,
-                1.45,
-                1.55,
-                1.65,
-                1.75,
-                1.85,
-                1.95,
-                2.05,
-                2.15,
-                2.25,
-                2.35,
-                2.45,
-                2.55,
-                2.65,
-                2.75,
-                2.85,
-                2.95,
-            ]
-        )
-        resampled_pts_7 = _resample_coords_grid_to_subgrid(
-            original_pts, original_spacing, new_spacing
-        )
-        assert np.allclose(resampled_pts_7, expected_pts_7)
+    def test_count_that_has_no_clean_spacing(self):
+        # 3 subcells of 1/3 m: impossible under the old divide-evenly spacing
+        # rule, exact under the count rule (always len(grid) * n points).
+        pts = _resample_coords_grid_to_subgrid(np.array([0.5, 1.5]), 1, 3)
+        assert pts.shape == (6,)
+        assert np.allclose(pts, [1 / 6, 3 / 6, 5 / 6, 1 + 1 / 6, 1 + 3 / 6, 1 + 5 / 6])
 
-    def test_same_resolution_shape(self):
-        # Test 1m resolution
+    def test_single_subcell_returns_cell_centers(self):
+        # n_subgrid == 1 -> one sample per cell, at its center (no subdivision)
         grid = np.arange(0.5, 100.5, 1)
-        grid_spacing = 1
-        new_spacing = 1
-        resampled_grid = _resample_coords_grid_to_subgrid(
-            grid, grid_spacing, new_spacing
-        )
-        assert resampled_grid.shape == grid.shape
-
-        # Test 0.5m resolution
-        grid = np.arange(0.25, 100.25, 0.5)
-        grid_spacing = 0.5
-        new_spacing = 0.5
-        resampled_grid = _resample_coords_grid_to_subgrid(
-            grid, grid_spacing, new_spacing
-        )
-        assert resampled_grid.shape == grid.shape
-
-        # Test 0.25m resolution
-        grid = np.arange(0.125, 100.125, 0.25)
-        grid_spacing = 0.25
-        new_spacing = 0.25
-        resampled_grid = _resample_coords_grid_to_subgrid(
-            grid, grid_spacing, new_spacing
-        )
-        assert resampled_grid.shape == grid.shape
-
-        # Test 0.1m resolution
-        grid = np.arange(0.05, 100.05, 0.1)
-        grid_spacing = 0.1
-        new_spacing = 0.1
-        resampled_grid = _resample_coords_grid_to_subgrid(
-            grid, grid_spacing, new_spacing
-        )
-        assert resampled_grid.shape == grid.shape
+        resampled = _resample_coords_grid_to_subgrid(grid, 1, 1)
+        assert np.array_equal(resampled, grid)
 
 
 class TestComputeCircleSegmentArea:
@@ -1329,59 +1264,45 @@ class TestDiscretizeCrownProfile:
         assert grid.shape[2] % 2 == 0
         assert np.sum(grid) > 0
 
-    def test_vr_subgrid_default_backward_compatible(self):
-        """Passing vr_subgrid=0.1 explicitly matches the default."""
+    def test_n_vertical_subgrid_default_is_ten(self):
+        """The default matches n_vertical_subgrid=10 (10 sub-heights per cell)."""
         test_tree = Tree(122, 1, 24, 20.66443, 0.5)
         grid_default = discretize_crown_profile(test_tree, 1, 1)
-        grid_explicit = discretize_crown_profile(test_tree, 1, 1, vr_subgrid=0.1)
+        grid_explicit = discretize_crown_profile(test_tree, 1, 1, n_vertical_subgrid=10)
         assert np.array_equal(grid_default, grid_explicit)
 
-    def test_vr_subgrid_different_values(self):
-        """Different valid vr_subgrid values produce reasonable results."""
+    def test_n_vertical_subgrid_different_values(self):
+        """Different subgrid counts produce reasonable volume-fraction grids."""
         test_tree = Tree(122, 1, 24, 20.66443, 0.5)
-        for vr_subgrid in [0.05, 0.1, 0.25, 0.5]:
-            grid = discretize_crown_profile(test_tree, 1, 1, vr_subgrid=vr_subgrid)
+        for n in [1, 2, 4, 10, 20]:
+            grid = discretize_crown_profile(test_tree, 1, 1, n_vertical_subgrid=n)
             assert np.all(grid >= 0)
             assert np.all(grid <= 1)
             assert np.sum(grid) > 0
 
-    def test_vr_subgrid_equals_vr(self):
-        """vr_subgrid equal to vr means no subdivision."""
+    def test_n_vertical_subgrid_one_means_no_subdivision(self):
+        """n_vertical_subgrid=1 evaluates each z-cell once, at its center."""
         test_tree = Tree(122, 1, 24, 20.66443, 0.5)
-        grid = discretize_crown_profile(test_tree, 1, 1, vr_subgrid=1.0)
+        grid = discretize_crown_profile(test_tree, 1, 1, n_vertical_subgrid=1)
         assert np.all(grid >= 0)
         assert np.all(grid <= 1)
         assert np.sum(grid) > 0
 
-    def test_vr_subgrid_invalid_raises(self):
-        """vr_subgrid that doesn't divide evenly into vr raises ValueError."""
+    def test_n_vertical_subgrid_count_with_no_clean_spacing(self):
+        """A count whose implied spacing is not a clean float (3 -> 1/3 m) is
+        fine now -- it was impossible under the old divide-evenly rule."""
         test_tree = Tree(122, 1, 24, 20.66443, 0.5)
-        with pytest.raises(ValueError, match="vr_subgrid"):
-            discretize_crown_profile(test_tree, 1, 1, vr_subgrid=0.3)
-        with pytest.raises(ValueError, match="vr_subgrid"):
-            discretize_crown_profile(test_tree, 1, 0.5, vr_subgrid=0.3)
-        with pytest.raises(ValueError, match="vr_subgrid"):
-            discretize_crown_profile(test_tree, 1, 1, vr_subgrid=0.7)
-        with pytest.raises(ValueError, match="vr_subgrid"):
-            discretize_crown_profile(test_tree, 1, 2, vr_subgrid=0.3)
+        for n in [3, 7, 9]:
+            grid = discretize_crown_profile(test_tree, 1, 1, n_vertical_subgrid=n)
+            assert np.sum(grid) > 0
 
-    def test_vr_subgrid_valid_does_not_raise(self):
-        """Valid vr_subgrid values should not raise, even with tricky floats."""
+    def test_n_vertical_subgrid_invalid_raises(self):
+        """Counts below 1 are invalid."""
         test_tree = Tree(122, 1, 24, 20.66443, 0.5)
-        # These all divide evenly but can have float representation issues
-        valid_pairs = [
-            (1.0, 0.1),
-            (1.0, 0.2),
-            (1.0, 0.5),
-            (0.5, 0.1),
-            (0.5, 0.25),
-            (2.0, 0.1),
-            (2.0, 0.2),
-            (2.0, 0.4),
-            (2.0, 1.0),
-        ]
-        for vr, vr_subgrid in valid_pairs:
-            discretize_crown_profile(test_tree, 1, vr, vr_subgrid=vr_subgrid)
+        with pytest.raises(ValueError, match="n_vertical_subgrid"):
+            discretize_crown_profile(test_tree, 1, 1, n_vertical_subgrid=0)
+        with pytest.raises(ValueError, match="n_vertical_subgrid"):
+            discretize_crown_profile(test_tree, 1, 1, n_vertical_subgrid=-2)
 
 
 class TestCenteringVisualization:
