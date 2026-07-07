@@ -180,3 +180,6 @@ figures/
 
 # Auto-generated version file
 fastfuels_core/_version.py
+
+# Local Claude Code guidance (personal, not shared)
+CLAUDE.md
