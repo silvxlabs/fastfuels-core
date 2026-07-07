@@ -32,6 +32,9 @@ from fastfuels_core.voxelization.sampling import (
     _compute_vertical_probability,
     _compute_joint_probability,
     _sample_voxels_from_probability_grid,
+    compute_crown_probability_field,
+    sample_occupancy,
+    sample_occupied_cells,
 )
 
 # External imports
@@ -1998,6 +2001,64 @@ class TestSampleCrownVoxels:
         result2 = _sample_voxels_from_probability_grid(n, joint_probability, 43)
 
         assert not np.array_equal(result1, result2)
+
+
+class TestOccupancySeam:
+    """The public deterministic/stochastic seam: compute_crown_probability_field
+    + sample_occupancy must compose to exactly sample_occupied_cells, and the
+    field must be reusable across seeds (build once, draw many)."""
+
+    @staticmethod
+    def _mask():
+        # A realistic non-uniform volume-fraction grid with some empty cells.
+        rng = np.random.default_rng(0)
+        m = rng.random((5, 6, 7))
+        m[m < 0.4] = 0.0
+        return m
+
+    def test_two_phase_equals_one_shot(self):
+        m = self._mask()
+        cases = [
+            (0.5, 0.5, None, 1),
+            (0.5, 0.5, 0.5, 7),
+            (1.0, 2.0, 0.3, 42),
+            (0.5, 0.5, 1.0, 3),
+        ]
+        for alpha, beta, rho, seed in cases:
+            field, n = compute_crown_probability_field(m, alpha, beta, rho)
+            two_phase = sample_occupancy(m, field, n, seed)
+            one_shot = sample_occupied_cells(m, alpha, beta, rho, seed)
+            assert np.array_equal(one_shot, two_phase)
+
+    def test_field_is_deterministic(self):
+        m = self._mask()
+        f1, n1 = compute_crown_probability_field(m, 0.5, 0.5)
+        f2, n2 = compute_crown_probability_field(m, 0.5, 0.5)
+        assert np.array_equal(f1, f2)
+        assert n1 == n2
+
+    def test_reused_field_matches_one_shot_per_seed(self):
+        # Build the field once, draw many: each draw equals the one-shot call
+        # with the same seed. This is the hoist that consumers rely on.
+        m = self._mask()
+        field, n = compute_crown_probability_field(m, 0.5, 0.5)
+        for seed in range(1, 6):
+            reuse = sample_occupancy(m, field, n, seed)
+            one_shot = sample_occupied_cells(m, 0.5, 0.5, seed=seed)
+            assert np.array_equal(reuse, one_shot)
+
+    def test_reused_field_still_varies_between_seeds(self):
+        # Reusing the field must not make realizations deterministic.
+        m = self._mask()
+        field, n = compute_crown_probability_field(m, 0.5, 0.5)
+        a = sample_occupancy(m, field, n, seed=1)
+        b = sample_occupancy(m, field, n, seed=2)
+        assert not np.array_equal(a, b)
+
+    def test_n_scales_with_rho(self):
+        m = self._mask()
+        _, n = compute_crown_probability_field(m, 0.5, 0.5, rho=0.5)
+        assert n == int(np.count_nonzero(m) * 0.5)
 
 
 class TestVoxelizedTree:

@@ -7,6 +7,53 @@ from numpy import ndarray
 from scipy.ndimage import distance_transform_edt
 
 
+def compute_crown_probability_field(
+    volume_fraction_array: ndarray,
+    alpha: float,
+    beta: float,
+    rho: float = None,
+) -> tuple[ndarray, int]:
+    """Precompute the deterministic inputs to occupancy sampling.
+
+    Returns the joint crown-occupancy probability grid and the number of voxels
+    ``n`` to draw from it. Both depend only on
+    ``(volume_fraction_array, alpha, beta, rho)`` -- not on any random seed -- so
+    a caller drawing multiple occupancy realizations of the same crown can
+    compute this once and pass it to :func:`sample_occupancy` repeatedly,
+    avoiding a redundant (and EDT-heavy) field recompute per realization.
+    """
+    # Create a probability mask for the crown grid
+    mask_bool = np.where(volume_fraction_array > 0.0, 1.0, 0.0)
+    field = _compute_joint_probability(mask_bool, alpha, beta)
+
+    # Number of voxels to occupy from the crown density
+    if rho is None:
+        rho = _estimate_crown_density(np.sum(mask_bool))
+    n = int(np.count_nonzero(mask_bool) * rho)
+
+    return field, n
+
+
+def sample_occupancy(
+    volume_fraction_array: ndarray,
+    field: ndarray,
+    n: int,
+    seed: int = None,
+) -> ndarray:
+    """Draw one stochastic occupancy realization from a precomputed field.
+
+    ``field`` and ``n`` come from :func:`compute_crown_probability_field`. Only
+    this step consumes ``seed``: different seeds yield different occupancy
+    realizations drawn from the same shared field.
+    """
+    sampled = _sample_voxels_from_probability_grid(n, field, seed)
+
+    # Make non-zero selected voxels 1
+    selected = np.where(sampled > 0, 1.0, 0.0)
+
+    return selected * volume_fraction_array
+
+
 def sample_occupied_cells(
     volume_fraction_array: ndarray,
     alpha: float,
@@ -14,20 +61,15 @@ def sample_occupied_cells(
     rho: float = None,
     seed: int = None,
 ) -> ndarray:
-    # Create a probability mask for the crown grid
-    mask_bool = np.where(volume_fraction_array > 0.0, 1.0, 0.0)
-    mask_prob = _compute_joint_probability(mask_bool, alpha, beta)
+    """One-shot occupancy sampling: build the crown probability field and draw
+    a single realization from it.
 
-    # Choose n voxels from the joint probability grid
-    if rho is None:
-        rho = _estimate_crown_density(np.sum(mask_bool))
-    n = int(np.count_nonzero(mask_bool) * rho)
-    sampled = _sample_voxels_from_probability_grid(n, mask_prob, seed)
-
-    # Make non-zero selected voxels 1
-    selected = np.where(sampled > 0, 1.0, 0.0)
-
-    return selected * volume_fraction_array
+    Equivalent to ``sample_occupancy(vfa, *compute_crown_probability_field(vfa,
+    alpha, beta, rho), seed)``; kept as the convenience path for callers that
+    only need one realization.
+    """
+    field, n = compute_crown_probability_field(volume_fraction_array, alpha, beta, rho)
+    return sample_occupancy(volume_fraction_array, field, n, seed)
 
 
 def _compute_joint_probability(mask: ndarray, alpha: float, beta: float) -> ndarray:
