@@ -103,7 +103,13 @@ def _linear_height_quadratic_radial(r: ndarray, z: ndarray, tree: "Tree") -> nda
     ht = tree.height
     hd = tree.crown_profile_model.get_max_radius_height()
     d = 2.0 * tree.max_crown_radius
-    return ((z - hb) + 4.0 * (ht - hd) * r**2 / d**2) / (ht - hb)
+    weight = ((z - hb) + 4.0 * (ht - hd) * r**2 / d**2) / (ht - hb)
+    # Clamp to non-negative. When ``z_origin`` anchors the grid, the first cell
+    # center can land just below the crown base (``z < hb``); the linear term is
+    # then negative and, near the stem where the radial term is small, drives the
+    # weight below zero -- which would give that base voxel a negative bulk
+    # density. The weight is a density and must be non-negative by construction.
+    return np.maximum(weight, 0.0)
 
 
 class LinearHeightQuadraticRadialDensity(GradientDensity):

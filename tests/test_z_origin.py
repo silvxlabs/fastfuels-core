@@ -99,3 +99,16 @@ class TestVoxelizeTreeThreadsZOrigin:
         tree = _paraboloid_tree()
         vt = VoxelizedTree(tree, np.zeros((3, 3, 3)), 2.0, 1.0)
         assert vt.z_origin is None
+
+    def test_gradient_density_never_negative_when_first_cell_below_crown_base(self):
+        # A z_origin whose first cell center lands below the crown base (here
+        # cbh=3.9 -> first center 3.5 on a z_origin=0, vr=1 grid) makes the LANL
+        # linear-in-height weight negative near the stem. Bulk density is a
+        # density and must stay non-negative; mass is still conserved.
+        tree = _paraboloid_tree(cbh=3.9)
+        vt = voxelize_tree(tree, 2.0, 1.0, alpha=0.0, beta=0.0, rho=1.0, z_origin=0.0)
+        z, _ = vt._voxel_coordinates()
+        assert z.ravel()[0] < tree.crown_base_height  # precondition for the bug
+        bulk = vt.distribute_biomass(LinearHeightQuadraticRadialDensity())
+        assert np.all(bulk >= 0.0)
+        assert bulk.sum() * 2.0 * 2.0 * 1.0 == pytest.approx(tree.foliage_biomass)
