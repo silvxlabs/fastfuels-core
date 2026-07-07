@@ -1,6 +1,5 @@
 # Core imports
 from __future__ import annotations
-import math
 from typing import TYPE_CHECKING
 
 # Internal imports
@@ -25,18 +24,24 @@ def discretize_crown_profile(
     vr: float,
     full_intersection=True,
     centering: CenteringMode = "cell",
-    vr_subgrid: float = 0.1,
+    n_vertical_subgrid: int = 10,
+    z_origin: float = None,
 ) -> ndarray:
-    # Validate that vr_subgrid divides evenly into vr
-    ratio = vr / vr_subgrid
-    if not math.isclose(ratio, round(ratio)):
-        raise ValueError(f"vr_subgrid ({vr_subgrid}) must divide evenly into vr ({vr})")
+    # Each output z-cell is evaluated at n_vertical_subgrid sub-heights to
+    # capture how the crown radius changes over the cell. Marching squares is
+    # exact in the horizontal, so there is no horizontal subgrid; for finer
+    # horizontal detail pass a finer hr.
+    if n_vertical_subgrid < 1:
+        raise ValueError(
+            f"n_vertical_subgrid must be a positive integer, got {n_vertical_subgrid}"
+        )
+    n_vertical_subgrid = int(n_vertical_subgrid)
 
     # Get the horizontal and vertical coordinates of the tree crown
     horizontal_coords = _get_horizontal_tree_coords(
         hr, tree.max_crown_radius, centering=centering
     )
-    z_pts = _get_vertical_tree_coords(vr, tree.height, tree.crown_base_height)
+    z_pts = _get_vertical_tree_coords(vr, tree.height, tree.crown_base_height, z_origin)
 
     # Slice the horizontal coordinates to get the first quadrant of the xy plane
     q2_slice = slice(len(horizontal_coords) // 2, None)
@@ -44,7 +49,7 @@ def discretize_crown_profile(
     y_pts_q2 = np.flip(x_pts_q2)
 
     q2_grid = _discretize_crown_profile_quadrant(
-        tree, x_pts_q2, y_pts_q2, z_pts, hr, vr, full_intersection, vr_subgrid
+        tree, x_pts_q2, y_pts_q2, z_pts, hr, vr, full_intersection, n_vertical_subgrid
     )
 
     # Build the other quadrants by flipping the q2 grid about the x and y axes
@@ -64,15 +69,15 @@ def _discretize_crown_profile_quadrant(
     hr,
     vr,
     full_intersection=False,
-    vr_subgrid=0.1,
+    n_vertical_subgrid=10,
 ):
     """
     Build a 3D grid of a quadrant of a tree crown represented as a rotational
     solid.
     """
-    # Create a subgrid of the z-axis to increase the resolution of the crown
-    num_subgrid_cells_per_z = int(vr / vr_subgrid)
-    z_pts_subgrid = _resample_coords_grid_to_subgrid(z_pts, vr, vr_subgrid)
+    # Split each z-cell into n_vertical_subgrid sub-heights to resolve the crown
+    vr_subgrid = vr / n_vertical_subgrid
+    z_pts_subgrid = _resample_coords_grid_to_subgrid(z_pts, vr, n_vertical_subgrid)
     r_at_height_z = tree.get_crown_radius_at_height(z_pts_subgrid)
 
     # Compute the area of intersection between the tree crown and each cell
@@ -83,7 +88,7 @@ def _discretize_crown_profile_quadrant(
     # Convert the area of intersection to a volume fraction by summing the area
     # along the z-axis and dividing by the cell volume
     volume_subgrid = area * vr_subgrid
-    volume = _sum_area_along_axis(volume_subgrid, 0, num_subgrid_cells_per_z)
+    volume = _sum_area_along_axis(volume_subgrid, 0, n_vertical_subgrid)
     volume_fraction = np.minimum(volume / (hr * hr * vr), 1.0)
 
     return volume_fraction
