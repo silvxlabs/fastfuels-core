@@ -116,9 +116,16 @@ def _sample_voxels_from_probability_grid(
     the joint probability of each voxel, such that voxels with higher joint
     probability are more likely to be sampled. Voxels are sampled without
     replacement.
+
+    Uses the Efraimidis-Spirakis / Gumbel-top-k method: each candidate voxel i
+    is given a key ``log(u_i) / w_i`` (u_i ~ U(0, 1), w_i the voxel's
+    probability), and the n voxels with the largest keys are kept. This draws
+    from the same distribution as sequential weighted sampling without
+    replacement -- i.e. ``np.random.choice(..., replace=False, p=...)`` -- but
+    in a single O(N) pass rather than numpy's rejection loop, whose cost grows
+    with n. See Efraimidis & Spirakis (2006), Inf. Process. Lett. 97(5).
     """
-    if seed:
-        np.random.seed(seed)
+    rng = np.random.default_rng(seed)
 
     # If joint probability is all zeros, return an empty array
     if np.all(joint_probability == 0):
@@ -132,12 +139,28 @@ def _sample_voxels_from_probability_grid(
     if np.any(np.isnan(jp_flat)):
         return joint_probability
 
-    # Choose n indices from the flattened joint probability
-    chosen_indices = np.random.choice(
-        np.arange(joint_probability.size), n, replace=False, p=jp_flat
-    )
+    # Only voxels with positive probability are candidates for selection.
+    # (numpy's weighted choice likewise cannot draw more than this many.)
+    candidates = np.flatnonzero(jp_flat)
+    if n < 0:
+        raise ValueError("n must be non-negative")
+    if n > candidates.size:
+        raise ValueError(
+            f"Cannot sample more voxels than have positive probability "
+            f"({n} requested, {candidates.size} available)"
+        )
+
+    selected_flat = np.zeros(joint_probability.size)
+    if n == 0:
+        return selected_flat.reshape(joint_probability.shape)
+
+    # Efraimidis-Spirakis keys; the n largest keys are the sampled voxels.
+    # argpartition finds the top n in O(N) without a full sort.
+    weights = jp_flat[candidates]
+    keys = np.log(rng.random(candidates.size)) / weights
+    kth = candidates.size - n
+    chosen_indices = candidates[np.argpartition(keys, kth)[kth:]]
 
     # Build flat selection array and reshape to original shape
-    selected_flat = np.zeros(joint_probability.size)
     selected_flat[chosen_indices] = jp_flat[chosen_indices]
     return selected_flat.reshape(joint_probability.shape)
