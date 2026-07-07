@@ -26,6 +26,7 @@ REF_JENKINS = pd.read_csv(  # type: ignore
     DATA_PATH / "REF_JENKINS.csv",
     index_col="JENKINS_SPGRPCD",
 )
+JENKINS_PARAMS = REF_JENKINS.to_dict(orient="index")
 
 # Meta: This data is from the TRY database. Values are per species mean recomputed after removing
 # measurements outside of 2.5 SD from mean. Species matched by genus and species to REF_SPECIES for

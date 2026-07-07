@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 # Internal imports
-from fastfuels_core.ref_data import REF_SPECIES, REF_JENKINS
+from fastfuels_core.ref_data import SPCD_PARAMS, JENKINS_PARAMS
 from fastfuels_core.crown_profile_models.abc import CrownProfileModel
 
 # External imports
@@ -27,21 +27,19 @@ class BetaCrownProfile(CrownProfileModel):
         self.crown_base_height = np.atleast_2d(crown_base_height).T
         self.crown_length = np.atleast_2d(crown_length).T
 
-        jenkins_species_group = np.atleast_2d(
-            REF_SPECIES.loc[self.species_code.ravel()]["JENKINS_SPGRPCD"]
-        ).T
-        self.a = np.atleast_2d(
-            REF_JENKINS.loc[jenkins_species_group.ravel()]["BETA_CANOPY_a"]
-        ).T
-        self.b = np.atleast_2d(
-            REF_JENKINS.loc[jenkins_species_group.ravel()]["BETA_CANOPY_b"]
-        ).T
-        self.c = np.atleast_2d(
-            REF_JENKINS.loc[jenkins_species_group.ravel()]["BETA_CANOPY_c"]
-        ).T
-        self.beta_norm = np.atleast_2d(
-            REF_JENKINS.loc[jenkins_species_group.ravel()]["BETA_CANOPY_NORM"]
-        ).T
+        # Look up the species-group beta parameters via dict indexing rather
+        # than pandas .loc — same values (species -> Jenkins group -> a/b/c/norm),
+        # ~180x faster per construction. Stored as [n_trees, 1] to match the
+        # broadcasting convention above.
+        groups = [
+            SPCD_PARAMS[int(s)]["JENKINS_SPGRPCD"] for s in self.species_code.ravel()
+        ]
+        self.a = np.array([[JENKINS_PARAMS[int(g)]["BETA_CANOPY_a"]] for g in groups])
+        self.b = np.array([[JENKINS_PARAMS[int(g)]["BETA_CANOPY_b"]] for g in groups])
+        self.c = np.array([[JENKINS_PARAMS[int(g)]["BETA_CANOPY_c"]] for g in groups])
+        self.beta_norm = np.array(
+            [[JENKINS_PARAMS[int(g)]["BETA_CANOPY_NORM"]] for g in groups]
+        )
 
     def get_max_radius(self) -> float | np.ndarray:
         """

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 # Internal imports
-from fastfuels_core.ref_data import REF_SPECIES
+from fastfuels_core.ref_data import SPCD_PARAMS
 from fastfuels_core.crown_profile_models.abc import CrownProfileModel
 
 # External imports
@@ -220,5 +220,14 @@ class PurvesCrownProfile(CrownProfileModel):
     def _get_purves_trait_score(spcd):
         """
         Get the trait score for a given species code from the REF_SPECIES table.
+        Uses dict indexing rather than pandas .loc for speed; handles scalar or
+        array-like species codes.
         """
-        return REF_SPECIES.loc[spcd]["PURVES_TRAIT_SCORE"]
+        if np.ndim(spcd) == 0:
+            return SPCD_PARAMS[int(spcd)]["PURVES_TRAIT_SCORE"]
+        return np.array(
+            [
+                SPCD_PARAMS[int(s)]["PURVES_TRAIT_SCORE"]
+                for s in np.asarray(spcd).ravel()
+            ]
+        )
