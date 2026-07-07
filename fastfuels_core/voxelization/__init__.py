@@ -14,7 +14,11 @@ from fastfuels_core.voxelization.mass_distribution import (
     LinearHeightQuadraticRadialDensity,
     UniformDensity,
 )
-from fastfuels_core.voxelization.sampling import sample_occupied_cells
+from fastfuels_core.voxelization.sampling import (
+    compute_crown_probability_field,
+    sample_occupancy,
+    sample_occupied_cells,
+)
 from fastfuels_core.voxelization.tree import VoxelizedTree, voxelize_tree
 
 __all__ = [
@@ -22,6 +26,8 @@ __all__ = [
     "voxelize_tree",
     "CenteringMode",
     "discretize_crown_profile",
+    "compute_crown_probability_field",
+    "sample_occupancy",
     "sample_occupied_cells",
     "DensityField",
     "UniformDensity",
