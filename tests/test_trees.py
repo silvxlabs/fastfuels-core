@@ -12,6 +12,7 @@ from fastfuels_core.trees import (
     REF_TRY_DB_LEAF,
 )
 from fastfuels_core.crown_profile_models.beta import BetaCrownProfile
+from fastfuels_core.crown_profile_models.purves import PurvesCrownProfile
 from fastfuels_core.crown_profile_models.cone import ConeCrownProfile
 from fastfuels_core.crown_profile_models.cylinder import CylinderCrownProfile
 from fastfuels_core.crown_profile_models.paraboloid import ParaboloidCrownProfile
@@ -171,6 +172,39 @@ class TestBetaCrownProfileModel:
         heights = np.linspace(20, 25, 1000)
         radii = model.get_radius_at_height(heights)
         assert np.all(max_crown_radius >= radii)
+
+
+class TestCrownModelSpeedups:
+    """De-pandas reference lookups must be value-exact, and crown_profile_model
+    must be cached so it is built once per tree."""
+
+    @pytest.mark.parametrize("spcd", [122, 202, 15, 93, 108, 17, 19, 746, 316])
+    def test_beta_params_match_reference_table(self, spcd):
+        model = BetaCrownProfile(spcd, crown_base_height=5.0, crown_length=15.0)
+        group = REF_SPECIES.loc[spcd]["JENKINS_SPGRPCD"]
+        row = REF_JENKINS.loc[group]
+        assert model.a.item() == row["BETA_CANOPY_a"]
+        assert model.b.item() == row["BETA_CANOPY_b"]
+        assert model.c.item() == row["BETA_CANOPY_c"]
+        assert model.beta_norm.item() == row["BETA_CANOPY_NORM"]
+
+    @pytest.mark.parametrize("spcd", [122, 202, 15, 93, 108])
+    def test_purves_trait_score_matches_reference_table(self, spcd):
+        model = PurvesCrownProfile(spcd, dbh=25.0, height=18.0, crown_ratio=0.6)
+        assert model.trait_score.item() == REF_SPECIES.loc[spcd]["PURVES_TRAIT_SCORE"]
+
+    def test_crown_profile_model_is_cached(self):
+        tree = make_random_tree(crown_profile_model="beta")
+        first = tree.crown_profile_model
+        assert tree.crown_profile_model is first  # same object, not rebuilt
+
+    def test_max_crown_radius_reuses_cached_model(self):
+        # max_crown_radius routes through the cached model; accessing it must not
+        # invalidate or rebuild the cached crown_profile_model.
+        tree = make_random_tree(crown_profile_model="beta")
+        model = tree.crown_profile_model
+        _ = tree.max_crown_radius
+        assert tree.crown_profile_model is model
 
 
 class TestJenkinsBiomassEquations:

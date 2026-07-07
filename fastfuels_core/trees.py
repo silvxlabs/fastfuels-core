@@ -1,6 +1,7 @@
 # Core imports
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from functools import cached_property
 
 # Internal imports
 from fastfuels_core.base import ObjectIterableDataFrame
@@ -335,8 +336,12 @@ class Tree:
         """
         return self.status_code == 1
 
-    @property
+    @cached_property
     def crown_profile_model(self) -> CrownProfileModel:
+        # Cached: max_crown_radius and get_crown_radius_at_height both build the
+        # model, so caching collapses the two constructions per voxelization into
+        # one. Trees are treated as immutable after construction (their
+        # attributes are not mutated in the voxelization pipeline).
         if self._crown_profile_model_type == "beta":
             return BetaCrownProfile(
                 self.species_code, self.crown_base_height, self.crown_length
