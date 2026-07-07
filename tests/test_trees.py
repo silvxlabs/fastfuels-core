@@ -183,15 +183,15 @@ class TestCrownModelSpeedups:
         model = BetaCrownProfile(spcd, crown_base_height=5.0, crown_length=15.0)
         group = REF_SPECIES.loc[spcd]["JENKINS_SPGRPCD"]
         row = REF_JENKINS.loc[group]
-        assert float(model.a) == row["BETA_CANOPY_a"]
-        assert float(model.b) == row["BETA_CANOPY_b"]
-        assert float(model.c) == row["BETA_CANOPY_c"]
-        assert float(model.beta_norm) == row["BETA_CANOPY_NORM"]
+        assert model.a.item() == row["BETA_CANOPY_a"]
+        assert model.b.item() == row["BETA_CANOPY_b"]
+        assert model.c.item() == row["BETA_CANOPY_c"]
+        assert model.beta_norm.item() == row["BETA_CANOPY_NORM"]
 
     @pytest.mark.parametrize("spcd", [122, 202, 15, 93, 108])
     def test_purves_trait_score_matches_reference_table(self, spcd):
         model = PurvesCrownProfile(spcd, dbh=25.0, height=18.0, crown_ratio=0.6)
-        assert float(model.trait_score) == REF_SPECIES.loc[spcd]["PURVES_TRAIT_SCORE"]
+        assert model.trait_score.item() == REF_SPECIES.loc[spcd]["PURVES_TRAIT_SCORE"]
 
     def test_crown_profile_model_is_cached(self):
         tree = make_random_tree(crown_profile_model="beta")
