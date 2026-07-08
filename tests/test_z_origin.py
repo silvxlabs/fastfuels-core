@@ -85,7 +85,7 @@ class TestVoxelizeTreeThreadsZOrigin:
         tree = _paraboloid_tree()
         vt = voxelize_tree(tree, 2.0, 1.0, alpha=0.0, beta=0.0, rho=1.0, z_origin=0.0)
         assert vt.z_origin == 0.0
-        z, _ = vt._voxel_coordinates()
+        z = vt.voxel_height
         # density-field heights align to the same half-integer grid
         assert np.allclose(z.ravel() % 1.0, 0.5)
 
@@ -107,7 +107,7 @@ class TestVoxelizeTreeThreadsZOrigin:
         # density and must stay non-negative; mass is still conserved.
         tree = _paraboloid_tree(cbh=3.9)
         vt = voxelize_tree(tree, 2.0, 1.0, alpha=0.0, beta=0.0, rho=1.0, z_origin=0.0)
-        z, _ = vt._voxel_coordinates()
+        z = vt.voxel_height
         assert z.ravel()[0] < tree.crown_base_height  # precondition for the bug
         bulk = vt.distribute_biomass(LinearHeightQuadraticRadialDensity())
         assert np.all(bulk >= 0.0)

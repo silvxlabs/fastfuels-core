@@ -138,7 +138,7 @@ class TestLinearHeightQuadraticRadialDensity:
 
     def test_is_top_weighted_relative_to_uniform(self):
         vt = _full_occupancy(_paraboloid_tree())
-        z = vt._voxel_coordinates()[0].ravel()
+        z = vt.voxel_height.ravel()
         uniform = vt.distribute_biomass(UniformDensity())
         lanl = vt.distribute_biomass(LinearHeightQuadraticRadialDensity())
 
@@ -149,7 +149,7 @@ class TestLinearHeightQuadraticRadialDensity:
 
     def test_is_outer_weighted_relative_to_uniform(self):
         vt = _full_occupancy(_paraboloid_tree())
-        _, r = vt._voxel_coordinates()
+        r = vt.radial_distance
         r = np.broadcast_to(r, vt.grid.shape)
         uniform = vt.distribute_biomass(UniformDensity())
         lanl = vt.distribute_biomass(LinearHeightQuadraticRadialDensity())

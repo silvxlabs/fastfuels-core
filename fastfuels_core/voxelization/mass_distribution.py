@@ -5,13 +5,21 @@ subgrid sampling) produces a volume-fraction grid; a ``DensityField`` then turns
 that occupancy into a bulk-density grid (kg/m^3) by deciding *how much* of the
 crown mass sits in each voxel.
 
+A ``DensityField`` is a **crown weight function**: it supplies the relative
+weight of each occupied voxel via :meth:`DensityField.crown_weight`. The
+mass-conserving normalization -- scale the weighted occupancy so its integral
+equals the tree's crown mass -- is shared and lives in
+:meth:`VoxelizedTree.distribute_biomass`, so subclasses only choose the *shape*
+of the distribution.
+
 Two flavors ship here:
 
-* :class:`UniformDensity` -- one constant bulk density through the crown
-  (mass / occupied volume). This is the original behavior.
-* :class:`GradientDensity` -- distribute mass with an arbitrary weight function
-  ``w(r, z, tree)``; the result is renormalized to conserve the crown mass, so a
-  constant weight recovers :class:`UniformDensity`. Named subclasses (e.g.
+* :class:`UniformDensity` -- a constant weight, giving one bulk density through
+  the crown (mass / occupied volume). This is the original behavior, and it
+  reads no crown geometry.
+* :class:`GradientDensity` -- an arbitrary weight function ``w(r, z, tree)``.
+  Because of the shared renormalization a constant weight recovers
+  :class:`UniformDensity`. Named subclasses (e.g.
   :class:`LinearHeightQuadraticRadialDensity`) pin a specific weight.
 
 The occupancy step and the mass-distribution step are deliberately independent:
@@ -28,6 +36,7 @@ from numpy import ndarray
 
 if TYPE_CHECKING:
     from fastfuels_core.trees import Tree
+    from fastfuels_core.voxelization.tree import VoxelizedTree
 
 # A weight function maps per-voxel radial distance ``r`` and height ``z`` (plus
 # the tree, for geometry) to non-negative relative weights over the voxel grid.
@@ -35,23 +44,32 @@ WeightFunction = Callable[[ndarray, ndarray, "Tree"], ndarray]
 
 
 class DensityField(ABC):
-    """Turns an occupancy grid into a bulk-density grid (kg/m^3).
+    """A crown weight function for distributing crown mass over occupied voxels.
 
-    Implementations receive the ``occupancy`` grid (volume fraction per voxel),
-    the ``tree``, per-voxel radial distance ``r`` and height ``z`` (broadcastable
-    to the grid), and the ``cell_volume`` (m^3), and return a bulk-density grid
-    of the same shape as ``occupancy``.
+    Implementations return the relative weight of each occupied voxel; the
+    shared, mass-conserving normalization in
+    :meth:`VoxelizedTree.distribute_biomass` turns those weights into a
+    bulk-density grid (kg/m^3). A constant weight yields uniform density.
     """
 
     @abstractmethod
-    def apply(
-        self,
-        occupancy: ndarray,
-        tree: "Tree",
-        r: ndarray,
-        z: ndarray,
-        cell_volume: float,
-    ) -> ndarray:
+    def crown_weight(self, vt: "VoxelizedTree") -> ndarray | float:
+        """Return the relative weight of each occupied voxel.
+
+        Parameters
+        ----------
+        vt : VoxelizedTree
+            The voxelized tree being distributed. Weights that vary with crown
+            geometry read ``vt.voxel_height`` and ``vt.radial_distance``, which
+            are computed lazily -- a constant weight never triggers them.
+
+        Returns
+        -------
+        ndarray or float
+            Per-voxel relative weights broadcastable to ``vt.grid``, or a scalar
+            for a spatially constant weight. Need not be normalized;
+            ``distribute_biomass`` renormalizes to conserve the crown mass.
+        """
         raise NotImplementedError
 
 
@@ -59,14 +77,12 @@ class UniformDensity(DensityField):
     """Constant bulk density through the crown: ``mass / occupied volume``.
 
     Equivalent to the original ``VoxelizedTree.distribute_biomass``: the whole
-    crown mass is spread at a single bulk density over the occupied volume.
+    crown mass is spread at a single bulk density over the occupied volume. The
+    weight is a spatially constant ``1.0``, so it reads no crown geometry.
     """
 
-    def apply(self, occupancy, tree, r, z, cell_volume):
-        volume = float(occupancy.sum()) * cell_volume
-        if volume <= 0.0:
-            return np.zeros_like(occupancy, dtype=float)
-        return occupancy * (tree.foliage_biomass / volume)
+    def crown_weight(self, vt):
+        return 1.0
 
 
 class GradientDensity(DensityField):
@@ -81,20 +97,18 @@ class GradientDensity(DensityField):
     weight_fn : callable
         ``weight_fn(r, z, tree) -> ndarray`` returning non-negative relative
         weights broadcast over the voxel grid. ``r`` is the radial distance from
-        the stem and ``z`` the height; both are broadcastable to the occupancy
-        grid. Any new gradient is just a new weight function.
+        the stem (``vt.radial_distance``) and ``z`` the height
+        (``vt.voxel_height``); both are broadcastable to the occupancy grid. Any
+        new gradient is just a new weight function.
     """
 
     def __init__(self, weight_fn: WeightFunction):
         self.weight_fn = weight_fn
 
-    def apply(self, occupancy, tree, r, z, cell_volume):
-        weight = np.asarray(self.weight_fn(r, z, tree), dtype=float)
-        raw = weight * occupancy
-        total = float(raw.sum()) * cell_volume
-        if total <= 0.0:
-            return np.zeros_like(occupancy, dtype=float)
-        return raw * (tree.foliage_biomass / total)
+    def crown_weight(self, vt):
+        return np.asarray(
+            self.weight_fn(vt.radial_distance, vt.voxel_height, vt.tree), dtype=float
+        )
 
 
 def _linear_height_quadratic_radial(r: ndarray, z: ndarray, tree: "Tree") -> ndarray:

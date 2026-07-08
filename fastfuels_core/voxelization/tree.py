@@ -1,5 +1,6 @@
 # Core imports
 from __future__ import annotations
+from functools import cached_property
 from typing import TYPE_CHECKING
 
 # Internal imports
@@ -42,28 +43,46 @@ class VoxelizedTree:
     def distribute_biomass(self, density_field: DensityField = None) -> ndarray:
         """Distribute the tree's crown mass across occupied voxels.
 
-        The mass-distribution step is independent of how the occupancy grid was
-        produced. ``density_field`` selects the distribution; it defaults to
-        :class:`UniformDensity`, reproducing the original constant-density
-        behavior.
+        A ``density_field`` supplies the relative weight of each occupied voxel
+        (see :class:`DensityField`); this method applies the shared,
+        mass-conserving normalization so the integrated bulk density equals the
+        tree's crown mass. Defaults to :class:`UniformDensity` (a constant
+        weight), reproducing the original constant-density behavior.
         """
         if density_field is None:
             density_field = UniformDensity()
-        z, r = self._voxel_coordinates()
+        weight = density_field.crown_weight(self)
+        raw = weight * self.grid
         cell_volume = self.hr * self.hr * self.vr
-        return density_field.apply(self.grid, self.tree, r, z, cell_volume)
+        total = float(raw.sum()) * cell_volume
+        if total <= 0.0:
+            return np.zeros_like(self.grid, dtype=float)
+        return raw * (self.tree.foliage_biomass / total)
 
-    def _voxel_coordinates(self) -> tuple[ndarray, ndarray]:
-        """Per-voxel height ``z`` (nz,1,1) and radial distance from the stem
-        ``r`` (1,ny,nx), matching ``self.grid``'s axes."""
+    @cached_property
+    def voxel_height(self) -> ndarray:
+        """Per-voxel height above the grid's z-reference, shape ``(nz, 1, 1)``.
+
+        Broadcasts over the horizontal axes. Computed lazily on first access --
+        a constant-weight density field (e.g. :class:`UniformDensity`) never
+        triggers it -- and cached thereafter.
+        """
         z = _get_vertical_tree_coords(
             self.vr, self.tree.height, self.tree.crown_base_height, self.z_origin
         )
+        return z[:, None, None]
+
+    @cached_property
+    def radial_distance(self) -> ndarray:
+        """Per-voxel horizontal distance from the stem axis, shape ``(1, ny, nx)``.
+
+        Broadcasts over the vertical axis. Computed lazily on first access and
+        cached thereafter.
+        """
         xy = _get_horizontal_tree_coords(
             self.hr, self.tree.max_crown_radius, centering=self.centering
         )
-        r = np.sqrt(xy[None, :] ** 2 + xy[:, None] ** 2)
-        return z[:, None, None], r[None, :, :]
+        return np.sqrt(xy[None, :] ** 2 + xy[:, None] ** 2)[None, :, :]
 
 
 def voxelize_tree(

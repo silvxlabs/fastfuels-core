@@ -414,12 +414,17 @@ class Tree:
                 self.height,
             )
 
-    @property
+    @cached_property
     def foliage_biomass(self) -> float:
         """
         Returns the foliage biomass of the tree. When a custom crown_fuel_load
         is set, returns that value directly. Otherwise computes from allometric
         equations.
+
+        Cached: constant for the tree's life (its inputs are fixed at
+        construction), and read once per occupancy realization by the mass
+        distribution. Trees are treated as immutable after construction, the
+        same assumption ``crown_profile_model`` relies on.
         """
         if self._crown_fuel_load_override is not None:
             return self._crown_fuel_load_override
