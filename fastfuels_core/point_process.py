@@ -179,13 +179,40 @@ def _calculate_per_plot_tree_density(plots, trees, merge_type) -> GeoDataFrame:
     return merged_plots.fillna(0)
 
 
+def _points_span_2d(x, y) -> bool:
+    """Whether the points can support a 2D Delaunay triangulation.
+
+    ``griddata`` with ``method="linear"`` or ``"cubic"`` triangulates the input
+    points, which needs at least three distinct, non-collinear points. Plot
+    cells drawn from a raster that is a single row or column (or a single pixel)
+    are collinear or coincident, so no valid triangulation exists and Qhull
+    raises. This lets the caller fall back to nearest-neighbour interpolation,
+    which needs no triangulation, for those degenerate inputs.
+    """
+    points = np.unique(
+        np.column_stack([np.asarray(x, dtype=float), np.asarray(y, dtype=float)]),
+        axis=0,
+    )
+    if len(points) < 3:
+        return False
+    return np.linalg.matrix_rank(points - points.mean(axis=0)) >= 2
+
+
 def _interpolate_data_to_grid(plots, data, grid_x, grid_y, method) -> ndarray:
     """Interpolate unstructured plot data to a structured grid."""
     if len(data) == 0:
         return np.zeros(grid_x.shape)
 
+    points = (plots.geometry.x, plots.geometry.y)
+    # linear/cubic interpolation triangulates the plot points; a domain covering
+    # a single row/column (or one) of plot cells is collinear/coincident, so no
+    # triangulation exists and Qhull would raise. Nearest-neighbour needs none,
+    # so fall back to it for those degenerate inputs.
+    if method != "nearest" and not _points_span_2d(*points):
+        method = "nearest"
+
     interpolated_grid = griddata(
-        (plots.geometry.x, plots.geometry.y),
+        points,
         data,
         (grid_x, grid_y),
         method=method,

@@ -13,6 +13,7 @@ from fastfuels_core.point_process import (
     _create_structured_coords_grid,
     _calculate_per_plot_tree_density,
     _interpolate_data_to_grid,
+    _points_span_2d,
     _interpolate_tree_density_to_grid,
     _interpolate_plot_id_to_grid,
     _generate_tree_counts,
@@ -122,6 +123,97 @@ class TestInterpolateDataToGrid:
         assert np.allclose(interpolated_grid[:2, 2:], 2)
         assert np.allclose(interpolated_grid[2:, :2], 3)
         assert np.allclose(interpolated_grid[2:, 2:], 4)
+
+    def _play_grid(self):
+        x_coords = np.array([0, 1, 2, 3], dtype=float)
+        y_coords = np.array([0, 1, 2, 3], dtype=float)
+        return np.meshgrid(x_coords, y_coords)
+
+    def test_linear_falls_back_to_nearest_for_collinear_plots(self):
+        # All plots share the same x (a single-column raster): the linear
+        # Delaunay triangulation is impossible. This must not raise a QhullError
+        # (QH6013) and must produce a valid, finite grid instead.
+        x_grid, y_grid = self._play_grid()
+        plots = gpd.GeoDataFrame(
+            geometry=[Point(0, 0), Point(0, 1), Point(0, 2), Point(0, 3)]
+        )
+        data = pd.Series([1.0, 2.0, 3.0, 4.0])
+
+        grid = _interpolate_data_to_grid(plots, data, x_grid, y_grid, method="linear")
+
+        assert grid.shape == x_grid.shape
+        assert np.all(np.isfinite(grid))
+        assert grid.min() >= 0
+
+    def test_linear_falls_back_to_nearest_for_diagonal_collinear_plots(self):
+        # Plots on a diagonal line are collinear too (QH6154 in production).
+        x_grid, y_grid = self._play_grid()
+        plots = gpd.GeoDataFrame(
+            geometry=[Point(0, 0), Point(1, 1), Point(2, 2), Point(3, 3)]
+        )
+        data = pd.Series([1.0, 2.0, 3.0, 4.0])
+
+        grid = _interpolate_data_to_grid(plots, data, x_grid, y_grid, method="linear")
+
+        assert grid.shape == x_grid.shape
+        assert np.all(np.isfinite(grid))
+
+    def test_linear_falls_back_to_nearest_for_single_plot(self):
+        # A domain covering a single plot pixel yields a coincident point set;
+        # nearest-neighbour spreads that one plot's value across the whole grid.
+        x_grid, y_grid = self._play_grid()
+        plots = gpd.GeoDataFrame(geometry=[Point(1, 1)])
+        data = pd.Series([5.0])
+
+        grid = _interpolate_data_to_grid(plots, data, x_grid, y_grid, method="linear")
+
+        assert grid.shape == x_grid.shape
+        assert np.allclose(grid, 5.0)
+
+    def test_linear_used_for_non_degenerate_plots(self):
+        # A 2-D spread of plots keeps linear interpolation: the midpoint of the
+        # grid blends the four corners rather than snapping to one (nearest).
+        x_grid, y_grid = self._play_grid()
+        plots = gpd.GeoDataFrame(
+            geometry=[Point(0, 0), Point(3, 0), Point(0, 3), Point(3, 3)]
+        )
+        data = pd.Series([0.0, 0.0, 0.0, 4.0])
+
+        grid = _interpolate_data_to_grid(plots, data, x_grid, y_grid, method="linear")
+
+        assert grid.shape == x_grid.shape
+        # Interior cell is a linear blend, so strictly between the corner values.
+        assert 0.0 < grid[1, 1] < 4.0
+        assert 0.0 < grid[2, 2] < 4.0
+
+
+class TestPointsSpan2d:
+    def test_collinear_same_x_is_degenerate(self):
+        assert not _points_span_2d([0, 0, 0, 0], [0, 1, 2, 3])
+
+    def test_collinear_same_y_is_degenerate(self):
+        assert not _points_span_2d([0, 1, 2, 3], [5, 5, 5, 5])
+
+    def test_diagonal_collinear_is_degenerate(self):
+        assert not _points_span_2d([0, 1, 2, 3], [0, 1, 2, 3])
+
+    def test_single_point_is_degenerate(self):
+        assert not _points_span_2d([1], [1])
+
+    def test_two_points_are_degenerate(self):
+        assert not _points_span_2d([0, 1], [0, 1])
+
+    def test_duplicate_points_collapse_to_degenerate(self):
+        # Only two distinct locations despite four rows.
+        assert not _points_span_2d([0, 0, 1, 1], [0, 0, 1, 1])
+
+    def test_grid_spans_2d(self):
+        assert _points_span_2d([0, 1, 0, 1], [0, 0, 1, 1])
+
+    def test_large_utm_coordinates_span_2d(self):
+        # Real domains sit at large UTM offsets; the rank check must not be
+        # fooled by the coordinate magnitude.
+        assert _points_span_2d([379200, 379230, 379200], [4000000, 4000000, 4000030])
 
 
 class TestInterpolateTreeDensityToGrid:
