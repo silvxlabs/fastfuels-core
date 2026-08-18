@@ -34,15 +34,17 @@ import pandas as pd
 import pytest
 
 from fastfuels_core.allometry import brown, fvs
-from fastfuels_core.canopy_fuel.metrics import (
-    FT_TO_M,
+from fastfuels_core.canopy_fuel.available_fuel import (
     available_canopy_fuel,
-    canopy_cover,
-    canopy_fuel_load,
     crown_class_factor,
-    cbd_running_mean,
+)
+from fastfuels_core.canopy_fuel.bulk_density import cbd_running_mean
+from fastfuels_core.canopy_fuel.cover import canopy_cover
+from fastfuels_core.canopy_fuel.canopy_height import profile_threshold_heights
+from fastfuels_core.canopy_fuel.fuel_load import canopy_fuel_load
+from fastfuels_core.canopy_fuel.profile import (
+    FT_TO_M,
     cumulative_fuel_fraction,
-    profile_threshold_heights,
     vertical_profile,
 )
 from fastfuels_core.units import conversion_factor

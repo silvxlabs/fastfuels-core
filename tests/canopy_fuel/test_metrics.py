@@ -1,4 +1,4 @@
-"""Tests for fastfuels_core.canopy_fuel.metrics."""
+"""Tests for the fastfuels_core.canopy_fuel stages."""
 
 import numpy as np
 import pandas as pd
@@ -10,17 +10,17 @@ from fastfuels_core.allometry.brown import (
     foliage_fraction,
     foliage_plus_fine_fraction,
 )
-from fastfuels_core.canopy_fuel.metrics import (
+from fastfuels_core.canopy_fuel.available_fuel import available_canopy_fuel
+from fastfuels_core.canopy_fuel.bulk_density import cbd_running_mean
+from fastfuels_core.canopy_fuel.cover import canopy_cover
+from fastfuels_core.canopy_fuel.canopy_height import profile_threshold_heights
+from fastfuels_core.canopy_fuel.crown_radius import max_crown_radius
+from fastfuels_core.canopy_fuel.fuel_load import canopy_fuel_load
+from fastfuels_core.canopy_fuel.geometry import disk_rect_overlap_area
+from fastfuels_core.canopy_fuel.metrics import compute_canopy_metrics
+from fastfuels_core.canopy_fuel.profile import (
     FT_TO_M,
-    available_canopy_fuel,
-    canopy_cover,
-    canopy_fuel_load,
-    compute_canopy_metrics,
-    cbd_running_mean,
     cumulative_fuel_fraction,
-    disk_rect_overlap_area,
-    max_crown_radius,
-    profile_threshold_heights,
     vertical_profile,
 )
 from fastfuels_core.canopy_fuel.ref_data import fuelcalc_species
@@ -456,7 +456,7 @@ class TestVerticalProfile:
             )
 
     def test_batching_matches_single_pass(self, monkeypatch):
-        import fastfuels_core.canopy_fuel.metrics as m
+        import fastfuels_core.canopy_fuel.profile as m
 
         trees = stand_on_lattice(150, seed=9)
         fuel = np.full(len(trees), 2.0)
@@ -912,7 +912,7 @@ class TestCanopyCover:
             )
 
     def test_strip_chunking_is_invisible(self, monkeypatch):
-        import fastfuels_core.canopy_fuel.metrics as m
+        import fastfuels_core.canopy_fuel.cover as m
 
         trees = stand_on_lattice(60, seed=21)
         whole = canopy_cover(trees, TRANSFORM, SHAPE)
