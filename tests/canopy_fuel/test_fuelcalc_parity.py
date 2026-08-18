@@ -332,17 +332,63 @@ class TestCrownProportionParity:
             available_canopy_fuel(trees, crown_class_adjustment="fuelcalc_table"),
         )
 
-    def test_unknown_adjustment_raises(self):
-        trees = pd.DataFrame(
+    @staticmethod
+    def _two_trees():
+        return pd.DataFrame(
             {
-                "fia_species_code": [122],
-                "dbh": [30.0],
-                "height": [18.0],
-                "crown_ratio": [0.5],
+                "fia_species_code": [122, 202],
+                "dbh": [30.0, 30.0],
+                "height": [18.0, 18.0],
+                "crown_ratio": [0.5, 0.5],
+                "cc": ["D", "S"],
             }
         )
+
+    def test_unknown_adjustment_raises(self):
         with pytest.raises(ValueError, match="crown_class_adjustment"):
-            available_canopy_fuel(trees, crown_class_adjustment="fuelcalc")
+            available_canopy_fuel(self._two_trees(), crown_class_adjustment="fuelcalc")
+
+    def test_none_means_no_adjustment(self):
+        """``None`` is the natural Python spelling and must not raise.
+
+        ``crown_class_column`` beside it takes a real ``None``, so
+        accepting only the string here is a trap.
+        """
+        trees = self._two_trees()
+        np.testing.assert_array_equal(
+            available_canopy_fuel(trees, crown_class_adjustment=None),
+            available_canopy_fuel(trees, crown_class_adjustment="none"),
+        )
+
+    def test_a_column_that_would_be_ignored_raises(self):
+        """Naming the column says the inventory has crown position.
+
+        Applying no adjustment to it would throw away the only input
+        that makes the adjustment more than a constant.
+        """
+        with pytest.raises(ValueError, match="would be ignored"):
+            available_canopy_fuel(self._two_trees(), crown_class_column="cc")
+
+    def test_a_missing_column_names_the_parameter(self):
+        with pytest.raises(ValueError, match="crown_class_column"):
+            available_canopy_fuel(
+                self._two_trees(),
+                crown_class_adjustment="fuelcalc_table",
+                crown_class_column="not_a_column",
+            )
+
+    def test_the_fallback_is_nearly_a_constant(self):
+        """Without crown position the adjustment loses its content.
+
+        50 of the 54 species take 0.5, so turning the table on with no
+        column is close to halving every tree. Pinned because it is the
+        difference between a species-and-position adjustment and a
+        blanket scale factor, and it is invisible from the call site.
+        """
+        spcd = fuelcalc_species().index.to_numpy()
+        factors = crown_class_factor(spcd)
+        values, counts = np.unique(factors, return_counts=True)
+        assert dict(zip(np.round(values, 2), counts)) == {0.5: 50, 0.75: 1, 1.0: 3}
 
     def test_no_unaccounted_equation_ids(self):
         """Every Id we define is either in the source or explained here."""

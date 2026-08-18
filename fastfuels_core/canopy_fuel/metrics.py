@@ -264,16 +264,20 @@ def available_canopy_fuel(
 
     ``crown_class_adjustment`` scales the result per tree:
 
-    ``"none"`` (default)
+    ``"none"`` (default; ``None`` is accepted for it)
         No adjustment.
     ``"fuelcalc_table"``
         FuelCalc's crown-class multipliers, via
         :func:`crown_class_factor`. Crown position is read per tree from
-        ``crown_class_column``. Without that column every tree falls
-        back to the Other/none column, which is a real approximation —
-        the factor for a species stops varying with position in the
-        canopy — so supply the column when the inventory carries crown
-        position, whether measured, imputed, or modelled.
+        ``crown_class_column``, so supply that column whenever the
+        inventory carries crown position — measured, imputed, or
+        modelled. Without it every tree falls back to the Other/none
+        column, and that fallback is close to information-free: it is
+        0.5 for 50 of the 54 species in the table, so the adjustment
+        degenerates into halving nearly every tree's fuel rather than
+        varying it by species and canopy position. Giving the column
+        while leaving the adjustment off raises, rather than discarding
+        it silently.
 
     Returns
     -------
@@ -292,10 +296,23 @@ def available_canopy_fuel(
     """
     if fuel_column is not None:
         return trees[fuel_column].to_numpy(dtype=np.float64)
+    if crown_class_adjustment is None:
+        crown_class_adjustment = "none"
     if crown_class_adjustment not in ("none", "fuelcalc_table"):
         raise ValueError(
             f"Unknown crown_class_adjustment {crown_class_adjustment!r}; "
-            f"expected 'none' or 'fuelcalc_table'."
+            f"expected 'none', None, or 'fuelcalc_table'."
+        )
+    # A crown class column is an explicit statement that the inventory
+    # carries crown position. Honouring it only when the adjustment is
+    # also on would mean silently discarding the one input that makes
+    # the adjustment worth applying.
+    if crown_class_column is not None and crown_class_adjustment == "none":
+        raise ValueError(
+            f"crown_class_column={crown_class_column!r} was given but "
+            f"crown_class_adjustment is 'none', so the column would be "
+            f"ignored. Set crown_class_adjustment='fuelcalc_table' to "
+            f"use it, or drop the column argument."
         )
     if equations not in ("nsvb", "brown_1978"):
         raise ValueError(
@@ -334,11 +351,15 @@ def available_canopy_fuel(
         branch_kg = nsvb.branch_biomass(spcd, trees["dbh"], trees["height"])
     fuel = foliage_fraction * foliage_kg + branchwood_fraction * fine_share * branch_kg
     if crown_class_adjustment == "fuelcalc_table":
-        crown_class = (
-            trees[crown_class_column].to_numpy()
-            if crown_class_column is not None
-            else None
-        )
+        crown_class = None
+        if crown_class_column is not None:
+            if crown_class_column not in trees.columns:
+                raise ValueError(
+                    f"crown_class_column={crown_class_column!r} is not a "
+                    f"column of the tree frame. Available columns: "
+                    f"{sorted(trees.columns)}."
+                )
+            crown_class = trees[crown_class_column].to_numpy()
         fuel = fuel * crown_class_factor(spcd, crown_class)
     return fuel
 
