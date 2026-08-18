@@ -324,6 +324,41 @@ def available_canopy_fuel_lb(equation_id: str, dia_in: float) -> float:
 
 
 # --------------------------------------------------------------------
+# crown class: NC_CC.C sr_CCT[] and CC_Adj()
+# --------------------------------------------------------------------
+# Codes are tscc_def.h:19-28. CC_Adj remaps three of them before the
+# lookup and sends everything else, including "N", to the Other column.
+CROWN_CLASS_REMAP = {"SC": "I", "O": "C", "E": "D"}
+CROWN_CLASS_COLUMN = {"D": 0, "C": 1, "I": 2, "S": 3}
+
+# (Dominant, Codominant, Intermediate, Suppressed, Other). The GF row is
+# commented out in the C and no species resolves to it, so it is absent.
+CROWN_CLASS_FACTORS: dict[str, tuple[float, float, float, float, float]] = {
+    "WF": (0.85, 0.85, 0.35, 0.3, 0.5),
+    "PP": (0.55, 0.55, 0.3, 0.15, 0.5),
+    "PS": (0.3, 0.3, 0.15, 0.1, 0.5),
+    "IC": (1.1, 1.1, 0.75, 0.4, 0.5),
+    "DF": (1.15, 1.15, 1.15, 0.75, 0.5),
+    "LP": (0.6, 0.6, 0.6, 0.3, 0.5),
+    "WL": (1.0, 0.45, 0.30, 0.20, 0.5),
+    "WP": (0.80, 0.90, 0.60, 0.35, 0.7),
+    "WC": (1.0, 1.0, 1.0, 0.60, 0.75),
+    "PJ": (1.0, 1.0, 1.0, 1.0, 1.0),
+}
+
+
+def crown_class_factor(reduc_code: str, crown_class: str) -> float:
+    """``NC_CC.C CC_Adj()``: the multiplier for one tree.
+
+    ``PTL_SetBioMass`` (``NC_PTL.C:846``) applies it to every crown
+    component, so available fuel, being linear in the components,
+    scales by the same factor.
+    """
+    code = CROWN_CLASS_REMAP.get(crown_class.upper(), crown_class.upper())
+    return CROWN_CLASS_FACTORS[reduc_code][CROWN_CLASS_COLUMN.get(code, 4)]
+
+
+# --------------------------------------------------------------------
 # vertical distribution: NC_VD.C
 # --------------------------------------------------------------------
 VDIST_CUBICS: dict[str, tuple[float, float, float]] = {

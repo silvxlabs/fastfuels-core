@@ -36,6 +36,7 @@ from fastfuels_core.canopy_fuel.metrics import (
     FT_TO_M,
     available_canopy_fuel,
     canopy_fuel_load,
+    crown_class_factor,
     cbd_running_mean,
     cumulative_fuel_fraction,
     profile_threshold_heights,
@@ -223,6 +224,125 @@ class TestCrownProportionParity:
             available_canopy_fuel(trees, equations="nsvb"),
             rtol=0.01,
         )
+
+    @pytest.mark.parametrize(
+        "crown_class", ["D", "C", "I", "S", "O", "E", "SC", "N", "", "?"]
+    )
+    def test_crown_class_dispatch_matches_cc_adj(self, crown_class):
+        """Every code, including the three CC_Adj folds and the fallthrough."""
+        species = fuelcalc_species()
+        spcd = species.index.to_numpy()
+        ours = crown_class_factor(spcd, np.full(spcd.shape, crown_class))
+        theirs = np.array(
+            [
+                fc.crown_class_factor(
+                    species.loc[code, "CROWN_REDUC_CODE"], crown_class
+                )
+                for code in spcd
+            ]
+        )
+        np.testing.assert_allclose(ours, theirs, atol=1e-12)
+
+    def test_crown_class_folds_are_not_identity(self):
+        """O, E and SC must land on C, D and I -- not on Other/none.
+
+        Every crown-class row a species actually resolves to has
+        Dominant equal to Codominant, so O and E cannot be told apart
+        through a real species; what is observable is that all three
+        folds differ from the Other/none column they would take if the
+        remap were skipped.
+        """
+        species = fuelcalc_species()
+        spcd = int(species.index[species["CROWN_REDUC_CODE"] == "WF"][0])
+        other = crown_class_factor(np.array([spcd]), np.array(["N"]))[0]
+        for alias, target in {"O": "C", "E": "D", "SC": "I"}.items():
+            folded = crown_class_factor(np.array([spcd]), np.array([alias]))[0]
+            direct = crown_class_factor(np.array([spcd]), np.array([target]))[0]
+            assert folded == direct, alias
+            assert folded != other, alias
+
+    def test_omitting_crown_class_takes_the_other_column(self):
+        species = fuelcalc_species()
+        spcd = species.index.to_numpy()
+        np.testing.assert_allclose(
+            crown_class_factor(spcd),
+            crown_class_factor(spcd, np.full(spcd.shape, "N")),
+            atol=1e-12,
+        )
+
+    def test_adjusted_available_fuel_matches_the_reference(self):
+        """The factor scales available fuel, as PTL_SetBioMass does.
+
+        FuelCalc multiplies each crown component by the factor before
+        summing; available fuel is linear in the components, so scaling
+        the sum is the same arithmetic.
+        """
+        species = fuelcalc_species()
+        for eq_id in sorted(brown.CROWN_WEIGHT_EQUATIONS):
+            spcd = int(species.index[species["TOTAL"] == eq_id][0])
+            reduc = species.loc[spcd, "CROWN_REDUC_CODE"]
+            for crown_class in ("D", "C", "I", "S", "N"):
+                dia_in = np.array([3.0, 11.0, 24.0, 38.0])
+                trees = pd.DataFrame(
+                    {
+                        "fia_species_code": spcd,
+                        "dbh": dia_in * conversion_factor("inch", "cm"),
+                        "height": 20.0,
+                        "crown_ratio": 0.5,
+                        "cc": crown_class,
+                    }
+                )
+                ours = available_canopy_fuel(
+                    trees,
+                    equations="brown_1978",
+                    crown_class_adjustment="fuelcalc_table",
+                    crown_class_column="cc",
+                )
+                theirs = np.array(
+                    [
+                        fc.available_canopy_fuel_lb(eq_id, float(d))
+                        * fc.crown_class_factor(reduc, crown_class)
+                        * conversion_factor("lb", "kg")
+                        for d in dia_in
+                    ]
+                )
+                np.testing.assert_allclose(
+                    ours,
+                    theirs,
+                    rtol=1e-11,
+                    atol=1e-11,
+                    err_msg=f"{eq_id}/{crown_class}",
+                )
+
+    def test_adjustment_defaults_to_inert(self):
+        trees = pd.DataFrame(
+            {
+                "fia_species_code": [122, 202],
+                "dbh": [30.0, 30.0],
+                "height": [18.0, 18.0],
+                "crown_ratio": [0.5, 0.5],
+            }
+        )
+        np.testing.assert_array_equal(
+            available_canopy_fuel(trees),
+            available_canopy_fuel(trees, crown_class_adjustment="none"),
+        )
+        assert not np.allclose(
+            available_canopy_fuel(trees),
+            available_canopy_fuel(trees, crown_class_adjustment="fuelcalc_table"),
+        )
+
+    def test_unknown_adjustment_raises(self):
+        trees = pd.DataFrame(
+            {
+                "fia_species_code": [122],
+                "dbh": [30.0],
+                "height": [18.0],
+                "crown_ratio": [0.5],
+            }
+        )
+        with pytest.raises(ValueError, match="crown_class_adjustment"):
+            available_canopy_fuel(trees, crown_class_adjustment="fuelcalc")
 
     def test_no_unaccounted_equation_ids(self):
         """Every Id we define is either in the source or explained here."""
@@ -580,20 +700,8 @@ class TestSpeciesTableParity:
 
     def test_crown_class_factors_match_source(self):
         ours = fuelcalc_crown_class_factors()
-        source = {
-            "WF": (0.85, 0.85, 0.35, 0.3, 0.5),
-            "PP": (0.55, 0.55, 0.3, 0.15, 0.5),
-            "PS": (0.3, 0.3, 0.15, 0.1, 0.5),
-            "IC": (1.1, 1.1, 0.75, 0.4, 0.5),
-            "DF": (1.15, 1.15, 1.15, 0.75, 0.5),
-            "LP": (0.6, 0.6, 0.6, 0.3, 0.5),
-            "WL": (1.0, 0.45, 0.30, 0.20, 0.5),
-            "WP": (0.80, 0.90, 0.60, 0.35, 0.7),
-            "WC": (1.0, 1.0, 1.0, 0.60, 0.75),
-            "PJ": (1.0, 1.0, 1.0, 1.0, 1.0),
-        }
         columns = ["DOMINANT", "CODOMINANT", "INTERMEDIATE", "SUPPRESSED", "OTHER_NONE"]
-        for code, expected in source.items():
+        for code, expected in fc.CROWN_CLASS_FACTORS.items():
             assert tuple(ours.loc[code, columns]) == expected
 
     def test_grand_fir_crown_class_row_is_unreachable(self):

@@ -30,7 +30,11 @@ from affine import Affine
 from rasterio.features import rasterize
 
 from fastfuels_core.allometry import brown, nsvb
-from fastfuels_core.canopy_fuel.ref_data import fuelcalc_species, fuelcalc_vdist
+from fastfuels_core.canopy_fuel.ref_data import (
+    fuelcalc_crown_class_factors,
+    fuelcalc_species,
+    fuelcalc_vdist,
+)
 from fastfuels_core.crown_profile_models.purves import PurvesCrownProfile
 from fastfuels_core.units import conversion_factor
 
@@ -131,11 +135,106 @@ def max_crown_radius(
     return np.atleast_1d(np.asarray(model.get_max_radius(), dtype=np.float64))
 
 
+# The three crown class codes CC_Adj folds onto another class before
+# the lookup. Codes are FuelCalc's (guide p. 17, tscc_def.h:19-28);
+# anything not listed here or in _CROWN_CLASS_INDEX, "N" included,
+# takes the Other/none column. Public so callers carrying a different
+# coding -- FIA's CCLCD, a field protocol, a model's output -- can see
+# which folds this layer already performs and map onto the letters
+# rather than duplicating the logic.
+CROWN_CLASS_REMAP = {"SC": "I", "O": "C", "E": "D"}
+_CROWN_CLASS_COLUMNS = [
+    "DOMINANT",
+    "CODOMINANT",
+    "INTERMEDIATE",
+    "SUPPRESSED",
+    "OTHER_NONE",
+]
+_CROWN_CLASS_INDEX = {"D": 0, "C": 1, "I": 2, "S": 3}
+
+
+def crown_class_factor(
+    species_code: np.ndarray, crown_class: np.ndarray | None = None
+) -> np.ndarray:
+    """FuelCalc's per-tree crown-class biomass multiplier.
+
+    Reinhardt, Scott, Gray & Keane (2006) fitted a multiplier per
+    species and crown class as the value minimising the average
+    difference between observed crown biomass and the biomass predicted
+    by Brown's equations. FuelCalc applies it to every crown component
+    (``PTL_SetBioMass``), so available fuel scales by the same factor.
+    Species resolve to a factor row through the species table's
+    ``CROWN_REDUC_CODE``.
+
+    Because the multipliers were fitted against *Brown's* predictions,
+    they carry that correction and nothing else. Applying them on top of
+    a different biomass model is a defensible thing to want and is not
+    prevented here, but it is no longer the published adjustment.
+
+    Parameters
+    ----------
+    species_code : numpy.ndarray
+        FIA species codes.
+    crown_class : numpy.ndarray, optional
+        FuelCalc crown class codes per tree — ``D`` dominant, ``C``
+        codominant, ``I`` intermediate, ``S`` suppressed, ``O`` open
+        grown, ``E`` emergent, ``SC`` subcanopy, ``N`` none. ``O``,
+        ``E`` and ``SC`` fold onto ``C``, ``D`` and ``I`` respectively,
+        as ``CC_Adj`` does; anything unrecognised takes the Other/none
+        column. Omitted, every tree takes Other/none — the factor for a
+        species then no longer varies with position in the canopy,
+        which is the whole point of the adjustment, so pass the codes
+        whenever the inventory has them. ``CROWN_CLASS_REMAP`` is public
+        so a caller translating some other coding onto these can see
+        exactly which folds are already applied.
+
+    Returns
+    -------
+    numpy.ndarray
+        Multiplier per tree.
+
+    Raises
+    ------
+    ValueError
+        For species outside the FuelCalc species table.
+    """
+    spcd = np.asarray(species_code)
+    species = fuelcalc_species()
+    unknown = np.setdiff1d(spcd, species.index.to_numpy())
+    if unknown.size:
+        raise ValueError(
+            f"Species code(s) {unknown.tolist()} are not in the FuelCalc "
+            f"species table, so they have no crown-class factors."
+        )
+    factors = fuelcalc_crown_class_factors()
+    matrix = factors[_CROWN_CLASS_COLUMNS].to_numpy(dtype=np.float64)
+    rows = factors.index.get_indexer(species["CROWN_REDUC_CODE"].loc[spcd])
+
+    if crown_class is None:
+        columns = np.full(spcd.shape, len(_CROWN_CLASS_COLUMNS) - 1)
+    else:
+        codes = np.asarray(crown_class, dtype=object)
+        columns = np.array(
+            [
+                _CROWN_CLASS_INDEX.get(
+                    CROWN_CLASS_REMAP.get(
+                        str(c).strip().upper(), str(c).strip().upper()
+                    ),
+                    len(_CROWN_CLASS_COLUMNS) - 1,
+                )
+                for c in codes
+            ]
+        )
+    return matrix[rows, columns]
+
+
 def available_canopy_fuel(
     trees: pd.DataFrame,
     *,
     fuel_column: str | None = None,
     equations: str = "nsvb",
+    crown_class_adjustment: str = "none",
+    crown_class_column: str | None = None,
     foliage_fraction: float = 1.0,
     branchwood_fraction: float = 0.5,
 ) -> np.ndarray:
@@ -163,6 +262,19 @@ def available_canopy_fuel(
         scoped to Brown's eleven Rocky Mountain conifers -- hardwoods
         and everything else raise.
 
+    ``crown_class_adjustment`` scales the result per tree:
+
+    ``"none"`` (default)
+        No adjustment.
+    ``"fuelcalc_table"``
+        FuelCalc's crown-class multipliers, via
+        :func:`crown_class_factor`. Crown position is read per tree from
+        ``crown_class_column``. Without that column every tree falls
+        back to the Other/none column, which is a real approximation —
+        the factor for a species stops varying with position in the
+        canopy — so supply the column when the inventory carries crown
+        position, whether measured, imputed, or modelled.
+
     Returns
     -------
     numpy.ndarray
@@ -180,6 +292,11 @@ def available_canopy_fuel(
     """
     if fuel_column is not None:
         return trees[fuel_column].to_numpy(dtype=np.float64)
+    if crown_class_adjustment not in ("none", "fuelcalc_table"):
+        raise ValueError(
+            f"Unknown crown_class_adjustment {crown_class_adjustment!r}; "
+            f"expected 'none' or 'fuelcalc_table'."
+        )
     if equations not in ("nsvb", "brown_1978"):
         raise ValueError(
             f"Unknown equations {equations!r}; expected 'nsvb' or " f"'brown_1978'."
@@ -215,7 +332,15 @@ def available_canopy_fuel(
     else:
         foliage_kg = nsvb.foliage_biomass(spcd, trees["dbh"], trees["height"])
         branch_kg = nsvb.branch_biomass(spcd, trees["dbh"], trees["height"])
-    return foliage_fraction * foliage_kg + branchwood_fraction * fine_share * branch_kg
+    fuel = foliage_fraction * foliage_kg + branchwood_fraction * fine_share * branch_kg
+    if crown_class_adjustment == "fuelcalc_table":
+        crown_class = (
+            trees[crown_class_column].to_numpy()
+            if crown_class_column is not None
+            else None
+        )
+        fuel = fuel * crown_class_factor(spcd, crown_class)
+    return fuel
 
 
 def cumulative_fuel_fraction(species_code: np.ndarray, ph: np.ndarray) -> np.ndarray:
@@ -662,6 +787,8 @@ def compute_canopy_metrics(
     fuel_column: str | None = None,
     crown_radius_column: str | None = None,
     equations: str = "nsvb",
+    crown_class_adjustment: str = "none",
+    crown_class_column: str | None = None,
     foliage_fraction: float = 1.0,
     branchwood_fraction: float = 0.5,
     min_tree_height: float = 0.0,
@@ -723,6 +850,8 @@ def compute_canopy_metrics(
             trees,
             fuel_column=fuel_column,
             equations=equations,
+            crown_class_adjustment=crown_class_adjustment,
+            crown_class_column=crown_class_column,
             foliage_fraction=foliage_fraction,
             branchwood_fraction=branchwood_fraction,
         )
