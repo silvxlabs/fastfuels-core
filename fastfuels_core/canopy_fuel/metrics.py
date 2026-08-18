@@ -411,10 +411,16 @@ def cbd_running_mean(
     ``window`` is the running-mean depth in meters (Reinhardt et al.
     2006 use 3.0 m; FuelCalc's guide states 5 ft in one place and no
     smoothing in another). ``window=None`` skips smoothing and returns
-    the maximum single layer. A profile shallower than the window is
-    zero-padded above — density above the canopy is zero, and the
-    effective CBD of a shallow canopy is diluted over the full window,
-    matching Reinhardt et al.'s "any 3-m deep layer".
+    the maximum single layer.
+
+    The mean is over a slab of fixed depth, so the denominator is the
+    window depth at every height, including against the ground. Layers
+    outside the profile contribute zero at both ends: a profile
+    shallower than the window is zero-padded above, and a canopy resting
+    on layer 0 is diluted over the full window just as one higher up is.
+    That is what Reinhardt et al.'s "any 3-m deep layer" measures, and
+    it makes CBD invariant to how high the canopy sits — the same slab
+    of fuel has the same bulk density wherever it is.
 
     Returns
     -------

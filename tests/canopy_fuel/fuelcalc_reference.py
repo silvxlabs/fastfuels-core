@@ -416,15 +416,27 @@ def bulk_density(
     half = spread // 2
     n_ra = n + half
 
-    # Running mean. The window is truncated at the ground (blay clamps to
-    # 0 and the denominator shrinks) but not above the canopy, where it
-    # reads past the end of a zeroed array with the denominator intact.
+    # Running mean over a window of fixed depth: the mean density of any
+    # slab `spread` layers deep, so the denominator is the slab depth
+    # wherever the slab sits. Layers outside the profile contribute zero
+    # at both ends.
+    #
+    # The C divides by the number of layers it actually summed, which
+    # differs only at the ground, where blay clamps to 0 -- above the
+    # canopy it reads past the end of a zeroed array with the
+    # denominator intact. That asymmetry makes the reported density
+    # depend on how high the canopy sits: three layers of uniform
+    # density 1.0 report 1.0 resting on the ground and 0.6 further up,
+    # for the same slab of fuel. Reinhardt et al. (2006) define CBD as
+    # the maximum mean over a fixed-depth layer, so the fixed
+    # denominator is the published quantity and is used here.
+    width = 2 * half + 1
     smoothed = []
     for i in range(n_ra):
         top = i + half
-        bottom = max(i - half, 0)
-        total = sum(profile[j] for j in range(bottom, top + 1) if j < n)
-        smoothed.append(total / (top - bottom + 1))
+        bottom = i - half
+        total = sum(profile[j] for j in range(max(bottom, 0), top + 1) if j < n)
+        smoothed.append(total / width)
 
     effective = min(max(smoothed) / 10.0, threshold)
 

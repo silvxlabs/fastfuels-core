@@ -298,6 +298,11 @@ class TestProfileReductionParity:
     the configuration the `fuelcalc_compat` API example targets. Our
     shipped defaults (3.0 m window, no CBH/CH smoothing) are a different
     and deliberate choice; see fastfuels-core#95.
+
+    The running mean is over a slab of fixed depth, so its denominator
+    is that depth wherever the slab sits. See the note in
+    ``fuelcalc_reference.bulk_density`` for why that is the published
+    quantity and what the C does instead.
     """
 
     WINDOW = 5 * LAYER_FT_M
@@ -313,13 +318,15 @@ class TestProfileReductionParity:
             profile[base:top] = rng.uniform(0.001, 0.35, top - base)
             yield profile, base
 
-    def test_cbd_matches_when_canopy_is_off_the_ground(self):
-        """With the crown base clear of the ground, the maximum running
-        mean agrees exactly: every window FuelCalc evaluates that we do
-        not is either zero-padded above the canopy or below the crown."""
-        for profile, base in self._profiles():
-            if base < 3:
-                continue
+    def test_cbd_matches(self):
+        """The maximum running mean agrees exactly, at any crown base.
+
+        Every window the reference evaluates that we do not is a partial
+        one at an end of the profile, whose sum is contained in some
+        full window at the same denominator, so it can never carry the
+        maximum.
+        """
+        for profile, _ in self._profiles():
             reference = fc.bulk_density(list(profile), LAYER_FT_M)
             ours = cbd_running_mean(
                 profile[:, None, None],
@@ -328,28 +335,33 @@ class TestProfileReductionParity:
             )[0, 0]
             assert ours == pytest.approx(reference.cbd, abs=1e-12)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FuelCalc truncates the running mean at the ground — the "
-            "window at layer 0 averages 3 layers, at layer 1 averages 4 "
-            "— so a crown reaching the ground can produce a maximum we "
-            "never evaluate. Ours only takes full-width interior "
-            "windows. Affects cells whose crown base is within 2 ft of "
-            "the ground. fastfuels-core#95 D10."
-        ),
-    )
-    def test_cbd_matches_when_canopy_reaches_the_ground(self):
-        for profile, base in self._profiles():
-            if base >= 3:
-                continue
-            reference = fc.bulk_density(list(profile), LAYER_FT_M)
-            ours = cbd_running_mean(
-                profile[:, None, None],
-                layer_depth=LAYER_FT_M,
-                window=self.WINDOW,
-            )[0, 0]
-            assert ours == pytest.approx(reference.cbd, abs=1e-12)
+    def test_cbd_is_invariant_to_how_high_the_canopy_sits(self):
+        """A slab of fuel has one bulk density wherever it sits.
+
+        The running mean is over a fixed depth, so translating a canopy
+        vertically cannot change its CBD. FuelCalc's C shrinks the
+        denominator at the ground and reports 1.0 for the profile below
+        resting on layer 0 against 0.6 higher up; the fixed-depth mean
+        that Reinhardt et al. (2006) define gives 0.6 for both.
+        """
+        slab = np.array([1.0, 1.0, 1.0])
+        densities = set()
+        for offset in range(0, 6):
+            profile = np.zeros(12)
+            profile[offset : offset + len(slab)] = slab
+            densities.add(
+                round(
+                    float(
+                        cbd_running_mean(
+                            profile[:, None, None],
+                            layer_depth=LAYER_FT_M,
+                            window=self.WINDOW,
+                        )[0, 0]
+                    ),
+                    12,
+                )
+            )
+        assert densities == {0.6}
 
     def test_cbh_matches_up_to_the_deliberate_anchor_offset(self):
         """With the bounds in place, the only CBH difference left is the
