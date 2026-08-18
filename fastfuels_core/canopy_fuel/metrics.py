@@ -135,19 +135,33 @@ def available_canopy_fuel(
     trees: pd.DataFrame,
     *,
     fuel_column: str | None = None,
+    equations: str = "nsvb",
     foliage_fraction: float = 1.0,
     branchwood_fraction: float = 0.5,
 ) -> np.ndarray:
     """Per-tree available canopy fuel (kg).
 
     With ``fuel_column`` set, that column is returned as-is (precomputed
-    fuel, e.g. from LiDAR regression); the fractions are ignored.
-    Otherwise fuel is ``foliage_fraction * NSVB foliage +
-    branchwood_fraction * fine branchwood``, where fine branchwood is
-    the NSVB total branch weight times the Brown (1978) / Snell & Little
-    (1983) fine share ``(P2 - P1) / (1 - P1)`` (see
-    :mod:`fastfuels_core.allometry.brown`). Requires ``dbh``, ``height``,
-    and ``fia_species_code`` columns.
+    fuel, e.g. from LiDAR regression); everything else is ignored.
+    Otherwise fuel is ``foliage_fraction * foliage + branchwood_fraction
+    * fine branchwood``, where fine branchwood is the total branch
+    weight times the Brown (1978) / Snell & Little (1983) fine share
+    ``(P2 - P1) / (1 - P1)`` (see
+    :mod:`fastfuels_core.allometry.brown`).
+
+    ``equations`` selects where the two weights come from:
+
+    ``"nsvb"`` (default)
+        Foliage and branch dry weight from NSVB (Westfall et al. 2024),
+        the national estimator FastFuels uses elsewhere. Needs ``dbh``,
+        ``height`` and ``fia_species_code``.
+    ``"brown_1978"``
+        Total live crown weight from Brown 1978 Table 1, split into
+        foliage and branchwood by ``P1``. This is the crown weight model
+        FuelCalc uses, so it is the arm to select when reproducing
+        FuelCalc. Diameter-only, so ``height`` is not read, and it is
+        scoped to Brown's eleven Rocky Mountain conifers -- hardwoods
+        and everything else raise.
 
     Returns
     -------
@@ -157,13 +171,19 @@ def available_canopy_fuel(
     Raises
     ------
     ValueError
-        For species FuelCalc has no equations for — codes outside the
-        FuelCalc species table, or whose equations are not implemented
-        (pinyon/juniper, the eastern newer species). Mirrors FuelCalc's
-        treelist error; ``fuel_column`` bypasses allometry entirely.
+        For an unknown ``equations`` choice, or for species the chosen
+        equations do not cover — codes outside the FuelCalc species
+        table, or whose equations are not implemented (pinyon/juniper,
+        the eastern newer species, and under ``"brown_1978"`` the
+        hardwoods too). Mirrors FuelCalc's treelist error;
+        ``fuel_column`` bypasses allometry entirely.
     """
     if fuel_column is not None:
         return trees[fuel_column].to_numpy(dtype=np.float64)
+    if equations not in ("nsvb", "brown_1978"):
+        raise ValueError(
+            f"Unknown equations {equations!r}; expected 'nsvb' or " f"'brown_1978'."
+        )
 
     spcd = trees["fia_species_code"].to_numpy()
     species = fuelcalc_species()
@@ -182,8 +202,19 @@ def available_canopy_fuel(
     twig_id = species["TWIG"].loc[spcd].to_numpy()
     fine_share = brown.fine_branchwood_share(fol_id, twig_id, dia_in)
 
-    foliage_kg = nsvb.foliage_biomass(spcd, trees["dbh"], trees["height"])
-    branch_kg = nsvb.branch_biomass(spcd, trees["dbh"], trees["height"])
+    if equations == "brown_1978":
+        # One crown weight, split by P1. Brown's proportions are of the
+        # whole crown, so branchwood is what P1 leaves behind and the
+        # fine share applies to it exactly as it does under NSVB.
+        crown_kg = brown.crown_weight(
+            species["TOTAL"].loc[spcd].to_numpy(), dia_in
+        ) * conversion_factor("lb", "kg")
+        p1 = brown.foliage_fraction(fol_id, dia_in)
+        foliage_kg = crown_kg * p1
+        branch_kg = crown_kg * (1.0 - p1)
+    else:
+        foliage_kg = nsvb.foliage_biomass(spcd, trees["dbh"], trees["height"])
+        branch_kg = nsvb.branch_biomass(spcd, trees["dbh"], trees["height"])
     return foliage_fraction * foliage_kg + branchwood_fraction * fine_share * branch_kg
 
 
@@ -630,6 +661,7 @@ def compute_canopy_metrics(
     *,
     fuel_column: str | None = None,
     crown_radius_column: str | None = None,
+    equations: str = "nsvb",
     foliage_fraction: float = 1.0,
     branchwood_fraction: float = 0.5,
     min_tree_height: float = 0.0,
@@ -654,6 +686,13 @@ def compute_canopy_metrics(
     :func:`vertical_profile` → :func:`cbd_running_mean` /
     :func:`profile_threshold_heights` / :func:`canopy_fuel_load`, plus
     :func:`canopy_cover`. See each stage for parameter semantics.
+
+    Each stage is an independent choice, so a run is a point in that
+    space rather than one fixed method. The defaults are
+    FastFuels-native (NSVB biomass, a 3.0 m bulk-density window,
+    unsmoothed heights); ``equations="brown_1978"`` with
+    ``cbd_window=1.524`` and ``threshold_smoothing_window=1.524`` moves
+    the biomass and reduction stages onto FuelCalc's.
 
     Cells with no canopy come back as 0 for ``cbd``, ``cfl``, and ``cc``
     (zero density is physical) and NaN for ``cbh`` and ``chm`` (no
@@ -683,6 +722,7 @@ def compute_canopy_metrics(
         fuel = available_canopy_fuel(
             trees,
             fuel_column=fuel_column,
+            equations=equations,
             foliage_fraction=foliage_fraction,
             branchwood_fraction=branchwood_fraction,
         )

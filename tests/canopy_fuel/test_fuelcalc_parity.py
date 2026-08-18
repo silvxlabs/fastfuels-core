@@ -34,12 +34,14 @@ import pytest
 from fastfuels_core.allometry import brown
 from fastfuels_core.canopy_fuel.metrics import (
     FT_TO_M,
+    available_canopy_fuel,
     canopy_fuel_load,
     cbd_running_mean,
     cumulative_fuel_fraction,
     profile_threshold_heights,
     vertical_profile,
 )
+from fastfuels_core.units import conversion_factor
 from fastfuels_core.canopy_fuel.ref_data import (
     fuelcalc_crown_class_factors,
     fuelcalc_species,
@@ -163,6 +165,64 @@ class TestCrownProportionParity:
                 crown = fc.bt_eq(eq_id, "Tot", d)
                 naive = crown * (fc.p1(eq_id, d) + 0.5 * fc.p2(eq_id, d))
                 assert naive > expected, "the misprinted formula is larger"
+
+    def test_brown_1978_arm_reproduces_available_fuel_exactly(self):
+        """The whole per-tree chain, ours against the reference.
+
+        Under ``equations="brown_1978"`` both sides take crown weight
+        from Brown Table 1 and split it with Brown Table 16, so this is
+        an absolute comparison of kilograms per tree rather than of a
+        proportion -- the thing that could not be checked while the only
+        biomass arm was NSVB. Height is passed but unread: Brown's
+        diameter-only forms do not use it.
+        """
+        species = fuelcalc_species()
+        for eq_id in sorted(brown.CROWN_WEIGHT_EQUATIONS):
+            spcd = int(species.index[species["TOTAL"] == eq_id][0])
+            dia_in = np.round(np.arange(1.05, 45.0, 0.05), 4)
+            trees = pd.DataFrame(
+                {
+                    "fia_species_code": spcd,
+                    "dbh": dia_in * conversion_factor("inch", "cm"),
+                    "height": 20.0,
+                    "crown_ratio": 0.5,
+                }
+            )
+            ours = available_canopy_fuel(trees, equations="brown_1978")
+            theirs = np.array(
+                [
+                    fc.available_canopy_fuel_lb(eq_id, float(d))
+                    * conversion_factor("lb", "kg")
+                    for d in dia_in
+                ]
+            )
+            np.testing.assert_allclose(
+                ours,
+                theirs,
+                rtol=1e-11,
+                atol=1e-11,
+                err_msg=f"{eq_id} available fuel drifted from the reference",
+            )
+
+    def test_brown_1978_and_nsvb_arms_disagree(self):
+        """They are different biomass models, not two names for one.
+
+        A regression that quietly routed brown_1978 back to NSVB would
+        pass every other test in this class.
+        """
+        trees = pd.DataFrame(
+            {
+                "fia_species_code": [122, 202, 108],
+                "dbh": [40.0, 40.0, 40.0],
+                "height": [18.0, 18.0, 18.0],
+                "crown_ratio": [0.5, 0.5, 0.5],
+            }
+        )
+        assert not np.allclose(
+            available_canopy_fuel(trees, equations="brown_1978"),
+            available_canopy_fuel(trees, equations="nsvb"),
+            rtol=0.01,
+        )
 
     def test_no_unaccounted_equation_ids(self):
         """Every Id we define is either in the source or explained here."""

@@ -3,9 +3,10 @@
 Primary sources, transcribed and verified against the original tables:
 
 - Brown, J.K. 1978. Weight and Density of Crowns of Rocky Mountain
-  Conifers. USDA For. Serv. Res. Pap. INT-197. **Table 16** (p. 53):
-  accumulative proportions of foliage and branchwood by size class for
-  live crowns of dominants > 1 in dbh, for 11 conifer species.
+  Conifers. USDA For. Serv. Res. Pap. INT-197. **Table 1** (p. 10):
+  live crown weight of dominant and codominant trees > 1 in dbh, and
+  **Table 16** (p. 53): accumulative proportions of foliage and
+  branchwood by size class for the same trees, for 11 conifer species.
 - Snell, J.A.K. & Little, S.N. 1983. Predicting Crown Weight and Bole
   Volume of Five Western Hardwoods. PNW-GTR-151. **Table 3** (p. 6):
   cumulative fractions of live crown component weights for five western
@@ -64,6 +65,51 @@ def _reciprocal(dia, a, b, c=1.0):
 def _sqrt_linear(dia, a, b):
     """a + b * sqrt(dia)"""
     return a + b * np.sqrt(dia)
+
+
+def _log_log(dia, a, b):
+    """exp(a + b * ln(dia))"""
+    return np.exp(a + b * np.log(dia))
+
+
+def _quadratic(dia, a, b):
+    """a + b * dia**2"""
+    return a + b * dia * dia
+
+
+def _douglas_fir_crown_weight(dia, a, b, c, d, break_in):
+    """Brown Table 1's two-part Douglas-fir fit.
+
+    ``exp(a + b*ln(dia))`` below the break, ``c*dia**2 + d`` at or above
+    it. The two branches agree to 0.15% where they meet, which is what
+    identifies them as halves of one predictor rather than alternatives.
+    """
+    return np.where(dia < break_in, _log_log(dia, a, b), c * dia * dia + d)
+
+
+# Live crown weight (foliage plus all branchwood) in POUNDS, for
+# dominant and codominant trees over 1 in dbh: Brown 1978 Table 1,
+# p. 10. Brown fits several predictors per species; these are the
+# diameter-only forms, the ones FuelCalc uses and the ones Gray &
+# Reinhardt (2003) evaluated. Species without a diameter-only entry in
+# Brown -- the Snell & Little hardwoods -- are absent by design; see
+# crown_weight().
+CROWN_WEIGHT_EQUATIONS = {
+    "GF": (_log_log, {"a": 1.3094, "b": 1.6076}),
+    "WL": (_log_log, {"a": 0.4373, "b": 1.6786}),
+    "ES": (_log_log, {"a": 1.0404, "b": 1.7096}),
+    "SF": (_quadratic, {"a": 7.345, "b": 1.255}),
+    "LP": (_log_log, {"a": 0.1224, "b": 1.8820}),
+    "WP": (_log_log, {"a": 0.7276, "b": 1.5497}),
+    "WB": (_quadratic, {"a": -1.00, "b": 0.8371}),
+    "WC": (_log_log, {"a": 0.8815, "b": 1.6389}),
+    "PP": (_log_log, {"a": 0.2680, "b": 2.0740}),
+    "DF": (
+        _douglas_fir_crown_weight,
+        {"a": 1.1368, "b": 1.5819, "c": 1.0237, "d": -20.74, "break_in": 17.0},
+    ),
+    "WH": (_log_log, {"a": 0.7218, "b": 1.7502}),
+}
 
 
 # P1: foliage fraction of total live crown weight.
@@ -215,3 +261,56 @@ def fine_branchwood_share(
     p2 = foliage_plus_fine_fraction(twig_id, dia_in)
     fine = np.maximum(p2 - p1, 0.0)
     return np.minimum(fine / (1.0 - p1), 1.0)
+
+
+def crown_weight(equation_id: np.ndarray, dia_in: np.ndarray) -> np.ndarray:
+    """Total live crown weight (pounds), by equation Id.
+
+    Brown 1978 Table 1 (p. 10), diameter-only forms, for dominant and
+    codominant trees over 1 in dbh. Foliage plus every branchwood size
+    class; multiply by :func:`foliage_fraction` for the foliage alone.
+
+    Two of Brown's fits are quadratics that go negative at the small end
+    of their range, so the result is floored at zero. Below 1 in dbh the
+    equations are extrapolations -- Brown fits trees under an inch
+    separately, in his Table 19, which is not implemented here.
+
+    Parameters
+    ----------
+    equation_id : numpy.ndarray
+        FuelCalc equation Ids from the species table's TOTAL column.
+    dia_in : numpy.ndarray
+        Diameter at breast height, inches.
+
+    Returns
+    -------
+    numpy.ndarray
+        Crown weight in pounds, aligned with ``dia_in``.
+
+    Raises
+    ------
+    ValueError
+        For Ids Brown has no diameter-only equation for. That is every
+        Snell & Little hardwood: their crown weights come from PNW-GTR-
+        151, a different source, and only their *proportions* are
+        implemented today.
+    """
+    equation_id = np.asarray(equation_id)
+    dia = np.asarray(dia_in, dtype=np.float64)
+    missing = sorted(
+        str(i) for i in np.unique(equation_id) if i not in CROWN_WEIGHT_EQUATIONS
+    )
+    if missing:
+        raise ValueError(
+            f"Brown 1978 Table 1 has no diameter-only crown weight "
+            f"equation for Id(s) {missing}. Brown covers Rocky Mountain "
+            f"conifers; the hardwood Ids would need Snell & Little "
+            f"(1983). Use the nsvb equations, or supply per-tree fuel "
+            f"via fuel_column, for these species."
+        )
+    result = np.empty(dia.shape, dtype=np.float64)
+    for eq_id in np.unique(equation_id):
+        form, params = CROWN_WEIGHT_EQUATIONS[eq_id]
+        mask = equation_id == eq_id
+        result[mask] = form(dia[mask], **params)
+    return np.maximum(result, 0.0)

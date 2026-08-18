@@ -53,6 +53,12 @@ import math
 # itself across both sides of the comparison.
 PP_CROSSOVER_IN = 31.0
 
+# Table 1's Douglas-fir crown weight is two-part: the log form below
+# 17 in, w = 1.0237*d**2 - 20.74 at or above it. The C table has one
+# equation slot per component and keeps only the log half, which
+# under-predicts a 30 in Douglas-fir by a third. Applied in bt_eq below.
+DF_CROWN_WEIGHT_BREAK_IN = 17.0
+
 BT: dict[str, dict[str, tuple[float, ...]]] = {
     "PP": {
         "Tot": (0.2680, 2.0740, 0.0, 0.0, 0.0, 0.0, 1),
@@ -183,6 +189,9 @@ def bt_eq(code: str, component: str, dia_in: float) -> float:
     # drops below P1, which an accumulative proportion cannot do.
     if code == "PP" and component == "Twg" and dia_in > PP_CROSSOVER_IN:
         return bt_eq(code, "Fol", dia_in) + 0.01
+    # The upper half of Brown's two-part Douglas-fir crown weight.
+    if code == "DF" and component == "Tot" and dia_in >= DF_CROWN_WEIGHT_BREAK_IN:
+        return 1.0237 * dia_in * dia_in - 20.74
     return max(p, 0.0)
 
 
