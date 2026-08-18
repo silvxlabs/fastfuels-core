@@ -3,7 +3,7 @@ Red Alder,351,No,RA,RA,RA,RA,RA,RA,UN,DF
 White Alder,352,No,RA,RA,RA,RA,RA,RA,UN,DF
 Alaska Cedar,42,Yes,WC,WC,WC,WC,WC,WC,IC,IC
 Incense Cedar,81,Yes,WC,WC,WC,WC,WC,WC,IC,IC
-Western Redcedar,242,Yes,WC,WC,WC,WC,WC,WC,IC,IC
+Western Redcedar,242,Yes,WC,WC,WC,WC,WC,WC,IC,WC
 Douglas Fir,202,Yes,DF,DF,DF,DF,DF,DF,DF,DF
 Grand Fir,17,Yes,GF,GF,GF,GF,GF,GF,DF,WF
 Noble Fir,22,Yes,GF,GF,GF,GF,GF,GF,DF,WF
@@ -24,7 +24,7 @@ Jeffrey Pine,116,Yes,PP,PP,PP,PP,PP,PP,PP,PP
 Limber Pine,113,Yes,LP,LP,LP,LP,LP,LP,PP,PP
 Lodgepole Pine,108,Yes,LP,LP,LP,LP,LP,LP,LP,LP
 Ponderosa Pine,122,Yes,PP,PP,PP,PP,PP,PP,PP,PP
-Ponderosa Pine SW,,Yes,PP,PP,PP,PP,PP,PP,PS,PS
+Ponderosa Pine SW,135,Yes,PP,PP,PP,PP,PP,PP,PS,PS
 Sugar Pine,117,Yes,PP,PP,PP,PP,PP,PP,PP,PP
 Western White Pine,119,Yes,WP,WP,WP,WP,WP,WP,LP,LP
 Whitebark Pine,101,Yes,WB,WB,WB,WB,WB,WB,LP,LP

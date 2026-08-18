@@ -10,8 +10,15 @@ pw(1)=1 (B1+B2+B3=1); ph is fractional height within the crown.
 
 The species table is FuelCalc's Default Equation Table keyed by FIA
 species code. ``INCL_CBD`` is FuelCalc's default species inclusion
-(hardwoods excluded). The "Ponderosa Pine SW" row has no distinct FIA
-code (122 covers both varieties) and is omitted; SPCD 122 maps to PP.
+(hardwoods excluded). The guide prints no species code for the
+"Ponderosa Pine SW" row; ``sr_ESD[]`` in ``FC_DLL/NC_ESD.C`` keys it
+to NRCS symbol PIAR5, which is *Pinus arizonica*, SPCD 135. That row
+is the one place the PS vertical distribution and the PS crown-class
+factors are reachable, and it carries the strongest empirical result
+in Gray & Reinhardt (2003): at their Flagstaff site Brown's ponderosa
+equations over-predicted crown biomass by 2.3x, which the PS factors
+(0.3/0.3/0.15/0.1) correct and the PP factors (0.55/0.55/0.3/0.15) do
+not.
 
 Tables are read from disk on first use and cached, so importing
 fastfuels_core (or this module) does no I/O.
@@ -46,6 +53,6 @@ def fuelcalc_species() -> pd.DataFrame:
     """FuelCalc Default Equation Table, indexed by FIA species code."""
     table = pd.read_csv(
         files("fastfuels_core.data") / "FUELCALC_SPECIES_TABLE.csv",
-    ).dropna(subset=["SPCD"])
+    )
     table["SPCD"] = table["SPCD"].astype(int)
     return table.set_index("SPCD")

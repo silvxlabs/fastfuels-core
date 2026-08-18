@@ -280,8 +280,9 @@ def vertical_profile(
     Trees with zero crown length contribute their fuel as a point mass
     in the layer containing the crown base. Layer weights are
     differences of :func:`cumulative_fuel_fraction` at layer boundaries
-    clipped to the crown interval (FuelCalc's CLA formula), so each
-    tree's weights sum to 1 and total mass is conserved. Under
+    clipped to the crown interval (FuelCalc's CLA formula), with the
+    cumulative fraction pinned to 1 at the crown top as VD_Calc does,
+    so each tree's weights sum to 1 and total mass is conserved. Under
     ``crown_projected``, the slice of a crown disk overhanging the
     lattice boundary has no cell and its share of the tree's fuel is
     dropped — mass is conserved for every crown fully inside.
@@ -376,6 +377,16 @@ def vertical_profile(
         ph = (boundaries[None, :] - crown_base[sl, None]) / safe_length[sl, None]
         if vertical_distribution == "reinhardt_2006":
             pw = cumulative_fuel_fraction(spcd[sl], ph)
+            # Close the crown at the top. FuelCalc's VD_Calc handles the
+            # layer containing the crown top with ``pcWT = 1 - pw(layer
+            # bottom)`` rather than a difference of cumulatives, so a
+            # cubic whose coefficients do not sum to exactly 1 still
+            # distributes exactly the tree's fuel. PS is such a cubic:
+            # Reinhardt et al. (2006) Table 4 rounds it to 1.0001, which
+            # would otherwise hand every Arizona pine 100.01% of its
+            # fuel. The cumulative fraction at the crown top is 1 by
+            # definition, so this is inert for every other species.
+            pw = np.where(ph >= 1.0, 1.0, pw)
         else:
             pw = np.clip(ph, 0.0, 1.0)
         vertical_weights = np.diff(pw, axis=1)

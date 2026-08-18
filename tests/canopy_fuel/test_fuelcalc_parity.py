@@ -33,10 +33,12 @@ import pytest
 
 from fastfuels_core.allometry import brown
 from fastfuels_core.canopy_fuel.metrics import (
+    FT_TO_M,
     canopy_fuel_load,
     cbd_running_mean,
     cumulative_fuel_fraction,
     profile_threshold_heights,
+    vertical_profile,
 )
 from fastfuels_core.canopy_fuel.ref_data import (
     fuelcalc_crown_class_factors,
@@ -113,19 +115,10 @@ EXPECTED_TABLE_DIVERGENCES: dict[int, str] = {
         "column to WB/LP/LP; the User Guide still prints the pre-2018 "
         "LP/PP/PP row that we transcribed."
     ),
-    242: (
-        "Western Redcedar: source gives crown reduction WC, the guide "
-        "gives IC. Different factors for every crown class."
-    ),
 }
 
 # SPCDs present in the source table and absent from ours.
 EXPECTED_TABLE_OMISSIONS: dict[int, str] = {
-    135: (
-        "Ponderosa Pine SW (PIAR5 = Pinus arizonica). Dropped because "
-        "the guide prints no species code; omitting it makes the PS "
-        "vertical distribution and the PS crown-class column unreachable."
-    ),
     312: (
         "Bigleaf Maple (ACMA3). The guide's Default Equation Table skips "
         "this row; the source has it."
@@ -251,18 +244,49 @@ class TestVerticalDistributionParity:
     def test_ps_cubic_does_not_close(self):
         """PS is the one cubic whose coefficients do not sum to 1.
 
-        Reinhardt et al. (2006) Table 4 rounds it to 1.0001. FuelCalc
-        absorbs the excess because VD_Calc's top-of-crown branch uses
-        ``1 - pw(bottom)``; our difference-of-cumulatives propagates it
-        as a 0.01% mass error. Harmless while no species maps to PS, but
-        it becomes a mass-conservation failure the moment SPCD 135 is
-        added — see EXPECTED_TABLE_OMISSIONS.
+        Reinhardt et al. (2006) Table 4 rounds it to 1.0001. The table
+        is a transcription, so it keeps the published value; the
+        closure happens where FuelCalc does it, in the layer weights.
         """
         assert sum(fc.VDIST_CUBICS["PS"]) == pytest.approx(1.0001, abs=1e-9)
         others = [c for c in fc.VDIST_CUBICS if c != "PS"]
         for code in others:
             assert sum(fc.VDIST_CUBICS[code]) == pytest.approx(1.0, abs=1e-12)
-        assert "PS" not in set(fuelcalc_species()["VDIST_CODE"])
+        # SPCD 135 (Arizona pine) is the only species that reaches it.
+        reaches_ps = (
+            fuelcalc_species().index[fuelcalc_species()["VDIST_CODE"] == "PS"].tolist()
+        )
+        assert reaches_ps == [135]
+
+    def test_ps_layer_weights_conserve_mass(self):
+        """VD_Calc closes the crown at the top; so must we.
+
+        FuelCalc's top-of-crown branch is ``pcWT = 1 - pw(layer
+        bottom)`` (``_Top`` in ``FC_DLL/NC_VD.C``), which absorbs the
+        1.0001. A difference of raw cumulatives would hand every
+        Arizona pine 100.01% of its fuel.
+        """
+        trees = pd.DataFrame(
+            {
+                "x": [5.0, 15.0, 25.0],
+                "y": [-5.0, -5.0, -15.0],
+                "height": [12.0, 20.0, 7.3],
+                "crown_ratio": [0.4, 0.65, 0.9],
+                "fia_species_code": [135, 135, 135],
+                "dbh": [25.0, 40.0, 12.0],
+            }
+        )
+        fuel = np.array([10.0, 25.0, 4.0])
+        transform = (10.0, 0.0, 0.0, 0.0, -10.0, 0.0)
+        profile = vertical_profile(
+            trees,
+            fuel,
+            transform,
+            (3, 3),
+            horizontal_distribution="stem",
+        )
+        cell_volume = 10.0 * 10.0 * FT_TO_M
+        assert profile.sum() * cell_volume == pytest.approx(fuel.sum(), rel=1e-12)
 
     def test_cumulative_fraction_matches_crown_fraction(self):
         ph = np.linspace(0.0, 1.0, 51)
