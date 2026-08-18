@@ -55,9 +55,8 @@ BT: dict[str, dict[str, tuple[float, ...]]] = {
         "Tot": (1.3094, 1.6076, 0.0, 0.0, 0.0, 0.0, 1),
         "Fol": (1.5920, 0.0529, 0.0, 0.0, 36.0, 0.286, 5),
         # NOTE: HiVal here is 0.286 — identical to the Fol HiVal — so the
-        # fine fraction collapses to zero above 36 in. Brown 1978
-        # Table 16 (p. 53) gives 0.378, confirmed against the paper.
-        # Reproduced as-is; this is a FuelCalc bug.
+        # fine fraction collapses to zero above 36 in. Brown's Table 16
+        # gives 0.378. Reproduced as-is; this is a FuelCalc bug.
         "Twg": (1.1500, 0.0416, 0.0, 0.0, 36.0, 0.286, 5),
         "1in": (1.0270, 0.0150, 2.9, 1.0, 36.0, 0.488, 4),
         "3in": (1.000, 0.0000, 0.0, 0.0, 0.0, 0.0, 0),
@@ -82,16 +81,11 @@ BT: dict[str, dict[str, tuple[float, ...]]] = {
     "WL": {
         "Tot": (0.4373, 1.6786, 0.0, 0.0, 0.0, 0.0, 1),
         "Fol": (0.3470, -0.0434, 0.0, 0.0, 0.0, 0.0, 3),
-        # NOTE: -0.0632 here; Brown 1978 Table 16 (p. 53) prints
-        # -0.0362. Confirmed against the paper -- a digit transposition.
-        # See EXPECTED_DIVERGENCES in the parity tests.
+        # NOTE: -0.0632 here; the User Guide and Brown's Table 16 as we
+        # read it give -0.0362. See EXPECTED_DIVERGENCES in the parity
+        # tests.
         "Twg": (0.7450, -0.0632, 0.0, 0.0, 0.0, 0.0, 3),
         "1in": (1.0540, -0.0213, 2.9, 1.0, 0.0, 0.0, 3),
-        # NOTE: form 6 is a + b/d, so b = -0.72 evaluates 0.922 - 0.720/d
-        # while Brown Table 16 prints P4 = 0.922 + 0.720/d. A third
-        # transcription error, but P4 splits 1-3 in from 3 in+ branchwood
-        # and never reaches available canopy fuel, so nothing downstream
-        # of us reads it. Recorded, not registered as a divergence.
         "3in": (0.9220, -0.7200, 11.0, 1.0, 0.0, 0.0, 6),
         "3inP": (0.0000, 0.0000, 0.0, 0.0, 0.0, 0.0, 0),
     },
