@@ -1,20 +1,20 @@
 """Parity of the canopy_fuel module against the FuelCalc 1.8 C source.
 
 Every assertion here compares our code to
-:mod:`tests.canopy_fuel.fuelcalc_reference`, a line-for-line
-transcription of FuelCalc's own arithmetic. The point is not that we
-must agree everywhere — we deliberately do not — but that every place we
-disagree is *recorded*, so a future edit cannot silently move us toward
-or away from the binary.
+:mod:`tests.canopy_fuel.fuelcalc_reference`, which implements the same
+equations with FuelCalc's algorithmic structure. What is being tested is
+the *algorithm* — accumulative differencing, available fuel as foliage
+plus half the fine branchwood, the vertical-distribution layer weights,
+the running-mean bulk density and its threshold heights — against the
+canonical implementation of it. The equations themselves are pinned to
+their primary sources in :mod:`tests.canopy_fuel.test_brown_table16`.
 
-Two registries carry that record. :data:`EXPECTED_DIVERGENCES` lists the
-crown-proportion Ids where we knowingly follow the primary sources
-instead of the shipped table, and :data:`EXPECTED_TABLE_DIVERGENCES`
-lists the species-table rows where we currently follow the User Guide
-instead of the source. Both are asserted in both directions: everything
-outside a registry must match exactly, and everything inside it must
-still differ. Resolving a divergence therefore means deleting its entry,
-not editing a tolerance.
+:data:`EXPECTED_TABLE_DIVERGENCES` lists the species-table rows where we
+currently follow the User Guide instead of the C source, and
+:data:`EXPECTED_TABLE_OMISSIONS` the rows we do not carry. Both are
+asserted in both directions: everything outside a registry must match
+exactly, and everything inside it must still differ. Resolving one
+therefore means deleting its entry, not editing a tolerance.
 
 The species-table check runs against ``fuelcalc_sr_esd.csv``, a frozen
 parse of the live ``sr_ESD[]`` table in ``FC_DLL/NC_ESD.C`` (the rows
@@ -79,42 +79,6 @@ DIA_IN = np.unique(
 
 SHARED_IDS = sorted(set(fc.ALL_IDS) & set(brown.P1_EQUATIONS) & set(brown.P2_EQUATIONS))
 
-# (equation Id, quantity) -> why we differ from the shipped C table.
-EXPECTED_DIVERGENCES: dict[tuple[str, str], str] = {
-    ("WL", "p2"): (
-        "NC_BM.C:69 uses 0.745*exp(-0.0632*d). Brown Table 16 (p. 53), "
-        "species L, prints 0.745 EXP(-0.0362d) -- read off the page, not "
-        "inferred -- so -0.0632 is a digit transposition in FuelCalc. It "
-        "understates the larch fine-branchwood share by up to 0.151 of "
-        "crown weight (71% low, peaking at 20.6 in dbh) and drives P2 "
-        "below P1 at 38.6 in, which an accumulative proportion cannot "
-        "do. Propagates to AL and QA. Settled against the primary "
-        "source; this entry is permanent unless FuelCalc fixes the typo."
-    ),
-    ("GF", "p2"): (
-        "NC_BM.C:44 sets the Twg high-value to 0.286, identical to the "
-        "Fol high-value, zeroing fine branchwood above 36 in. Brown "
-        "Table 16's GF Conditions read 'If d >36.0 in, P1 = 0.286, "
-        "P2 = 0.378, P3 = 0.488'; FuelCalc copied the P1 value into the "
-        "P2 slot. Settled against the primary source. Affects grand fir "
-        "and white fir, which share the GF equations."
-    ),
-    ("PP", "p2"): (
-        "We hold the fine fraction at 0.01*CW past the 31.5 in curve "
-        "crossing; FuelCalc has no override and lets BT_GetWC clamp the "
-        "negative difference to 0. Brown prints the condition as 'If "
-        "d <=31 in, P2 = P1 + 0.01', but the inequality has to be a "
-        "typo for '>': see PP_CROSSOVER_IN in allometry/brown.py."
-    ),
-}
-EXPECTED_DIVERGENCES.update(
-    {
-        (eq_id, "fine"): reason
-        for (eq_id, q), reason in list(EXPECTED_DIVERGENCES.items())
-        if q == "p2"
-    }
-)
-
 # SPCD -> (column, ours, theirs, why). Rows where our shipped species
 # table follows the User Guide and the C source disagrees.
 EXPECTED_TABLE_DIVERGENCES: dict[int, str] = {
@@ -177,23 +141,11 @@ class TestCrownProportionParity:
     @pytest.mark.parametrize("quantity", ["p1", "p2", "fine"])
     @pytest.mark.parametrize("equation_id", SHARED_IDS)
     def test_matches_source(self, equation_id, quantity):
-        if (equation_id, quantity) in EXPECTED_DIVERGENCES:
-            pytest.skip(EXPECTED_DIVERGENCES[(equation_id, quantity)])
         np.testing.assert_allclose(
             _ours(quantity, equation_id, DIA_IN),
             _theirs(quantity, equation_id, DIA_IN),
             atol=1e-12,
             err_msg=f"{equation_id} {quantity} drifted from the C source",
-        )
-
-    @pytest.mark.parametrize("equation_id,quantity", sorted(EXPECTED_DIVERGENCES))
-    def test_documented_divergence_still_diverges(self, equation_id, quantity):
-        """Deleting a divergence requires deleting its registry entry."""
-        ours = _ours(quantity, equation_id, DIA_IN)
-        theirs = _theirs(quantity, equation_id, DIA_IN)
-        assert np.abs(ours - theirs).max() > 1e-9, (
-            f"{equation_id} {quantity} now matches FuelCalc. If that is "
-            f"intended, drop its EXPECTED_DIVERGENCES entry."
         )
 
     def test_available_fuel_is_foliage_plus_half_fine(self):

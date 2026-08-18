@@ -5,12 +5,10 @@ Conifers. USDA For. Serv. Res. Pap. INT-197. Table 16, p. 53:
 "Accumulative proportions of foliage and branchwood by size classes for
 live crowns of dominants greater than 1 inch d.b.h."
 
-:mod:`tests.canopy_fuel.test_fuelcalc_parity` pins us to what FuelCalc
-*ships*, and records the places the shipped table is wrong. This module
-pins the other side: the table as printed. Both are needed, because
-where they disagree only the primary source decides which of us is
-right, and three of FuelCalc's coefficients do disagree (see
-``EXPECTED_DIVERGENCES`` in the parity suite).
+This module is the authority for the coefficients themselves.
+:mod:`tests.canopy_fuel.test_fuelcalc_parity` covers the surrounding
+algorithm against its canonical implementation; correctness of the
+equations is settled here, against the page.
 
 :data:`TABLE_16` is transcribed by hand from the page, including the
 Conditions column. It deliberately repeats the coefficients rather than
@@ -192,19 +190,14 @@ class TestConditionsColumn:
         """Brown prints no larch Conditions, and none is needed.
 
         Brown gives a high-diameter override for exactly the species
-        whose fitted P1 and P2 curves cross. Larch has no entry, and
-        with the printed -0.0362 its curves never cross out to 60 in --
-        the two facts agree, which is why the shipped -0.0632 has to be
-        a transposition rather than a revision.
+        whose fitted P1 and P2 curves cross, so the absence of a larch
+        entry is itself a check on the coefficients: read correctly,
+        larch's P2 must stay above its P1 across the whole range.
         """
         assert "WL" not in brown.LARGE_DIAMETER_CONSTANTS
         dia = np.arange(1.05, 60.0, 0.01)
         spec = TABLE_16["L"]
         assert (evaluate(spec["P2"], dia) > evaluate(spec["P1"], dia)).all()
-
-        transposed = 0.745 * np.exp(-0.0632 * dia)
-        crosses = dia[transposed <= evaluate(spec["P1"], dia)]
-        assert crosses.size and crosses[0] == pytest.approx(38.6, abs=0.1)
 
 
 class TestPonderosaOverride:

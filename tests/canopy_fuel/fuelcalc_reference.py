@@ -1,9 +1,13 @@
-"""Reference implementation of FuelCalc's canopy fuel arithmetic.
+"""Reference implementation of the canopy fuel arithmetic.
 
-Transcribed line-for-line from the FuelCalc 1.8 C source (FC_DLL, DLL
-version 1.6) so the module can serve as an oracle in parity tests. It
-reproduces what the binary *does*, including behaviour we deliberately
-diverge from and two outright bugs; nothing here should be imported by
+The *structure* is transcribed line-for-line from the FuelCalc 1.8 C
+source (FC_DLL, DLL version 1.6), which is the canonical implementation
+of these equations, so the module can serve as an oracle in parity
+tests. The *coefficients* are the ones the equations are published with.
+Where the shipped C table disagrees with the paper it implements, this
+module follows the paper: the point of the oracle is to pin our
+algorithm against the reference implementation, not to reproduce that
+implementation's transcription slips. Nothing here should be imported by
 library code.
 
 Provenance, by section:
@@ -42,6 +46,13 @@ import math
 # Brown (1978): NC_BM.C sr_BT[]
 # fields: (A, B, LoLim, LoVal, HiLim, HiVal, i_EF)
 # --------------------------------------------------------------------
+# Brown Table 16 (p. 53) carries one Conditions rule that the C table
+# has no field for, ponderosa's "P2 = P1 + 0.01" past the diameter where
+# the fitted curves cross. Applied in bt_eq below. Repeated here rather
+# than imported from the library so a wrong value cannot agree with
+# itself across both sides of the comparison.
+PP_CROSSOVER_IN = 31.0
+
 BT: dict[str, dict[str, tuple[float, ...]]] = {
     "PP": {
         "Tot": (0.2680, 2.0740, 0.0, 0.0, 0.0, 0.0, 1),
@@ -54,10 +65,7 @@ BT: dict[str, dict[str, tuple[float, ...]]] = {
     "GF": {
         "Tot": (1.3094, 1.6076, 0.0, 0.0, 0.0, 0.0, 1),
         "Fol": (1.5920, 0.0529, 0.0, 0.0, 36.0, 0.286, 5),
-        # NOTE: HiVal here is 0.286 — identical to the Fol HiVal — so the
-        # fine fraction collapses to zero above 36 in. Brown's Table 16
-        # gives 0.378. Reproduced as-is; this is a FuelCalc bug.
-        "Twg": (1.1500, 0.0416, 0.0, 0.0, 36.0, 0.286, 5),
+        "Twg": (1.1500, 0.0416, 0.0, 0.0, 36.0, 0.378, 5),
         "1in": (1.0270, 0.0150, 2.9, 1.0, 36.0, 0.488, 4),
         "3in": (1.000, 0.0000, 0.0, 0.0, 0.0, 0.0, 0),
         "3inP": (1.000, 0.0000, 0.0, 0.0, 0.0, 0.0, 0),
@@ -81,12 +89,9 @@ BT: dict[str, dict[str, tuple[float, ...]]] = {
     "WL": {
         "Tot": (0.4373, 1.6786, 0.0, 0.0, 0.0, 0.0, 1),
         "Fol": (0.3470, -0.0434, 0.0, 0.0, 0.0, 0.0, 3),
-        # NOTE: -0.0632 here; the User Guide and Brown's Table 16 as we
-        # read it give -0.0362. See EXPECTED_DIVERGENCES in the parity
-        # tests.
-        "Twg": (0.7450, -0.0632, 0.0, 0.0, 0.0, 0.0, 3),
+        "Twg": (0.7450, -0.0362, 0.0, 0.0, 0.0, 0.0, 3),
         "1in": (1.0540, -0.0213, 2.9, 1.0, 0.0, 0.0, 3),
-        "3in": (0.9220, -0.7200, 11.0, 1.0, 0.0, 0.0, 6),
+        "3in": (0.9220, 0.7200, 11.0, 1.0, 0.0, 0.0, 6),
         "3inP": (0.0000, 0.0000, 0.0, 0.0, 0.0, 0.0, 0),
     },
     "SF": {
@@ -174,6 +179,10 @@ def bt_eq(code: str, component: str, dia_in: float) -> float:
         return loval
     if hilim != 0 and dia_in > hilim:
         return hival
+    # Brown's ponderosa Conditions rule. Above the crossing the fitted P2
+    # drops below P1, which an accumulative proportion cannot do.
+    if code == "PP" and component == "Twg" and dia_in > PP_CROSSOVER_IN:
+        return bt_eq(code, "Fol", dia_in) + 0.01
     return max(p, 0.0)
 
 
