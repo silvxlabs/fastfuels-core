@@ -117,10 +117,18 @@ LARGE_DIAMETER_CONSTANTS = {
     "WB": (20.0, 0.242, 0.268),
 }
 
-# Brown's PP condition: P2 = P1 + 0.01 past the diameter where the two
-# fitted curves cross (P1 = P2 at d = ln(0.625/0.558)/0.0036 = 31.5 in;
-# beyond it the fitted fine fraction goes negative). Table 16 prints the
-# inequality ambiguously; the crossing fixes the direction.
+# Brown's PP condition, Table 16 (p. 53): P2 = P1 + 0.01. The printed
+# inequality reads "If d <=31 in", but that has to be a typo for ">":
+#   - the two fitted curves cross at d = ln(0.625/0.558)/0.0036 = 31.5 in,
+#     and only above the crossing does the fine fraction go negative, so
+#     only above it does P2 need an override at all;
+#   - applied below 31 in the override would supersede a P2 equation
+#     Brown fits with R2 = 0.89 over almost the whole diameter range,
+#     and would contradict his own Table 15, which gives ponderosa a
+#     fine fraction of 0.14 -- not 0.01 -- at d <= 1 in;
+#   - every other Conditions entry that patches P1 or P2 is a high-side
+#     "d >" rule; the "d <=" rules all patch P3 or P4 to 1.0.
+# So the override applies above the crossing, where it repairs the sign.
 PP_CROSSOVER_IN = 31.0
 
 

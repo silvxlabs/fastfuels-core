@@ -82,21 +82,29 @@ SHARED_IDS = sorted(set(fc.ALL_IDS) & set(brown.P1_EQUATIONS) & set(brown.P2_EQU
 # (equation Id, quantity) -> why we differ from the shipped C table.
 EXPECTED_DIVERGENCES: dict[tuple[str, str], str] = {
     ("WL", "p2"): (
-        "NC_BM.C:69 uses 0.745*exp(-0.0632*d); the User Guide and our "
-        "reading of Brown Table 16 give -0.0362. The shipped coefficient "
-        "drives P2 below P1 at 38.6 in, and Brown flags every other "
-        "crossing with an explicit Conditions entry but none for larch, "
-        "so we treat -0.0632 as a transposition. Propagates to AL and QA."
+        "NC_BM.C:69 uses 0.745*exp(-0.0632*d). Brown Table 16 (p. 53), "
+        "species L, prints 0.745 EXP(-0.0362d) -- read off the page, not "
+        "inferred -- so -0.0632 is a digit transposition in FuelCalc. It "
+        "understates the larch fine-branchwood share by up to 0.151 of "
+        "crown weight (71% low, peaking at 20.6 in dbh) and drives P2 "
+        "below P1 at 38.6 in, which an accumulative proportion cannot "
+        "do. Propagates to AL and QA. Settled against the primary "
+        "source; this entry is permanent unless FuelCalc fixes the typo."
     ),
     ("GF", "p2"): (
         "NC_BM.C:44 sets the Twg high-value to 0.286, identical to the "
         "Fol high-value, zeroing fine branchwood above 36 in. Brown "
-        "Table 16 gives 0.378. FuelCalc bug."
+        "Table 16's GF Conditions read 'If d >36.0 in, P1 = 0.286, "
+        "P2 = 0.378, P3 = 0.488'; FuelCalc copied the P1 value into the "
+        "P2 slot. Settled against the primary source. Affects grand fir "
+        "and white fir, which share the GF equations."
     ),
     ("PP", "p2"): (
         "We hold the fine fraction at 0.01*CW past the 31.5 in curve "
-        "crossing, per Brown's printed condition. FuelCalc has no "
-        "override and lets BT_GetWC clamp the negative difference to 0."
+        "crossing; FuelCalc has no override and lets BT_GetWC clamp the "
+        "negative difference to 0. Brown prints the condition as 'If "
+        "d <=31 in, P2 = P1 + 0.01', but the inequality has to be a "
+        "typo for '>': see PP_CROSSOVER_IN in allometry/brown.py."
     ),
 }
 EXPECTED_DIVERGENCES.update(
