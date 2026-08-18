@@ -531,10 +531,27 @@ class TestProfileThresholdHeights:
         np.testing.assert_allclose(cbh[0, 0], 1.0)
         np.testing.assert_allclose(chm[0, 0], 2.0)
 
-    def test_smoothing_window(self):
-        # [0, 0.03, 0, 0] with a 3-layer centered truncated mean becomes
-        # [0.015, 0.01, 0.01, 0] -> only layer 0 clears 0.012, lowering
-        # CBH from 1 to 0.
+    def test_smoothing_window_is_bounded_by_the_fuel(self):
+        # Smoothing spreads density past the ends of the canopy, so the
+        # scan alone would put canopy in layers 1 and 5, which hold none.
+        # The bounds pull both ends back to the layers that do.
+        profile = column_profile([0, 0, 0.03, 0.03, 0, 0, 0])
+        cbh, chm = profile_threshold_heights(
+            profile,
+            layer_depth=1.0,
+            threshold=0.012,
+            relative_fraction=None,
+            smoothing_window=3.0,
+        )
+        np.testing.assert_allclose(cbh, [[2.0]])
+        np.testing.assert_allclose(chm, [[4.0]])
+
+    def test_smoothing_can_dilute_a_thin_canopy_to_nothing(self):
+        # [0, 0.03, 0, 0] smooths to [0.015, 0.01, 0.01, 0]: truncating
+        # the window at the profile floor averages layer 0 over two
+        # layers instead of three, so the one layer clearing 0.012 holds
+        # no fuel while the one holding fuel falls short. The qualifying
+        # span and the fuel span are disjoint, which is no canopy.
         profile = column_profile([0, 0.03, 0, 0])
         cbh_raw, chm_raw = profile_threshold_heights(
             profile, layer_depth=1.0, threshold=0.012, relative_fraction=None
@@ -548,8 +565,22 @@ class TestProfileThresholdHeights:
             relative_fraction=None,
             smoothing_window=3.0,
         )
-        np.testing.assert_allclose(cbh_s, [[0.0]])
-        np.testing.assert_allclose(chm_s, [[1.0]])
+        assert np.isnan(cbh_s).all() and np.isnan(chm_s).all()
+
+    def test_bounds_are_inert_without_smoothing(self):
+        # Every qualifying layer holds fuel by construction, so the
+        # bounds cannot move an unsmoothed answer.
+        rng = np.random.default_rng(11)
+        profile = rng.uniform(0, 0.05, (40, 6, 7)) * (
+            rng.uniform(0, 1, (40, 6, 7)) > 0.6
+        )
+        cbh, chm = profile_threshold_heights(profile, layer_depth=0.3048)
+        qualifies = profile > 0
+        lowest = qualifies.argmax(axis=0) * 0.3048
+        highest = (40 - 1 - qualifies[::-1].argmax(axis=0) + 1) * 0.3048
+        defined = ~np.isnan(cbh)
+        assert (cbh[defined] >= lowest[defined] - 1e-12).all()
+        assert (chm[defined] <= highest[defined] + 1e-12).all()
 
     def test_cbh_never_exceeds_chm(self):
         rng = np.random.default_rng(4)
