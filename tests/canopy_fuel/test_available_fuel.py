@@ -16,8 +16,25 @@ import pandas as pd
 import pytest
 
 from fastfuels_core.allometry import nsvb
-from fastfuels_core.canopy_fuel.available_fuel import available_canopy_fuel
+from fastfuels_core.canopy_fuel.available_fuel import (
+    available_canopy_fuel,
+    crown_class_factor,
+)
+from fastfuels_core.canopy_fuel.ref_data import fuelcalc_species
 from tests.canopy_fuel.builders import random_stand
+
+
+def two_trees(**extra):
+    """One ponderosa and one Douglas-fir, both 30 cm at 18 m."""
+    return pd.DataFrame(
+        {
+            "fia_species_code": [122, 202],
+            "dbh": [30.0, 30.0],
+            "height": [18.0, 18.0],
+            "crown_ratio": [0.5, 0.5],
+            **{k: [v, v] for k, v in extra.items()},
+        }
+    )
 
 
 def one_tree(species_code, dbh_cm, height_m, **extra):
@@ -138,3 +155,161 @@ class TestSpeciesCoverage:
 def test_unknown_equations_raises():
     with pytest.raises(ValueError, match="bogus"):
         available_canopy_fuel(random_stand(3), equations="bogus")
+
+
+class TestEquationsArm:
+    def test_brown_1978_and_nsvb_do_not_agree(self):
+        """They are different biomass models, not two names for one.
+
+        A regression that quietly routed brown_1978 back to NSVB would
+        pass every parity test: both arms would match the same oracle
+        on the proportions and differ only in the weight they scale.
+        """
+        trees = pd.concat(
+            [two_trees(), one_tree(108, 40.0, 18.0)], ignore_index=True
+        ).assign(dbh=40.0)
+        assert not np.allclose(
+            available_canopy_fuel(trees, equations="brown_1978"),
+            available_canopy_fuel(trees, equations="nsvb"),
+            rtol=0.01,
+        )
+
+
+class TestCrownClassFactor:
+    """The multiplier itself. Its values are pinned against FuelCalc in
+    :mod:`tests.canopy_fuel.test_fuelcalc_parity`; what is here is how
+    codes map onto columns."""
+
+    def test_the_three_aliases_fold_onto_real_classes(self):
+        """O, E and SC must land on C, D and I -- not on Other/none.
+
+        Every crown-class row a species actually resolves to has
+        Dominant equal to Codominant, so O and E cannot be told apart
+        through a real species; what is observable is that all three
+        folds differ from the Other/none column they would take if the
+        remap were skipped.
+        """
+        species = fuelcalc_species()
+        spcd = int(species.index[species["CROWN_REDUC_CODE"] == "WF"][0])
+        other = crown_class_factor(np.array([spcd]), np.array(["N"]))[0]
+        for alias, target in {"O": "C", "E": "D", "SC": "I"}.items():
+            folded = crown_class_factor(np.array([spcd]), np.array([alias]))[0]
+            direct = crown_class_factor(np.array([spcd]), np.array([target]))[0]
+            assert folded == direct, alias
+            assert folded != other, alias
+
+    def test_omitting_the_class_takes_the_other_none_column(self):
+        spcd = fuelcalc_species().index.to_numpy()
+        np.testing.assert_allclose(
+            crown_class_factor(spcd),
+            crown_class_factor(spcd, np.full(spcd.shape, "N")),
+            atol=1e-12,
+        )
+
+    def test_the_fallback_is_nearly_a_constant(self):
+        """Without crown position the adjustment loses its content.
+
+        50 of the 54 species take 0.5, so turning the table on with no
+        column is close to halving every tree. Pinned because it is the
+        difference between a species-and-position adjustment and a
+        blanket scale factor, and it is invisible from the call site.
+        """
+        values, counts = np.unique(
+            crown_class_factor(fuelcalc_species().index.to_numpy()),
+            return_counts=True,
+        )
+        assert dict(zip(np.round(values, 2), counts)) == {0.5: 50, 0.75: 1, 1.0: 3}
+
+
+class TestCrownClassArguments:
+    """``crown_class_adjustment`` and ``crown_class_column`` are one
+    decision: an adjustment needs the data it adjusts by, and the data
+    is pointless without the adjustment. Both half-specified forms fail
+    silently if allowed through, so both raise."""
+
+    def test_no_adjustment_is_the_default(self):
+        trees = two_trees()
+        np.testing.assert_array_equal(
+            available_canopy_fuel(trees),
+            available_canopy_fuel(trees, crown_class_adjustment="none"),
+        )
+
+    def test_the_adjustment_changes_the_answer(self):
+        """Otherwise the tests above would pass on a no-op."""
+        trees = two_trees(cc="D")
+        assert not np.allclose(
+            available_canopy_fuel(trees),
+            available_canopy_fuel(
+                trees,
+                crown_class_adjustment="reinhardt_2006",
+                crown_class_column="cc",
+            ),
+        )
+
+    def test_none_means_no_adjustment(self):
+        """``None`` is the natural Python spelling and must not raise.
+
+        ``crown_class_column`` beside it takes a real ``None``, so
+        accepting only the string here is a trap.
+        """
+        trees = two_trees(cc="D")
+        np.testing.assert_array_equal(
+            available_canopy_fuel(trees, crown_class_adjustment=None),
+            available_canopy_fuel(trees, crown_class_adjustment="none"),
+        )
+
+    def test_an_unknown_adjustment_raises(self):
+        """The arm is named for the paper, not for FuelCalc.
+
+        The multipliers are Reinhardt, Scott, Gray & Keane (2006), the
+        same paper the vertical distribution cubics come from, so the
+        value matches ``vertical_distribution="reinhardt_2006"``.
+        FuelCalc is one program that applies them.
+        """
+        with pytest.raises(ValueError, match="crown_class_adjustment"):
+            available_canopy_fuel(
+                two_trees(cc="D"), crown_class_adjustment="fuelcalc_table"
+            )
+
+    def test_a_column_that_would_be_ignored_raises(self):
+        """Naming the column says the inventory has crown position.
+
+        Applying no adjustment to it would throw away the only input
+        that makes the adjustment more than a constant.
+        """
+        with pytest.raises(ValueError, match="would be ignored"):
+            available_canopy_fuel(two_trees(cc="D"), crown_class_column="cc")
+
+    def test_the_adjustment_without_a_column_raises(self):
+        """Allowing it would apply the Other/none factor to everything,
+        which halves 50 of the 54 species — a silent blanket scaling
+        wearing the name of a crown-class adjustment."""
+        with pytest.raises(ValueError, match="needs crown_class_column"):
+            available_canopy_fuel(
+                two_trees(cc="D"), crown_class_adjustment="reinhardt_2006"
+            )
+
+    def test_a_column_that_is_not_in_the_frame_raises(self):
+        with pytest.raises(ValueError, match="crown_class_column"):
+            available_canopy_fuel(
+                two_trees(cc="D"),
+                crown_class_adjustment="reinhardt_2006",
+                crown_class_column="not_a_column",
+            )
+
+    def test_the_uniform_fallback_is_still_reachable_deliberately(self):
+        """A column of "N" is FuelCalc's blank crown class field.
+
+        The behaviour the bare flag used to give is still available; it
+        just has to be asked for where a reader can see it.
+        """
+        trees = two_trees(cc="N")
+        got = available_canopy_fuel(
+            trees,
+            crown_class_adjustment="reinhardt_2006",
+            crown_class_column="cc",
+        )
+        expected = available_canopy_fuel(trees) * crown_class_factor(
+            trees["fia_species_code"].to_numpy()
+        )
+        np.testing.assert_allclose(got, expected, rtol=1e-12)

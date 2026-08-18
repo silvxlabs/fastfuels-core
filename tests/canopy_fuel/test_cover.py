@@ -1,10 +1,19 @@
-"""Tests for :mod:`fastfuels_core.canopy_fuel.cover`, ``crown_union``.
+"""Tests for :mod:`fastfuels_core.canopy_fuel.cover`.
 
-The union counts overlapping crowns once, which is the property these
-tests are built around: adding a crown that covers no new ground must
-not change the answer. The other two methods, ``crown_overlap`` and
-``cover_fraction``, are covered in
-:mod:`tests.canopy_fuel.test_fuelcalc_parity`.
+Three methods over the same crown disks, so what separates them is how
+they treat overlap and which trees they count:
+
+``crown_union``
+    Counts overlapping crowns once. Adding a crown that covers no new
+    ground must not change the answer.
+``crown_overlap``
+    Reads only total crown area, so it cannot see arrangement. Its
+    values are pinned against FuelCalc's ``CA_Overlap`` in
+    :mod:`tests.canopy_fuel.test_fuelcalc_parity`; what is here is the
+    behaviour that distinguishes it from the union.
+``cover_fraction``
+    The union restricted by tree height. It has no FuelCalc
+    counterpart, so what is pinned is its relation to ``crown_union``.
 """
 
 from __future__ import annotations
@@ -15,8 +24,11 @@ import pytest
 
 from fastfuels_core.canopy_fuel.cover import canopy_cover
 from fastfuels_core.canopy_fuel.geometry import disk_rect_overlap_area
+from fastfuels_core.canopy_fuel.ref_data import fuelcalc_species
 from tests.canopy_fuel.builders import (
     CELL_AREA,
+    ONE_CELL_SHAPE,
+    ONE_CELL_TRANSFORM,
     SHAPE,
     TRANSFORM,
     random_stand,
@@ -109,3 +121,139 @@ class TestCoverEdgeCases:
             canopy_cover(
                 stand_on_lattice(5), (30.0, 1.0, 1000.0, 0.0, -30.0, 5000.0), SHAPE
             )
+
+
+def one_cell_stand(heights, x=None, y=None, dbh=None, species_code=122):
+    """A stand inside the single 30 m cell, sized by Purves allometry."""
+    n = len(heights)
+    rng = np.random.default_rng(4)
+    return pd.DataFrame(
+        {
+            "x": rng.uniform(4.0, 26.0, n) if x is None else x,
+            "y": -rng.uniform(4.0, 26.0, n) if y is None else y,
+            "fia_species_code": species_code,
+            "dbh": np.linspace(5.0, 40.0, n) if dbh is None else dbh,
+            "height": np.asarray(heights, dtype=float),
+            "crown_ratio": np.full(n, 0.6),
+        }
+    )
+
+
+def one_cell_cover(trees, **kwargs):
+    return canopy_cover(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE, **kwargs)[0, 0]
+
+
+class TestCrownOverlap:
+    """Crookston & Stage's random-overlap correction."""
+
+    def test_it_cannot_see_arrangement(self):
+        """Its defining property, and its limitation.
+
+        The estimator reads only total crown area, so translating stems
+        within a cell cannot move it. The union sees the difference,
+        which is the whole reason both methods exist.
+        """
+        rng = np.random.default_rng(11)
+        n = 25
+        layouts = [
+            (rng.uniform(4, 26, n), -rng.uniform(4, 26, n)),
+            (
+                np.tile(np.linspace(4, 26, 5), 5),
+                -np.repeat(np.linspace(4, 26, 5), 5),
+            ),
+            (rng.normal(15, 1.5, n), -rng.normal(15, 1.5, n)),
+        ]
+        overlap, union = [], []
+        for x, y in layouts:
+            trees = one_cell_stand(
+                np.full(n, 15.0),
+                x=np.clip(x, 3, 27),
+                y=-np.clip(-y, 3, 27),
+                dbh=np.full(n, 25.0),
+            )
+            overlap.append(one_cell_cover(trees, method="crown_overlap"))
+            union.append(one_cell_cover(trees))
+        assert max(overlap) - min(overlap) < 1e-9
+        assert max(union) - min(union) > 20.0
+
+    def test_it_agrees_with_the_union_when_nothing_can_overlap(self):
+        """One crown in a cell: no overlap to resolve, so both are exact.
+
+        1 - exp(-p) != p, so they agree only in the limit; a crown
+        covering under 2% of the cell puts the two within a tenth of a
+        point.
+        """
+        trees = one_cell_stand([7.0], x=[15.0], y=[-15.0], dbh=[8.0])
+        union = one_cell_cover(trees)
+        assert union < 2.0
+        assert one_cell_cover(trees, method="crown_overlap") == pytest.approx(
+            union, abs=0.1
+        )
+
+
+class TestCoverFraction:
+    """The union restricted by tree height, the CHM-comparable variable."""
+
+    def test_a_zero_threshold_is_the_plain_union(self):
+        trees = one_cell_stand(np.linspace(0.5, 25.0, 30))
+        assert one_cell_cover(
+            trees, method="cover_fraction", height_threshold=0.0
+        ) == pytest.approx(one_cell_cover(trees), abs=1e-12)
+
+    def test_raising_the_threshold_can_only_lower_cover(self):
+        trees = one_cell_stand(np.linspace(0.5, 25.0, 30))
+        covers = [
+            one_cell_cover(trees, method="cover_fraction", height_threshold=t)
+            for t in np.arange(0.0, 30.0, 0.5)
+        ]
+        assert all(b <= a + 1e-12 for a, b in zip(covers, covers[1:]))
+        assert covers[0] > 0.0
+        assert covers[-1] == 0.0
+
+    def test_the_threshold_is_strict(self):
+        """A tree exactly at the threshold does not clear it."""
+        trees = one_cell_stand([2.0, 2.0])
+        assert one_cell_cover(trees, method="cover_fraction", height_threshold=2.0) == 0
+        assert one_cell_cover(trees, method="cover_fraction", height_threshold=1.99) > 0
+
+    def test_understorey_is_what_separates_it_from_the_union(self):
+        trees = one_cell_stand([1.0, 1.2, 1.5, 18.0])
+        fraction = one_cell_cover(trees, method="cover_fraction", height_threshold=2.0)
+        assert fraction < one_cell_cover(trees) - 1.0
+
+    def test_a_stand_entirely_below_the_threshold_covers_nothing(self):
+        assert (
+            one_cell_cover(one_cell_stand([0.5, 1.0, 1.9]), method="cover_fraction")
+            == 0.0
+        )
+
+    def test_a_negative_threshold_raises(self):
+        with pytest.raises(ValueError, match="height_threshold"):
+            one_cell_cover(
+                one_cell_stand([10.0]), method="cover_fraction", height_threshold=-1.0
+            )
+
+
+@pytest.mark.parametrize("method", ["crown_union", "crown_overlap"])
+def test_cover_counts_species_excluded_from_bulk_density(method):
+    """Cover is not gated by the species inclusion flag.
+
+    Broadleaf canopy occupies ground whether or not it is treated as
+    crown-fire fuel, so ``exclude_hardwoods`` gates the bulk-density
+    bands and leaves cover alone. FuelCalc does the same: ``PTL_CanCov``
+    (``NC_PTL2.C:44``) loops over every live record, and the inclusion
+    flag is read in exactly one place in the whole source,
+    ``NC_PTL.C:731``, inside the bulk-density loop.
+    """
+    excluded = fuelcalc_species()
+    excluded = excluded[excluded["INCL_CBD"] == "No"]
+    assert not excluded.empty
+    trees = one_cell_stand(
+        [18.0], x=[15.0], y=[-15.0], dbh=[30.0], species_code=int(excluded.index[0])
+    )
+    assert one_cell_cover(trees, method=method) > 0.0
+
+
+def test_an_unknown_method_raises():
+    with pytest.raises(ValueError, match="canopy cover method"):
+        one_cell_cover(one_cell_stand([15.0]), method="crookston")

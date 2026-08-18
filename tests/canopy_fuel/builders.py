@@ -19,6 +19,12 @@ TRANSFORM = (30.0, 0.0, 1000.0, 0.0, -30.0, 5000.0)
 SHAPE = (4, 5)
 CELL_AREA = 900.0
 
+# A single 30 m cell spanning x 0-30, y -30-0. Tests that compare two
+# stand-level estimators want one cell and no boundary, so the whole
+# stand lands in the same denominator.
+ONE_CELL_TRANSFORM = (30.0, 0.0, 0.0, 0.0, -30.0, 0.0)
+ONE_CELL_SHAPE = (1, 1)
+
 # The lattice spans x 1000-1150, y 4880-5000. Cell (row 2, col 1) is
 # x 1030-1060, y 4910-4940, and (1045, 4915) is a point inside it.
 CENTER_CELL = (2, 1)

@@ -2,12 +2,19 @@
 
 Every assertion here compares our code to
 :mod:`tests.canopy_fuel.fuelcalc_reference`, which implements the same
-equations with FuelCalc's algorithmic structure. What is being tested is
-the *algorithm* — accumulative differencing, available fuel as foliage
-plus half the fine branchwood, the vertical-distribution layer weights,
-the running-mean bulk density and its threshold heights — against the
-canonical implementation of it. The equations themselves are pinned to
-their primary sources in :mod:`tests.canopy_fuel.test_brown_table16`.
+equations with FuelCalc's algorithmic structure, or to a frozen parse of
+a FuelCalc source table. What is being tested is the *algorithm* —
+accumulative differencing, available fuel as foliage plus half the fine
+branchwood, the vertical-distribution layer weights, the running-mean
+bulk density and its threshold heights, the crown-area overlap
+correction — against the canonical implementation of it.
+
+Nothing else belongs here. The equations themselves are pinned to their
+primary sources in :mod:`tests.canopy_fuel.test_brown_table1` and
+:mod:`~tests.canopy_fuel.test_brown_table16`; each stage's own contract
+— argument validation, the relations between its options, the
+behaviours that have no FuelCalc counterpart — is pinned in the test
+module named for it.
 
 :data:`EXPECTED_TABLE_DIVERGENCES` lists the species-table rows where we
 currently follow the User Guide instead of the C source, and
@@ -211,26 +218,6 @@ class TestCrownProportionParity:
                 err_msg=f"{eq_id} available fuel drifted from the reference",
             )
 
-    def test_brown_1978_and_nsvb_arms_disagree(self):
-        """They are different biomass models, not two names for one.
-
-        A regression that quietly routed brown_1978 back to NSVB would
-        pass every other test in this class.
-        """
-        trees = pd.DataFrame(
-            {
-                "fia_species_code": [122, 202, 108],
-                "dbh": [40.0, 40.0, 40.0],
-                "height": [18.0, 18.0, 18.0],
-                "crown_ratio": [0.5, 0.5, 0.5],
-            }
-        )
-        assert not np.allclose(
-            available_canopy_fuel(trees, equations="brown_1978"),
-            available_canopy_fuel(trees, equations="nsvb"),
-            rtol=0.01,
-        )
-
     @pytest.mark.parametrize(
         "crown_class", ["D", "C", "I", "S", "O", "E", "SC", "N", "", "?"]
     )
@@ -248,33 +235,6 @@ class TestCrownProportionParity:
             ]
         )
         np.testing.assert_allclose(ours, theirs, atol=1e-12)
-
-    def test_crown_class_folds_are_not_identity(self):
-        """O, E and SC must land on C, D and I -- not on Other/none.
-
-        Every crown-class row a species actually resolves to has
-        Dominant equal to Codominant, so O and E cannot be told apart
-        through a real species; what is observable is that all three
-        folds differ from the Other/none column they would take if the
-        remap were skipped.
-        """
-        species = fuelcalc_species()
-        spcd = int(species.index[species["CROWN_REDUC_CODE"] == "WF"][0])
-        other = crown_class_factor(np.array([spcd]), np.array(["N"]))[0]
-        for alias, target in {"O": "C", "E": "D", "SC": "I"}.items():
-            folded = crown_class_factor(np.array([spcd]), np.array([alias]))[0]
-            direct = crown_class_factor(np.array([spcd]), np.array([target]))[0]
-            assert folded == direct, alias
-            assert folded != other, alias
-
-    def test_omitting_crown_class_takes_the_other_column(self):
-        species = fuelcalc_species()
-        spcd = species.index.to_numpy()
-        np.testing.assert_allclose(
-            crown_class_factor(spcd),
-            crown_class_factor(spcd, np.full(spcd.shape, "N")),
-            atol=1e-12,
-        )
 
     def test_adjusted_available_fuel_matches_the_reference(self):
         """The factor scales available fuel, as PTL_SetBioMass does.
@@ -319,125 +279,6 @@ class TestCrownProportionParity:
                     atol=1e-11,
                     err_msg=f"{eq_id}/{crown_class}",
                 )
-
-    def test_adjustment_defaults_to_inert(self):
-        trees = pd.DataFrame(
-            {
-                "fia_species_code": [122, 202],
-                "dbh": [30.0, 30.0],
-                "height": [18.0, 18.0],
-                "crown_ratio": [0.5, 0.5],
-            }
-        )
-        np.testing.assert_array_equal(
-            available_canopy_fuel(trees),
-            available_canopy_fuel(trees, crown_class_adjustment="none"),
-        )
-        assert not np.allclose(
-            available_canopy_fuel(trees),
-            available_canopy_fuel(
-                trees.assign(cc="D"),
-                crown_class_adjustment="reinhardt_2006",
-                crown_class_column="cc",
-            ),
-        )
-
-    @staticmethod
-    def _two_trees():
-        return pd.DataFrame(
-            {
-                "fia_species_code": [122, 202],
-                "dbh": [30.0, 30.0],
-                "height": [18.0, 18.0],
-                "crown_ratio": [0.5, 0.5],
-                "cc": ["D", "S"],
-            }
-        )
-
-    def test_unknown_adjustment_raises(self):
-        """The arm is named for the paper, not for FuelCalc.
-
-        The multipliers are Reinhardt, Scott, Gray & Keane (2006), the
-        same paper the vertical distribution cubics come from, so the
-        value matches ``vertical_distribution="reinhardt_2006"``.
-        FuelCalc is one program that applies them.
-        """
-        with pytest.raises(ValueError, match="crown_class_adjustment"):
-            available_canopy_fuel(
-                self._two_trees(), crown_class_adjustment="fuelcalc_table"
-            )
-
-    def test_none_means_no_adjustment(self):
-        """``None`` is the natural Python spelling and must not raise.
-
-        ``crown_class_column`` beside it takes a real ``None``, so
-        accepting only the string here is a trap.
-        """
-        trees = self._two_trees()
-        np.testing.assert_array_equal(
-            available_canopy_fuel(trees, crown_class_adjustment=None),
-            available_canopy_fuel(trees, crown_class_adjustment="none"),
-        )
-
-    def test_a_column_that_would_be_ignored_raises(self):
-        """Naming the column says the inventory has crown position.
-
-        Applying no adjustment to it would throw away the only input
-        that makes the adjustment more than a constant.
-        """
-        with pytest.raises(ValueError, match="would be ignored"):
-            available_canopy_fuel(self._two_trees(), crown_class_column="cc")
-
-    def test_the_adjustment_requires_a_column(self):
-        """The two arguments are one decision.
-
-        Allowing the adjustment without the column would apply the
-        Other/none factor to everything, which halves 50 of the 54
-        species — a silent blanket scaling wearing the name of a
-        crown-class adjustment.
-        """
-        with pytest.raises(ValueError, match="needs crown_class_column"):
-            available_canopy_fuel(
-                self._two_trees(), crown_class_adjustment="reinhardt_2006"
-            )
-
-    def test_uniform_other_none_is_reachable_deliberately(self):
-        """A column of "N" is FuelCalc's blank crown class field.
-
-        The behaviour the bare flag used to give is still available; it
-        just has to be asked for where a reader can see it.
-        """
-        trees = self._two_trees()
-        got = available_canopy_fuel(
-            trees.assign(cc="N"),
-            crown_class_adjustment="reinhardt_2006",
-            crown_class_column="cc",
-        )
-        expected = available_canopy_fuel(trees) * crown_class_factor(
-            trees["fia_species_code"].to_numpy()
-        )
-        np.testing.assert_allclose(got, expected, rtol=1e-12)
-
-    def test_a_missing_column_names_the_parameter(self):
-        with pytest.raises(ValueError, match="crown_class_column"):
-            available_canopy_fuel(
-                self._two_trees(),
-                crown_class_adjustment="reinhardt_2006",
-                crown_class_column="not_a_column",
-            )
-
-    def test_the_fallback_is_nearly_a_constant(self):
-        """Without crown position the adjustment loses its content.
-
-        50 of the 54 species take 0.5, so turning the table on with no
-        column is close to halving every tree. Pinned because it is the
-        difference between a species-and-position adjustment and a
-        blanket scale factor, and it is invisible from the call site.
-        """
-        spcd = fuelcalc_species().index.to_numpy()
-        factors = crown_class_factor(spcd)
-        values, counts = np.unique(factors, return_counts=True)
-        assert dict(zip(np.round(values, 2), counts)) == {0.5: 50, 0.75: 1, 1.0: 3}
 
     def test_no_unaccounted_equation_ids(self):
         """Every Id we define is either in the source or explained here."""
@@ -811,9 +652,10 @@ class TestCanopyCoverParity:
     """Crown width and the overlap correction against NC_CA.C.
 
     Crookston & Stage (1999), RMRS-GTR-24, reached through FFE-FVS.
-    ``crown_overlap`` is the estimator FuelCalc uses; it is the one to
-    select for reproducing FuelCalc or LANDFIRE, and the weaker of the
-    two cover methods for inventories that carry stem positions.
+    ``crown_overlap`` is the estimator FuelCalc uses, so it is the arm
+    to select when reproducing FuelCalc or LANDFIRE. How it differs
+    from the other two cover methods is covered in
+    :mod:`tests.canopy_fuel.test_cover`.
     """
 
     TRANSFORM = (30.0, 0.0, 0.0, 0.0, -30.0, 0.0)
@@ -882,180 +724,3 @@ class TestCanopyCoverParity:
             )
             theirs = fc.ca_overlap(total_sqft, self.CELL_SQ_M * self.FT2_PER_M2)
             assert ours == pytest.approx(theirs, rel=1e-9)
-
-    def test_crown_overlap_cannot_see_arrangement(self):
-        """Its defining property, and its limitation.
-
-        The estimator reads only total crown area, so translating stems
-        within a cell cannot move it. The union sees the difference,
-        which is the whole reason both methods exist.
-        """
-        rng = np.random.default_rng(11)
-        n = 25
-        layouts = {
-            "random": (rng.uniform(4, 26, n), -rng.uniform(4, 26, n)),
-            "grid": (
-                np.tile(np.linspace(4, 26, 5), 5),
-                -np.repeat(np.linspace(4, 26, 5), 5),
-            ),
-            "clumped": (rng.normal(15, 1.5, n), -rng.normal(15, 1.5, n)),
-        }
-        overlap, union = [], []
-        for x, y in layouts.values():
-            trees = pd.DataFrame(
-                {
-                    "x": np.clip(x, 3, 27),
-                    "y": -np.clip(-y, 3, 27),
-                    "fia_species_code": 122,
-                    "dbh": np.full(n, 25.0),
-                    "height": np.full(n, 15.0),
-                    "crown_ratio": np.full(n, 0.5),
-                }
-            )
-            overlap.append(
-                canopy_cover(trees, self.TRANSFORM, (1, 1), method="crown_overlap")[
-                    0, 0
-                ]
-            )
-            union.append(canopy_cover(trees, self.TRANSFORM, (1, 1))[0, 0])
-        assert max(overlap) - min(overlap) < 1e-9
-        assert max(union) - min(union) > 20.0
-
-    def test_methods_agree_when_nothing_can_overlap(self):
-        """One crown in a cell: no overlap to resolve, so both are exact.
-
-        1 - exp(-p) != p, so they agree only in the limit; a crown
-        covering under 2% of the cell puts the two within a tenth of a
-        point.
-        """
-        trees = pd.DataFrame(
-            {
-                "x": [15.0],
-                "y": [-15.0],
-                "fia_species_code": [122],
-                "dbh": [8.0],
-                "height": [7.0],
-                "crown_ratio": [0.5],
-            }
-        )
-        union = canopy_cover(trees, self.TRANSFORM, (1, 1))[0, 0]
-        overlap = canopy_cover(trees, self.TRANSFORM, (1, 1), method="crown_overlap")[
-            0, 0
-        ]
-        assert union < 2.0
-        assert overlap == pytest.approx(union, abs=0.1)
-
-    def test_unknown_method_raises(self):
-        trees = pd.DataFrame(
-            {
-                "x": [15.0],
-                "y": [-15.0],
-                "fia_species_code": [122],
-                "dbh": [20.0],
-                "height": [15.0],
-                "crown_ratio": [0.5],
-            }
-        )
-        with pytest.raises(ValueError, match="canopy cover method"):
-            canopy_cover(trees, self.TRANSFORM, (1, 1), method="crookston")
-
-    def test_cover_counts_species_excluded_from_bulk_density(self):
-        """Cover is not gated by the species inclusion flag.
-
-        ``PTL_CanCov`` (``NC_PTL2.C:44``) loops over every live record,
-        skipping only the dead. The inclusion flag is read in exactly
-        one place in the whole source, ``NC_PTL.C:731``, inside the loop
-        that builds the bulk-density profile. So a hardwood contributes
-        to cover while contributing nothing to CBD.
-
-        Pinned ahead of the ``fuelcalc_default`` species exclusion
-        slice, which must gate cbd/cbh/chm/cfl and leave cc alone.
-        """
-        excluded = fuelcalc_species()
-        excluded = excluded[excluded["INCL_CBD"] == "No"]
-        assert not excluded.empty
-        spcd = int(excluded.index[0])
-
-        trees = pd.DataFrame(
-            {
-                "x": [15.0],
-                "y": [-15.0],
-                "fia_species_code": [spcd],
-                "dbh": [30.0],
-                "height": [18.0],
-                "crown_ratio": [0.6],
-            }
-        )
-        for method in ("crown_union", "crown_overlap"):
-            assert (
-                canopy_cover(trees, self.TRANSFORM, (1, 1), method=method)[0, 0] > 0.0
-            ), method
-
-
-class TestCoverFraction:
-    """cover_fraction: the union restricted by canopy height.
-
-    No FuelCalc counterpart -- FuelCalc has one cover estimator. This is
-    the CHM-comparable variable, so what the tests pin is its relation
-    to crown_union rather than parity with anything.
-    """
-
-    TRANSFORM = (30.0, 0.0, 0.0, 0.0, -30.0, 0.0)
-
-    @staticmethod
-    def _stand(heights):
-        n = len(heights)
-        rng = np.random.default_rng(4)
-        return pd.DataFrame(
-            {
-                "x": rng.uniform(4.0, 26.0, n),
-                "y": -rng.uniform(4.0, 26.0, n),
-                "fia_species_code": 122,
-                "dbh": np.linspace(5.0, 40.0, n),
-                "height": np.asarray(heights, dtype=float),
-                "crown_ratio": np.full(n, 0.6),
-            }
-        )
-
-    def _cover(self, trees, **kw):
-        return canopy_cover(trees, self.TRANSFORM, (1, 1), **kw)[0, 0]
-
-    def test_zero_threshold_is_crown_union(self):
-        trees = self._stand(np.linspace(0.5, 25.0, 30))
-        assert self._cover(
-            trees, method="cover_fraction", height_threshold=0.0
-        ) == pytest.approx(self._cover(trees), abs=1e-12)
-
-    def test_monotonic_in_the_threshold(self):
-        """Raising the bar can only remove trees, never add them."""
-        trees = self._stand(np.linspace(0.5, 25.0, 30))
-        covers = [
-            self._cover(trees, method="cover_fraction", height_threshold=t)
-            for t in np.arange(0.0, 30.0, 0.5)
-        ]
-        assert all(b <= a + 1e-12 for a, b in zip(covers, covers[1:]))
-        assert covers[0] > 0.0
-        assert covers[-1] == 0.0
-
-    def test_threshold_is_strict(self):
-        """A tree exactly at the threshold does not clear it."""
-        trees = self._stand([2.0, 2.0])
-        assert self._cover(trees, method="cover_fraction", height_threshold=2.0) == 0.0
-        assert self._cover(trees, method="cover_fraction", height_threshold=1.99) > 0.0
-
-    def test_it_is_not_the_same_as_crown_union(self):
-        """Understorey is exactly what separates them."""
-        trees = self._stand([1.0, 1.2, 1.5, 18.0])
-        union = self._cover(trees)
-        fraction = self._cover(trees, method="cover_fraction", height_threshold=2.0)
-        assert fraction < union - 1.0
-
-    def test_negative_threshold_raises(self):
-        with pytest.raises(ValueError, match="height_threshold"):
-            self._cover(
-                self._stand([10.0]), method="cover_fraction", height_threshold=-1.0
-            )
-
-    def test_all_trees_below_threshold_gives_zero(self):
-        trees = self._stand([0.5, 1.0, 1.9])
-        assert self._cover(trees, method="cover_fraction") == 0.0
