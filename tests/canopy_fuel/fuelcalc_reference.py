@@ -359,6 +359,83 @@ def crown_class_factor(reduc_code: str, crown_class: str) -> float:
 
 
 # --------------------------------------------------------------------
+# canopy cover: NC_CA.C, table nc_ca2.h
+# --------------------------------------------------------------------
+# Crown width coefficients (A, B, Ratio) by FVS species index, from
+# Crookston & Stage (1999) via FFE-FVS, fitted to the R6 Permanent Plot
+# Grid Inventory. Transcribed from nc_ca2.h; the User Guide (p. 78)
+# prints the same numbers, differing only in numbering the catch-all
+# row 38 where the C and sr_ESD[] use 39.
+CROWN_WIDTH_COEFFICIENTS: dict[int, tuple[float, float, float]] = {
+    1: (3.9723, 0.5177, 0.473),  # SF
+    2: (3.8166, 0.5229, 0.452),  # WF
+    3: (4.187, 0.5341, 0.489),  # GF
+    4: (3.2348, 0.5179, 0.385),  # AF
+    5: (3.1146, 0.578, 0.345),  # RF
+    7: (3.0614, 0.6276, 0.32),  # NF
+    8: (3.5341, 0.5374, 0.331),  # YC
+    9: (4.092, 0.4912, 0.412),  # C
+    10: (3.6802, 0.494, 0.412),  # S
+    11: (2.4132, 0.6403, 0.298),  # LP
+    12: (3.2367, 0.6247, 0.406),  # JP
+    13: (3.061, 0.6201, 0.385),  # SP
+    14: (3.4447, 0.5185, 0.476),  # WP
+    15: (2.8541, 0.64, 0.407),  # PP
+    16: (4.4215, 0.5329, 0.517),  # DF
+    17: (4.4215, 0.5329, 0.517),  # RW
+    18: (6.2318, 0.4259, 0.698),  # RC
+    19: (5.4864, 0.5144, 0.533),  # WH
+    20: (2.9372, 0.5878, 0.253),  # MH
+    21: (7.5183, 0.4461, 0.815),  # BM
+    22: (7.0806, 0.4771, 0.73),  # RA
+    23: (7.0806, 0.4771, 0.73),  # WA
+    24: (5.898, 0.4841, 0.601),  # PB
+    25: (2.4922, 0.8544, 0.14),  # GC
+    26: (4.091, 0.5907, 0.351),  # AS
+    27: (7.5183, 0.4461, 0.815),  # CW
+    28: (2.4922, 0.8544, 0.14),  # WO
+    29: (4.5859, 0.4841, 0.468),  # J
+    30: (2.1039, 0.6758, 0.207),  # LL
+    31: (2.1606, 0.6897, 0.255),  # WB
+    32: (2.1451, 0.7132, 0.248),  # KP
+    33: (4.5859, 0.4841, 0.468),  # PY
+    34: (2.4922, 0.8544, 0.14),  # DG
+    35: (4.5859, 0.4841, 0.468),  # HT
+    36: (4.5859, 0.4841, 0.468),  # CH
+    37: (4.5859, 0.4841, 0.468),  # WI
+    39: (4.4215, 0.5329, 0.517),  # Other
+}
+
+BREAST_HEIGHT_FT = 4.5
+
+
+def ca_crown_area(cover_eq: int, dia_in: float, height_ft: float) -> float:
+    """``NC_CA.C CA_CrnArea()``: crown area of one tree, square feet.
+
+    The C multiplies by a five-digit 3.14159; pi is what the equation
+    means, and the difference is 8e-7 relative.
+    """
+    a, b, ratio = CROWN_WIDTH_COEFFICIENTS[cover_eq]
+    if height_ft <= BREAST_HEIGHT_FT:
+        width = ratio * dia_in
+    else:
+        width = a * dia_in**b
+    return math.pi * (width / 2.0) ** 2
+
+
+def ca_overlap(area_sqft: float, ground_sqft: float = 43560.0) -> float:
+    """``NC_CA.C CA_Overlap()``: percent cover after random overlap.
+
+    The C divides by an acre because a FuelCalc plot is one; the ground
+    area is a parameter here so the same estimator can be applied to a
+    grid cell.
+    """
+    if area_sqft == 0:
+        return 0.0
+    return 100.0 * (1.0 - math.exp(-area_sqft / ground_sqft))
+
+
+# --------------------------------------------------------------------
 # vertical distribution: NC_VD.C
 # --------------------------------------------------------------------
 VDIST_CUBICS: dict[str, tuple[float, float, float]] = {

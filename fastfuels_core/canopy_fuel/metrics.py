@@ -29,7 +29,7 @@ import xarray as xr
 from affine import Affine
 from rasterio.features import rasterize
 
-from fastfuels_core.allometry import brown, nsvb
+from fastfuels_core.allometry import brown, fvs, nsvb
 from fastfuels_core.canopy_fuel.ref_data import (
     fuelcalc_crown_class_factors,
     fuelcalc_species,
@@ -111,21 +111,54 @@ def disk_rect_overlap_area(
 
 
 def max_crown_radius(
-    trees: pd.DataFrame, *, crown_radius_column: str | None = None
+    trees: pd.DataFrame,
+    *,
+    crown_radius_column: str | None = None,
+    equations: str = "purves",
 ) -> np.ndarray:
     """Per-tree maximum crown radius (m).
 
-    Reads ``crown_radius_column`` when given (e.g. LiDAR-measured radii);
-    otherwise computes the Purves et al. (2007) allometric radius from
-    ``fia_species_code``, ``dbh``, ``height``, and ``crown_ratio``.
+    Reads ``crown_radius_column`` when given (e.g. LiDAR-measured
+    radii), which overrides ``equations``. Otherwise ``equations``
+    selects an allometry:
+
+    ``"purves"`` (default)
+        Purves et al. (2007), from ``fia_species_code``, ``dbh``,
+        ``height`` and ``crown_ratio``.
+    ``"fuelcalc"``
+        Half the FVS/FOFEM crown width behind FuelCalc's canopy cover
+        (see :mod:`fastfuels_core.allometry.fvs`) — diameter alone above
+        breast height, regional coefficients.
+
+    The radius source is independent of how canopy cover treats
+    overlap, so the two can be varied separately: a run can compare
+    overlap treatments on one radius, or radii under one overlap
+    treatment, without confounding the two.
 
     Returns
     -------
     numpy.ndarray
         Shape ``(len(trees),)``, meters.
+
+    Raises
+    ------
+    ValueError
+        For an unknown ``equations`` choice.
     """
     if crown_radius_column is not None:
         return trees[crown_radius_column].to_numpy(dtype=np.float64)
+    if equations not in ("purves", "fuelcalc"):
+        raise ValueError(
+            f"Unknown crown radius equations {equations!r}; expected "
+            f"'purves' or 'fuelcalc'."
+        )
+    if equations == "fuelcalc":
+        width_ft = fvs.crown_width_for_species(
+            trees["fia_species_code"].to_numpy(),
+            trees["dbh"].to_numpy(dtype=np.float64) * conversion_factor("cm", "inch"),
+            trees["height"].to_numpy(dtype=np.float64) * conversion_factor("m", "foot"),
+        )
+        return 0.5 * width_ft * conversion_factor("foot", "m")
     model = PurvesCrownProfile(
         trees["fia_species_code"],
         trees["dbh"],
@@ -738,33 +771,111 @@ def canopy_fuel_load(
     return profile.sum(axis=0) * layer_depth
 
 
+def _crown_overlap_cover(
+    x: np.ndarray,
+    y: np.ndarray,
+    radius: np.ndarray,
+    transform: tuple[float, float, float, float, float, float],
+    shape: tuple[int, int],
+) -> np.ndarray:
+    """Crookston & Stage (1999) cover, per cell.
+
+    ``NC_CA.C CA_Overlap`` divides accumulated crown area by an acre
+    because a FuelCalc plot is one; the ground area here is the cell, so
+    that is the denominator. Both are the same Poisson argument: with
+    stems placed at random, the expected uncovered fraction of a patch
+    of ground is ``exp(-crown area / patch area)``.
+    """
+    a, _, c, _, e, f = transform
+    ny, nx = shape
+    area = np.zeros(shape, dtype=np.float64)
+    if len(x) == 0:
+        return area
+
+    radius = np.maximum(radius, 0.0)
+    col_lo = np.floor((x - radius - c) / a).astype(np.int64)
+    col_hi = np.floor((x + radius - c) / a).astype(np.int64)
+    row_lo = np.floor((y + radius - f) / e).astype(np.int64)  # e < 0
+    row_hi = np.floor((y - radius - f) / e).astype(np.int64)
+    flat = area.reshape(-1)
+    for row_offset in range(int((row_hi - row_lo).max()) + 1):
+        rows = row_lo + row_offset
+        y_hi = f + rows * e
+        y_lo = y_hi + e
+        for col_offset in range(int((col_hi - col_lo).max()) + 1):
+            cols = col_lo + col_offset
+            x_lo = c + cols * a
+            overlap = disk_rect_overlap_area(x, y, radius, x_lo, x_lo + a, y_lo, y_hi)
+            inside = (cols >= 0) & (cols < nx) & (rows >= 0) & (rows < ny)
+            overlap = np.where(inside, overlap, 0.0)
+            if not overlap.any():
+                continue
+            flat += np.bincount(
+                np.where(inside, rows * nx + cols, 0),
+                weights=overlap,
+                minlength=flat.size,
+            )
+    cell_area = abs(a * e)
+    return 100.0 * (1.0 - np.exp(-area / cell_area))
+
+
 def canopy_cover(
     trees: pd.DataFrame,
     transform: tuple[float, float, float, float, float, float],
     shape: tuple[int, int],
     *,
     crown_radius_column: str | None = None,
+    crown_radius_equations: str = "purves",
+    method: str = "crown_union",
     supersample: int | None = None,
 ) -> np.ndarray:
-    """Per-cell projected canopy cover (%) from the crown-disk union.
+    """Per-cell projected canopy cover (%).
 
-    Overlapping crowns count once (a true union, not a sum of crown
-    areas): crown disks are rasterized as a binary union on a fine grid
-    of ``supersample x supersample`` pixels per output cell, then
-    block-reduced to covered fractions. ``supersample`` defaults to a
-    fine pixel of at most 0.5 m so crown edges are resolved at any
-    output resolution. Crown radii come from ``crown_radius_column`` or
-    the Purves allometric radius.
+    ``method`` decides how crowns that overlap each other are counted.
+    Both methods clip crowns to the cell the same way, so they differ
+    only in that treatment and can be compared directly.
 
-    The union internals are an implementation detail (fastfuels-core#95
-    keeps them swappable against a kd-tree analytic candidate pending
-    profiling); only the covered fractions are contract.
+    ``"crown_union"`` (default)
+        The geometric union of the crown disks: overlapping crowns count
+        once. Crown disks are rasterized as a binary union on a fine
+        grid of ``supersample x supersample`` pixels per output cell,
+        then block-reduced to covered fractions. ``supersample``
+        defaults to a fine pixel of at most 0.5 m so crown edges are
+        resolved at any output resolution. The union internals are an
+        implementation detail (fastfuels-core#95 keeps them swappable
+        against a kd-tree analytic candidate pending profiling); only
+        the covered fractions are contract.
+    ``"crown_overlap"``
+        Crookston & Stage (1999) random-overlap correction,
+        ``100 * (1 - exp(-crown area in cell / cell area))``: the cover
+        expected if stems were placed at random. This is FuelCalc's
+        estimator, and it is the one to use when reproducing FuelCalc
+        or LANDFIRE. It is otherwise the weaker of the two here — it
+        answers the question you are forced to ask when you know only a
+        stand table, and we know where the stems are, so the union
+        resolves overlap exactly rather than in expectation. The crown
+        area in a cell is the exact disk/cell intersection, so a crown
+        straddling a boundary contributes to both cells in proportion.
+
+    Crown radii come from ``crown_radius_column`` or
+    ``crown_radius_equations`` (see :func:`max_crown_radius`), which is
+    independent of ``method``.
 
     Returns
     -------
     numpy.ndarray
         Cover (%), shape ``(ny, nx)``.
+
+    Raises
+    ------
+    ValueError
+        For an unknown ``method``, or a rotated transform.
     """
+    if method not in ("crown_union", "crown_overlap"):
+        raise ValueError(
+            f"Unknown canopy cover method {method!r}; expected "
+            f"'crown_union' or 'crown_overlap'."
+        )
     a, b_rot, c, d_rot, e, f = transform
     if b_rot != 0.0 or d_rot != 0.0:
         raise ValueError("Rotated transforms are not supported.")
@@ -776,7 +887,13 @@ def canopy_cover(
 
     x = trees["x"].to_numpy(dtype=np.float64)
     y = trees["y"].to_numpy(dtype=np.float64)
-    radius = max_crown_radius(trees, crown_radius_column=crown_radius_column)
+    radius = max_crown_radius(
+        trees,
+        crown_radius_column=crown_radius_column,
+        equations=crown_radius_equations,
+    )
+    if method == "crown_overlap":
+        return _crown_overlap_cover(x, y, radius, transform, shape)
     crowns = shapely.buffer(shapely.points(x, y), radius, quad_segs=16)
     max_radius = float(radius.max())
 
@@ -817,6 +934,8 @@ def compute_canopy_metrics(
     *,
     fuel_column: str | None = None,
     crown_radius_column: str | None = None,
+    crown_radius_equations: str = "purves",
+    cover_method: str = "crown_union",
     equations: str = "nsvb",
     crown_class_adjustment: str = "none",
     crown_class_column: str | None = None,
@@ -919,7 +1038,12 @@ def compute_canopy_metrics(
 
     if "cc" in bands:
         dataset["cc"].data[...] = canopy_cover(
-            trees, transform, shape, crown_radius_column=crown_radius_column
+            trees,
+            transform,
+            shape,
+            crown_radius_column=crown_radius_column,
+            crown_radius_equations=crown_radius_equations,
+            method=cover_method,
         )
 
     return dataset

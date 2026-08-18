@@ -56,3 +56,18 @@ def fuelcalc_species() -> pd.DataFrame:
     )
     table["SPCD"] = table["SPCD"].astype(int)
     return table.set_index("SPCD")
+
+
+@lru_cache(maxsize=1)
+def fuelcalc_crown_width() -> pd.DataFrame:
+    """FVS crown width coefficients, indexed by FVS species index.
+
+    ``COVER_EQ`` in the species table selects a row. The C table numbers
+    the catch-all "Other" row 39 and the User Guide's printed table
+    numbers it 38; ``sr_ESD[]`` points species at 39, so that is the
+    number carried here. Every other row agrees between the two.
+    """
+    return pd.read_csv(
+        files("fastfuels_core.data") / "FUELCALC_CROWN_WIDTH.csv",
+        index_col="COVER_EQ",
+    )

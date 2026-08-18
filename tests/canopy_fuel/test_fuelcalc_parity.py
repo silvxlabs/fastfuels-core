@@ -27,14 +27,17 @@ from __future__ import annotations
 
 from importlib.resources import files
 
+import math
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from fastfuels_core.allometry import brown
+from fastfuels_core.allometry import brown, fvs
 from fastfuels_core.canopy_fuel.metrics import (
     FT_TO_M,
     available_canopy_fuel,
+    canopy_cover,
     canopy_fuel_load,
     crown_class_factor,
     cbd_running_mean,
@@ -45,6 +48,7 @@ from fastfuels_core.canopy_fuel.metrics import (
 from fastfuels_core.units import conversion_factor
 from fastfuels_core.canopy_fuel.ref_data import (
     fuelcalc_crown_class_factors,
+    fuelcalc_crown_width,
     fuelcalc_species,
     fuelcalc_vdist,
 )
@@ -790,3 +794,156 @@ class TestSpeciesTableParity:
         crown reduction. We carry the row; nothing may reference it."""
         assert "GF" in fuelcalc_crown_class_factors().index
         assert "GF" not in set(fuelcalc_species()["CROWN_REDUC_CODE"])
+
+
+class TestCanopyCoverParity:
+    """Crown width and the overlap correction against NC_CA.C.
+
+    Crookston & Stage (1999), RMRS-GTR-24, reached through FFE-FVS.
+    ``crown_overlap`` is the estimator FuelCalc uses; it is the one to
+    select for reproducing FuelCalc or LANDFIRE, and the weaker of the
+    two cover methods for inventories that carry stem positions.
+    """
+
+    TRANSFORM = (30.0, 0.0, 0.0, 0.0, -30.0, 0.0)
+    CELL_SQ_M = 30.0 * 30.0
+    FT2_PER_M2 = 1.0 / (0.3048**2)
+
+    def test_coefficient_table_matches_source(self):
+        ours = fuelcalc_crown_width()
+        assert set(ours.index) == set(fc.CROWN_WIDTH_COEFFICIENTS)
+        for eq, (a, b, ratio) in fc.CROWN_WIDTH_COEFFICIENTS.items():
+            row = ours.loc[eq]
+            assert (row.A, row.B, row.RATIO) == (a, b, ratio), eq
+
+    def test_every_species_resolves_to_a_row(self):
+        species = fuelcalc_species()
+        assert set(species["COVER_EQ"]) <= set(fuelcalc_crown_width().index)
+
+    @pytest.mark.parametrize("cover_eq", sorted(fc.CROWN_WIDTH_COEFFICIENTS))
+    def test_crown_width_matches_ca_crnarea(self, cover_eq):
+        """Both branches, either side of the 4.5 ft split."""
+        dia = np.round(np.arange(0.2, 40.0, 0.2), 4)
+        for height in (2.0, 4.5, 4.6, 60.0):
+            ours = fvs.crown_width(
+                np.full(dia.shape, cover_eq), dia, np.full(dia.shape, height)
+            )
+            theirs = np.array(
+                [
+                    2.0
+                    * math.sqrt(fc.ca_crown_area(cover_eq, float(d), height) / math.pi)
+                    for d in dia
+                ]
+            )
+            np.testing.assert_allclose(ours, theirs, rtol=1e-12, atol=1e-12)
+
+    def test_cover_matches_ca_overlap(self):
+        """One cell, crowns wholly inside it, against the C estimator."""
+        species = fuelcalc_species()
+        rng = np.random.default_rng(20260818)
+        for _ in range(25):
+            n = int(rng.integers(1, 30))
+            spcd = rng.choice(species.index.to_numpy(), n)
+            trees = pd.DataFrame(
+                {
+                    "x": rng.uniform(12.0, 18.0, n),
+                    "y": -rng.uniform(12.0, 18.0, n),
+                    "fia_species_code": spcd,
+                    "dbh": rng.uniform(2.0, 25.0, n),
+                    "height": rng.uniform(6.0, 30.0, n),
+                    "crown_ratio": rng.uniform(0.3, 0.9, n),
+                }
+            )
+            ours = canopy_cover(
+                trees,
+                self.TRANSFORM,
+                (1, 1),
+                crown_radius_equations="fuelcalc",
+                method="crown_overlap",
+            )[0, 0]
+            total_sqft = sum(
+                fc.ca_crown_area(
+                    int(species.loc[int(c), "COVER_EQ"]),
+                    float(d) * conversion_factor("cm", "inch"),
+                    float(h) * conversion_factor("m", "foot"),
+                )
+                for c, d, h in zip(spcd, trees["dbh"], trees["height"])
+            )
+            theirs = fc.ca_overlap(total_sqft, self.CELL_SQ_M * self.FT2_PER_M2)
+            assert ours == pytest.approx(theirs, rel=1e-9)
+
+    def test_crown_overlap_cannot_see_arrangement(self):
+        """Its defining property, and its limitation.
+
+        The estimator reads only total crown area, so translating stems
+        within a cell cannot move it. The union sees the difference,
+        which is the whole reason both methods exist.
+        """
+        rng = np.random.default_rng(11)
+        n = 25
+        layouts = {
+            "random": (rng.uniform(4, 26, n), -rng.uniform(4, 26, n)),
+            "grid": (
+                np.tile(np.linspace(4, 26, 5), 5),
+                -np.repeat(np.linspace(4, 26, 5), 5),
+            ),
+            "clumped": (rng.normal(15, 1.5, n), -rng.normal(15, 1.5, n)),
+        }
+        overlap, union = [], []
+        for x, y in layouts.values():
+            trees = pd.DataFrame(
+                {
+                    "x": np.clip(x, 3, 27),
+                    "y": -np.clip(-y, 3, 27),
+                    "fia_species_code": 122,
+                    "dbh": np.full(n, 25.0),
+                    "height": np.full(n, 15.0),
+                    "crown_ratio": np.full(n, 0.5),
+                }
+            )
+            overlap.append(
+                canopy_cover(trees, self.TRANSFORM, (1, 1), method="crown_overlap")[
+                    0, 0
+                ]
+            )
+            union.append(canopy_cover(trees, self.TRANSFORM, (1, 1))[0, 0])
+        assert max(overlap) - min(overlap) < 1e-9
+        assert max(union) - min(union) > 20.0
+
+    def test_methods_agree_when_nothing_can_overlap(self):
+        """One crown in a cell: no overlap to resolve, so both are exact.
+
+        1 - exp(-p) != p, so they agree only in the limit; a crown
+        covering under 2% of the cell puts the two within a tenth of a
+        point.
+        """
+        trees = pd.DataFrame(
+            {
+                "x": [15.0],
+                "y": [-15.0],
+                "fia_species_code": [122],
+                "dbh": [8.0],
+                "height": [7.0],
+                "crown_ratio": [0.5],
+            }
+        )
+        union = canopy_cover(trees, self.TRANSFORM, (1, 1))[0, 0]
+        overlap = canopy_cover(trees, self.TRANSFORM, (1, 1), method="crown_overlap")[
+            0, 0
+        ]
+        assert union < 2.0
+        assert overlap == pytest.approx(union, abs=0.1)
+
+    def test_unknown_method_raises(self):
+        trees = pd.DataFrame(
+            {
+                "x": [15.0],
+                "y": [-15.0],
+                "fia_species_code": [122],
+                "dbh": [20.0],
+                "height": [15.0],
+                "crown_ratio": [0.5],
+            }
+        )
+        with pytest.raises(ValueError, match="canopy cover method"):
+            canopy_cover(trees, self.TRANSFORM, (1, 1), method="crookston")
