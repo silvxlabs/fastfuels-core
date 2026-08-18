@@ -365,6 +365,9 @@ def available_canopy_fuel(
             f"Unknown equations {equations!r}; expected 'nsvb' or " f"'brown_1978'."
         )
 
+    if len(trees) == 0:
+        return np.zeros(0, dtype=np.float64)
+
     spcd = trees["fia_species_code"].to_numpy()
     species = fuelcalc_species()
     unknown = np.setdiff1d(spcd, species.index.to_numpy())
@@ -967,6 +970,7 @@ def compute_canopy_metrics(
     foliage_fraction: float = 1.0,
     branchwood_fraction: float = 0.5,
     min_tree_height: float = 0.0,
+    exclude_hardwoods: bool = False,
     layer_depth: float = FT_TO_M,
     vertical_distribution: str = "reinhardt_2006",
     horizontal_distribution: str = "crown_projected",
@@ -983,6 +987,13 @@ def compute_canopy_metrics(
     present are computed. Tree coordinates must be in the dataset's CRS;
     only live trees should be passed. Trees shorter than
     ``min_tree_height`` (m) are excluded.
+
+    ``exclude_hardwoods`` drops broadleaf species from the bulk-density
+    profile — ``cbd``, ``cbh``, ``chm`` and ``cfl`` — while leaving
+    ``cc`` computed over every tree, since broadleaf canopy still
+    occupies ground even where it is not treated as crown-fire fuel.
+    The crown fire models CBD feeds are built for conifer crowns, so a
+    hardwood understorey would otherwise raise CBD and lower CBH.
 
     Chains the public stages: :func:`available_canopy_fuel` →
     :func:`vertical_profile` → :func:`cbd_running_mean` /
@@ -1020,9 +1031,18 @@ def compute_canopy_metrics(
 
     trees = trees[trees["height"].to_numpy() >= min_tree_height]
 
+    # Hardwoods are dropped from the bulk-density profile only, never
+    # from cover: broadleaf canopy still occupies ground.
+    fuel_trees = trees
+    if exclude_hardwoods:
+        conifer = fuelcalc_species()["INCL_CBD"].reindex(
+            trees["fia_species_code"].to_numpy()
+        )
+        fuel_trees = trees[(conifer == "Yes").to_numpy()]
+
     if bands & {"cbd", "cbh", "chm", "cfl"}:
         fuel = available_canopy_fuel(
-            trees,
+            fuel_trees,
             fuel_column=fuel_column,
             equations=equations,
             crown_class_adjustment=crown_class_adjustment,
@@ -1031,7 +1051,7 @@ def compute_canopy_metrics(
             branchwood_fraction=branchwood_fraction,
         )
         profile = vertical_profile(
-            trees,
+            fuel_trees,
             fuel,
             transform,
             shape,

@@ -1033,3 +1033,62 @@ class TestComputeCanopyMetrics:
             (ds.cfl.values * CELL_AREA).sum(), fuel.sum(), rtol=1e-3
         )
         assert (ds.cbd.values >= 0).all()
+
+
+class TestExcludeHardwoods:
+    """Hardwoods leave the bulk-density profile but stay in cover."""
+
+    @staticmethod
+    def _dataset():
+        import xarray as xr
+        from affine import Affine
+
+        d = xr.Dataset(
+            {
+                k: (("y", "x"), np.full((1, 1), np.nan, np.float32))
+                for k in ("cbd", "cbh", "cc")
+            },
+            coords={"y": [-15.0], "x": [15.0]},
+        )
+        return d.rio.write_crs("EPSG:5070").rio.write_transform(
+            Affine(30, 0, 0, 0, -30, 0)
+        )
+
+    @staticmethod
+    def _mixed_stand():
+        # 202 Douglas-fir (conifer), 351 red alder (hardwood).
+        return pd.DataFrame(
+            {
+                "x": [10.0, 20.0],
+                "y": [-10.0, -20.0],
+                "fia_species_code": [202, 351],
+                "dbh": [35.0, 30.0],
+                "height": [20.0, 14.0],
+                "crown_ratio": [0.6, 0.7],
+            }
+        )
+
+    def test_cbd_drops_and_cover_does_not(self):
+        trees = self._mixed_stand()
+        both = compute_canopy_metrics(trees, self._dataset())
+        conifer_only = compute_canopy_metrics(
+            trees, self._dataset(), exclude_hardwoods=True
+        )
+        assert conifer_only["cbd"].values[0, 0] < both["cbd"].values[0, 0]
+        assert conifer_only["cc"].values[0, 0] == pytest.approx(both["cc"].values[0, 0])
+
+    def test_inert_on_an_all_conifer_stand(self):
+        trees = self._mixed_stand()
+        trees = trees[trees["fia_species_code"] == 202]
+        a = compute_canopy_metrics(trees, self._dataset())
+        b = compute_canopy_metrics(trees, self._dataset(), exclude_hardwoods=True)
+        for band in ("cbd", "cbh", "cc"):
+            np.testing.assert_array_equal(a[band].values, b[band].values)
+
+    def test_all_hardwood_stand_has_cover_but_no_cbd(self):
+        trees = self._mixed_stand()
+        trees = trees[trees["fia_species_code"] == 351]
+        out = compute_canopy_metrics(trees, self._dataset(), exclude_hardwoods=True)
+        assert out["cc"].values[0, 0] > 0.0
+        assert out["cbd"].values[0, 0] == 0.0
+        assert np.isnan(out["cbh"].values[0, 0])
