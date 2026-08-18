@@ -947,3 +947,35 @@ class TestCanopyCoverParity:
         )
         with pytest.raises(ValueError, match="canopy cover method"):
             canopy_cover(trees, self.TRANSFORM, (1, 1), method="crookston")
+
+    def test_cover_counts_species_excluded_from_bulk_density(self):
+        """Cover is not gated by the species inclusion flag.
+
+        ``PTL_CanCov`` (``NC_PTL2.C:44``) loops over every live record,
+        skipping only the dead. The inclusion flag is read in exactly
+        one place in the whole source, ``NC_PTL.C:731``, inside the loop
+        that builds the bulk-density profile. So a hardwood contributes
+        to cover while contributing nothing to CBD.
+
+        Pinned ahead of the ``fuelcalc_default`` species exclusion
+        slice, which must gate cbd/cbh/chm/cfl and leave cc alone.
+        """
+        excluded = fuelcalc_species()
+        excluded = excluded[excluded["INCL_CBD"] == "No"]
+        assert not excluded.empty
+        spcd = int(excluded.index[0])
+
+        trees = pd.DataFrame(
+            {
+                "x": [15.0],
+                "y": [-15.0],
+                "fia_species_code": [spcd],
+                "dbh": [30.0],
+                "height": [18.0],
+                "crown_ratio": [0.6],
+            }
+        )
+        for method in ("crown_union", "crown_overlap"):
+            assert (
+                canopy_cover(trees, self.TRANSFORM, (1, 1), method=method)[0, 0] > 0.0
+            ), method
