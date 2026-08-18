@@ -329,7 +329,11 @@ class TestCrownProportionParity:
         )
         assert not np.allclose(
             available_canopy_fuel(trees),
-            available_canopy_fuel(trees, crown_class_adjustment="fuelcalc_table"),
+            available_canopy_fuel(
+                trees.assign(cc="D"),
+                crown_class_adjustment="fuelcalc_table",
+                crown_class_column="cc",
+            ),
         )
 
     @staticmethod
@@ -368,6 +372,36 @@ class TestCrownProportionParity:
         """
         with pytest.raises(ValueError, match="would be ignored"):
             available_canopy_fuel(self._two_trees(), crown_class_column="cc")
+
+    def test_the_adjustment_requires_a_column(self):
+        """The two arguments are one decision.
+
+        Allowing the adjustment without the column would apply the
+        Other/none factor to everything, which halves 50 of the 54
+        species — a silent blanket scaling wearing the name of a
+        crown-class adjustment.
+        """
+        with pytest.raises(ValueError, match="needs crown_class_column"):
+            available_canopy_fuel(
+                self._two_trees(), crown_class_adjustment="fuelcalc_table"
+            )
+
+    def test_uniform_other_none_is_reachable_deliberately(self):
+        """A column of "N" is FuelCalc's blank crown class field.
+
+        The behaviour the bare flag used to give is still available; it
+        just has to be asked for where a reader can see it.
+        """
+        trees = self._two_trees()
+        got = available_canopy_fuel(
+            trees.assign(cc="N"),
+            crown_class_adjustment="fuelcalc_table",
+            crown_class_column="cc",
+        )
+        expected = available_canopy_fuel(trees) * crown_class_factor(
+            trees["fia_species_code"].to_numpy()
+        )
+        np.testing.assert_allclose(got, expected, rtol=1e-12)
 
     def test_a_missing_column_names_the_parameter(self):
         with pytest.raises(ValueError, match="crown_class_column"):
