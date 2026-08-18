@@ -827,6 +827,7 @@ def canopy_cover(
     crown_radius_column: str | None = None,
     crown_radius_equations: str = "purves",
     method: str = "crown_union",
+    height_threshold: float = 2.0,
     supersample: int | None = None,
 ) -> np.ndarray:
     """Per-cell projected canopy cover (%).
@@ -857,6 +858,23 @@ def canopy_cover(
         area in a cell is the exact disk/cell intersection, so a crown
         straddling a boundary contributes to both cells in proportion.
 
+    ``"cover_fraction"``
+        The union again, but only over trees taller than
+        ``height_threshold`` (m, default 2.0). A CHM-style measure: it
+        reports where the canopy *surface* clears a height rather than
+        the projection of all suspended canopy, so it is the cover
+        variable to compare against one derived from a canopy height
+        model. ``height_threshold=0`` makes it identical to
+        ``crown_union``.
+
+        Crowns are flat disks at the tree top here, as they are for
+        every method in this function, so a tree either clears the
+        threshold everywhere under its crown or nowhere. A real canopy
+        surface tapers, and a crown near the threshold would cover part
+        of its footprint; resolving that needs a crown profile and
+        would make this method the only one not built on disks, so it
+        is left as a separate refinement rather than folded in here.
+
     Crown radii come from ``crown_radius_column`` or
     ``crown_radius_equations`` (see :func:`max_crown_radius`), which is
     independent of ``method``.
@@ -871,11 +889,17 @@ def canopy_cover(
     ValueError
         For an unknown ``method``, or a rotated transform.
     """
-    if method not in ("crown_union", "crown_overlap"):
+    if method not in ("crown_union", "crown_overlap", "cover_fraction"):
         raise ValueError(
             f"Unknown canopy cover method {method!r}; expected "
-            f"'crown_union' or 'crown_overlap'."
+            f"'crown_union', 'crown_overlap' or 'cover_fraction'."
         )
+    if height_threshold < 0.0:
+        raise ValueError(
+            f"height_threshold must be non-negative, got {height_threshold}."
+        )
+    if method == "cover_fraction":
+        trees = trees[trees["height"].to_numpy(dtype=np.float64) > height_threshold]
     a, b_rot, c, d_rot, e, f = transform
     if b_rot != 0.0 or d_rot != 0.0:
         raise ValueError("Rotated transforms are not supported.")
@@ -936,6 +960,7 @@ def compute_canopy_metrics(
     crown_radius_column: str | None = None,
     crown_radius_equations: str = "purves",
     cover_method: str = "crown_union",
+    cover_height_threshold: float = 2.0,
     equations: str = "nsvb",
     crown_class_adjustment: str = "none",
     crown_class_column: str | None = None,
@@ -1044,6 +1069,7 @@ def compute_canopy_metrics(
             crown_radius_column=crown_radius_column,
             crown_radius_equations=crown_radius_equations,
             method=cover_method,
+            height_threshold=cover_height_threshold,
         )
 
     return dataset

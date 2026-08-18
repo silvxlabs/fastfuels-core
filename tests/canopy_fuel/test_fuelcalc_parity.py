@@ -979,3 +979,72 @@ class TestCanopyCoverParity:
             assert (
                 canopy_cover(trees, self.TRANSFORM, (1, 1), method=method)[0, 0] > 0.0
             ), method
+
+
+class TestCoverFraction:
+    """cover_fraction: the union restricted by canopy height.
+
+    No FuelCalc counterpart -- FuelCalc has one cover estimator. This is
+    the CHM-comparable variable, so what the tests pin is its relation
+    to crown_union rather than parity with anything.
+    """
+
+    TRANSFORM = (30.0, 0.0, 0.0, 0.0, -30.0, 0.0)
+
+    @staticmethod
+    def _stand(heights):
+        n = len(heights)
+        rng = np.random.default_rng(4)
+        return pd.DataFrame(
+            {
+                "x": rng.uniform(4.0, 26.0, n),
+                "y": -rng.uniform(4.0, 26.0, n),
+                "fia_species_code": 122,
+                "dbh": np.linspace(5.0, 40.0, n),
+                "height": np.asarray(heights, dtype=float),
+                "crown_ratio": np.full(n, 0.6),
+            }
+        )
+
+    def _cover(self, trees, **kw):
+        return canopy_cover(trees, self.TRANSFORM, (1, 1), **kw)[0, 0]
+
+    def test_zero_threshold_is_crown_union(self):
+        trees = self._stand(np.linspace(0.5, 25.0, 30))
+        assert self._cover(
+            trees, method="cover_fraction", height_threshold=0.0
+        ) == pytest.approx(self._cover(trees), abs=1e-12)
+
+    def test_monotonic_in_the_threshold(self):
+        """Raising the bar can only remove trees, never add them."""
+        trees = self._stand(np.linspace(0.5, 25.0, 30))
+        covers = [
+            self._cover(trees, method="cover_fraction", height_threshold=t)
+            for t in np.arange(0.0, 30.0, 0.5)
+        ]
+        assert all(b <= a + 1e-12 for a, b in zip(covers, covers[1:]))
+        assert covers[0] > 0.0
+        assert covers[-1] == 0.0
+
+    def test_threshold_is_strict(self):
+        """A tree exactly at the threshold does not clear it."""
+        trees = self._stand([2.0, 2.0])
+        assert self._cover(trees, method="cover_fraction", height_threshold=2.0) == 0.0
+        assert self._cover(trees, method="cover_fraction", height_threshold=1.99) > 0.0
+
+    def test_it_is_not_the_same_as_crown_union(self):
+        """Understorey is exactly what separates them."""
+        trees = self._stand([1.0, 1.2, 1.5, 18.0])
+        union = self._cover(trees)
+        fraction = self._cover(trees, method="cover_fraction", height_threshold=2.0)
+        assert fraction < union - 1.0
+
+    def test_negative_threshold_raises(self):
+        with pytest.raises(ValueError, match="height_threshold"):
+            self._cover(
+                self._stand([10.0]), method="cover_fraction", height_threshold=-1.0
+            )
+
+    def test_all_trees_below_threshold_gives_zero(self):
+        trees = self._stand([0.5, 1.0, 1.9])
+        assert self._cover(trees, method="cover_fraction") == 0.0
