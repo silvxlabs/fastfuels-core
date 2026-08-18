@@ -299,7 +299,7 @@ class TestCrownProportionParity:
                 ours = available_canopy_fuel(
                     trees,
                     equations="brown_1978",
-                    crown_class_adjustment="fuelcalc_table",
+                    crown_class_adjustment="reinhardt_2006",
                     crown_class_column="cc",
                 )
                 theirs = np.array(
@@ -335,7 +335,7 @@ class TestCrownProportionParity:
             available_canopy_fuel(trees),
             available_canopy_fuel(
                 trees.assign(cc="D"),
-                crown_class_adjustment="fuelcalc_table",
+                crown_class_adjustment="reinhardt_2006",
                 crown_class_column="cc",
             ),
         )
@@ -353,8 +353,17 @@ class TestCrownProportionParity:
         )
 
     def test_unknown_adjustment_raises(self):
+        """The arm is named for the paper, not for FuelCalc.
+
+        The multipliers are Reinhardt, Scott, Gray & Keane (2006), the
+        same paper the vertical distribution cubics come from, so the
+        value matches ``vertical_distribution="reinhardt_2006"``.
+        FuelCalc is one program that applies them.
+        """
         with pytest.raises(ValueError, match="crown_class_adjustment"):
-            available_canopy_fuel(self._two_trees(), crown_class_adjustment="fuelcalc")
+            available_canopy_fuel(
+                self._two_trees(), crown_class_adjustment="fuelcalc_table"
+            )
 
     def test_none_means_no_adjustment(self):
         """``None`` is the natural Python spelling and must not raise.
@@ -387,7 +396,7 @@ class TestCrownProportionParity:
         """
         with pytest.raises(ValueError, match="needs crown_class_column"):
             available_canopy_fuel(
-                self._two_trees(), crown_class_adjustment="fuelcalc_table"
+                self._two_trees(), crown_class_adjustment="reinhardt_2006"
             )
 
     def test_uniform_other_none_is_reachable_deliberately(self):
@@ -399,7 +408,7 @@ class TestCrownProportionParity:
         trees = self._two_trees()
         got = available_canopy_fuel(
             trees.assign(cc="N"),
-            crown_class_adjustment="fuelcalc_table",
+            crown_class_adjustment="reinhardt_2006",
             crown_class_column="cc",
         )
         expected = available_canopy_fuel(trees) * crown_class_factor(
@@ -411,7 +420,7 @@ class TestCrownProportionParity:
         with pytest.raises(ValueError, match="crown_class_column"):
             available_canopy_fuel(
                 self._two_trees(),
-                crown_class_adjustment="fuelcalc_table",
+                crown_class_adjustment="reinhardt_2006",
                 crown_class_column="not_a_column",
             )
 
@@ -858,7 +867,7 @@ class TestCanopyCoverParity:
                 trees,
                 self.TRANSFORM,
                 (1, 1),
-                crown_radius_equations="fuelcalc",
+                crown_radius_equations="crookston_stage",
                 method="crown_overlap",
             )[0, 0]
             total_sqft = sum(

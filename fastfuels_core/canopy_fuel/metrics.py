@@ -125,10 +125,11 @@ def max_crown_radius(
     ``"purves"`` (default)
         Purves et al. (2007), from ``fia_species_code``, ``dbh``,
         ``height`` and ``crown_ratio``.
-    ``"fuelcalc"``
-        Half the FVS/FOFEM crown width behind FuelCalc's canopy cover
-        (see :mod:`fastfuels_core.allometry.fvs`) — diameter alone above
-        breast height, regional coefficients.
+    ``"crookston_stage"``
+        Half the crown width of Crookston & Stage (1999), reached
+        through FVS (see :mod:`fastfuels_core.allometry.fvs`) — diameter
+        alone above breast height, coefficients fitted regionally. This
+        is the width behind FuelCalc's canopy cover.
 
     The radius source is independent of how canopy cover treats
     overlap, so the two can be varied separately: a run can compare
@@ -147,12 +148,12 @@ def max_crown_radius(
     """
     if crown_radius_column is not None:
         return trees[crown_radius_column].to_numpy(dtype=np.float64)
-    if equations not in ("purves", "fuelcalc"):
+    if equations not in ("purves", "crookston_stage"):
         raise ValueError(
             f"Unknown crown radius equations {equations!r}; expected "
-            f"'purves' or 'fuelcalc'."
+            f"'purves' or 'crookston_stage'."
         )
-    if equations == "fuelcalc":
+    if equations == "crookston_stage":
         width_ft = fvs.crown_width_for_species(
             trees["fia_species_code"].to_numpy(),
             trees["dbh"].to_numpy(dtype=np.float64) * conversion_factor("cm", "inch"),
@@ -299,7 +300,7 @@ def available_canopy_fuel(
 
     ``"none"`` (default; ``None`` is accepted for it)
         No adjustment.
-    ``"fuelcalc_table"``
+    ``"reinhardt_2006"``
         FuelCalc's crown-class multipliers, via
         :func:`crown_class_factor`. Requires ``crown_class_column``,
         naming the per-tree column that holds crown position —
@@ -335,10 +336,10 @@ def available_canopy_fuel(
         return trees[fuel_column].to_numpy(dtype=np.float64)
     if crown_class_adjustment is None:
         crown_class_adjustment = "none"
-    if crown_class_adjustment not in ("none", "fuelcalc_table"):
+    if crown_class_adjustment not in ("none", "reinhardt_2006"):
         raise ValueError(
             f"Unknown crown_class_adjustment {crown_class_adjustment!r}; "
-            f"expected 'none', None, or 'fuelcalc_table'."
+            f"expected 'none', None, or 'reinhardt_2006'."
         )
     # The two arguments are one decision: an adjustment needs the data
     # it adjusts by, and the data is pointless without the adjustment.
@@ -347,12 +348,12 @@ def available_canopy_fuel(
         raise ValueError(
             f"crown_class_column={crown_class_column!r} was given but "
             f"crown_class_adjustment is 'none', so the column would be "
-            f"ignored. Set crown_class_adjustment='fuelcalc_table' to "
+            f"ignored. Set crown_class_adjustment='reinhardt_2006' to "
             f"use it, or drop the column argument."
         )
-    if crown_class_adjustment == "fuelcalc_table" and crown_class_column is None:
+    if crown_class_adjustment == "reinhardt_2006" and crown_class_column is None:
         raise ValueError(
-            "crown_class_adjustment='fuelcalc_table' needs "
+            "crown_class_adjustment='reinhardt_2006' needs "
             "crown_class_column to say where crown position comes from. "
             "Without it every tree would take the table's Other/none "
             "column, which is 0.5 for 50 of the 54 species — a silent "
@@ -399,7 +400,7 @@ def available_canopy_fuel(
         foliage_kg = nsvb.foliage_biomass(spcd, trees["dbh"], trees["height"])
         branch_kg = nsvb.branch_biomass(spcd, trees["dbh"], trees["height"])
     fuel = foliage_fraction * foliage_kg + branchwood_fraction * fine_share * branch_kg
-    if crown_class_adjustment == "fuelcalc_table":
+    if crown_class_adjustment == "reinhardt_2006":
         if crown_class_column not in trees.columns:
             raise ValueError(
                 f"crown_class_column={crown_class_column!r} is not a "
