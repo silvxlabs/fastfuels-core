@@ -169,13 +169,10 @@ class TestCrownProportionParity:
         ours = set(brown.P1_EQUATIONS) & set(brown.P2_EQUATIONS)
         vestigial = {
             # sr_EFD has no AL entry at all; Subalpine Larch (LALY) uses
-            # the WL Ids for all six components.
+            # the WL Ids for all six components. Unreachable, so it is
+            # harmless -- unlike QA, which resolved SPCD 746 to the same
+            # unsourced borrow and has been dropped.
             "AL",
-            # sr_EFD maps QA to QuakingAspen_MN (Loomis & Roussopoulos
-            # 1978, NC_BM3.C), not to the whitebark/larch borrow the
-            # guide's Appendix D prints. Ours is reachable: SPCD 746
-            # resolves FOL and TWIG to QA.
-            "QA",
         }
         assert ours - set(fc.ALL_IDS) == vestigial
         assert set(fc.ALL_IDS) - ours == set(), "source Id we do not define"

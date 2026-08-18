@@ -22,9 +22,17 @@ this module follows the primary sources.
 Species are keyed by FuelCalc's two-letter equation Ids (the FuelCalc
 Default Equation Table maps FIA species codes to Ids; see
 ``fastfuels_core.canopy_fuel.ref_data``). Brown's own species letters
-map onto them as L->WL, S->ES, AF->SF, WBP->WB, C->WC. The QA and AL
-Ids are FuelCalc cross-references (whitebark pine's P1 with western
-larch's P2). Diameters are in inches throughout, matching the sources.
+map onto them as L->WL, S->ES, AF->SF, WBP->WB, C->WC. Diameters are in
+inches throughout, matching the sources.
+
+The AL Id is a FuelCalc cross-reference that borrows whitebark pine's P1
+and western larch's P2. Neither primary source sanctions that pairing,
+so it is kept only because nothing resolves to it -- subalpine larch
+uses the WL Ids for every component. The QA Id was the same borrow and
+*was* reachable, via SPCD 746; it has been dropped rather than left to
+return an unsourced number, so quaking aspen now raises like any other
+species without equations. Its real source is Loomis & Roussopoulos
+1978 (NC-156), not yet implemented.
 """
 
 from __future__ import annotations
@@ -77,8 +85,7 @@ P1_EQUATIONS = {
     "BM": (_reciprocal, {"a": 4.6762, "b": 0.1091, "c": 2.0390}),
     "MA": (_reciprocal, {"a": 1.6013, "b": 0.3591, "c": 1.3090}),
     "TO": (_reciprocal, {"a": 1.7936, "b": 0.5952, "c": 0.7239}),
-    # FuelCalc cross-reference Ids: whitebark pine's foliage fraction.
-    "QA": (_exponential, {"a": 0.512, "b": -0.0374}),
+    # FuelCalc cross-reference Id: whitebark pine's foliage fraction.
     "AL": (_exponential, {"a": 0.512, "b": -0.0374}),
 }
 
@@ -101,8 +108,7 @@ P2_EQUATIONS = {
     "BM": (_reciprocal, {"a": 3.3212, "b": 0.0777, "c": 2.0496}),
     "MA": (_reciprocal, {"a": 1.0357, "b": 0.2263, "c": 1.3567}),
     "TO": (_reciprocal, {"a": 0.9940, "b": 0.4229, "c": 0.6520}),
-    # FuelCalc cross-reference Ids: western larch's P2.
-    "QA": (_exponential, {"a": 0.745, "b": -0.0362}),
+    # FuelCalc cross-reference Id: western larch's P2.
     "AL": (_exponential, {"a": 0.745, "b": -0.0362}),
 }
 

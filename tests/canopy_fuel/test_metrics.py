@@ -33,7 +33,7 @@ def random_stand(n, seed=0):
         {
             "x": rng.uniform(0, 100, n),
             "y": rng.uniform(0, 100, n),
-            "fia_species_code": rng.choice([202, 122, 73, 17, 746, 15, 108], n),
+            "fia_species_code": rng.choice([202, 122, 73, 17, 351, 15, 108], n),
             "dbh": rng.uniform(2.5, 90, n),
             "height": rng.uniform(2, 40, n),
             "crown_ratio": rng.uniform(0.1, 0.9, n),
@@ -137,14 +137,24 @@ class TestBrownProportions:
         )
         assert share[0] == 0.0
 
-    def test_aspen_cross_reference(self):
-        # QA: whitebark pine's P1 with western larch's P2.
-        share = fine_branchwood_share(
-            np.array(["QA"]), np.array(["QA"]), np.array([8.0])
+    def test_quaking_aspen_has_no_equations(self):
+        # SPCD 746 used to resolve to the QA Id, which borrowed
+        # whitebark pine's P1 and western larch's P2 -- a pairing
+        # neither Brown nor SL-83 sanctions. Dropped, so aspen now
+        # raises rather than returning an unsourced number. Its real
+        # source is Loomis & Roussopoulos 1978 (NC-156).
+        with pytest.raises(ValueError, match="QA"):
+            fine_branchwood_share(np.array(["QA"]), np.array(["QA"]), np.array([8.0]))
+        aspen = pd.DataFrame(
+            {
+                "fia_species_code": [746],
+                "dbh": [20.0],
+                "height": [15.0],
+                "crown_ratio": [0.5],
+            }
         )
-        p1 = 0.512 * np.exp(-0.0374 * 8.0)
-        p2 = 0.745 * np.exp(-0.0362 * 8.0)
-        np.testing.assert_allclose(share, (p2 - p1) / (1 - p1), rtol=1e-12)
+        with pytest.raises(ValueError, match="QA"):
+            available_canopy_fuel(aspen)
 
     def test_giant_chinkapin_from_sl83(self):
         # GC is absent from the FuelCalc guide but present in SL-83
@@ -158,7 +168,7 @@ class TestBrownProportions:
         # Cross-Id subtraction and curve crossings must never yield a
         # negative fine share, over a broad diameter sweep.
         dia = np.linspace(1.0, 80.0, 200)
-        for eq_id in ["PP", "GF", "DF", "LP", "WP", "WB", "ES", "WH", "QA", "RA"]:
+        for eq_id in ["PP", "GF", "DF", "LP", "WP", "WB", "ES", "WH", "AL", "RA"]:
             ids = np.full(dia.shape, eq_id)
             share = fine_branchwood_share(ids, ids, dia)
             assert (share >= 0.0).all() and (share <= 1.0).all(), eq_id
