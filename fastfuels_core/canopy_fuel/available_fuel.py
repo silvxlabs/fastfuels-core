@@ -240,8 +240,11 @@ def small_tree_crown_components(
     covered = table.index.get_level_values("CODE").unique()
     codes = np.where(np.isin(codes, covered), codes, SMALL_TREE_DEFAULT_CODE)
     # h <= 1 is class 1, h <= 2 class 2, ..., anything over 9 class 10.
-    ht_class = np.clip(np.ceil(np.asarray(height_ft, dtype=np.float64)), 1, 10)
-    ht_class = ht_class.astype(int)
+    # Heights reach here through a metre-to-foot conversion, so a tree
+    # measured at a whole number of feet lands a few ulp either side of
+    # it; round before the ceiling or half of them take the class above.
+    height_ft = np.round(np.asarray(height_ft, dtype=np.float64), 6)
+    ht_class = np.clip(np.ceil(height_ft), 1, 10).astype(int)
     keys = pd.MultiIndex.from_arrays([codes, ht_class])
     rows = table.reindex(keys)
     in_range = np.asarray(dia_in, dtype=np.float64) <= SMALL_TREE_MAX_DIA_IN

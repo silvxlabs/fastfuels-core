@@ -32,6 +32,24 @@ package -- treelist in, thinned stand, canopy metrics out.
 thinned stand itself against the expansion factors FuelCalc reported,
 before any canopy fuel is computed.
 
+Where we differ, and why
+------------------------
+This package implements the published equations, not FuelCalc's build
+of them, and on these stands the two disagree in exactly one place:
+FuelCalc's compiled crown-proportion table carries a western larch P2
+of ``0.745*exp(-0.0632d)`` where Brown 1978 Table 16 (p. 53) and
+FuelCalc's own User Guide (Appendix D) both print
+``0.745*exp(-0.0362d)``. We implement the published coefficient. Both
+tutorial stands carry larch, and on the largest of them the two put the
+fine branchwood fraction a factor of three apart, so the difference
+reaches every stand total that larch touches.
+
+Ten of the twenty-four reported values differ for that reason and no
+other. :func:`test_the_larch_coefficient_accounts_for_the_deviations`
+substitutes FuelCalc's coefficient -- in this module, never in the
+package -- and every one of them lands on FuelCalc's number. Nothing
+else about these four stands is unaccounted for.
+
 Displayed precision
 -------------------
 FuelCalc's plot report rounds. Its GUI truncates the same values (canopy
@@ -178,12 +196,12 @@ def test_plot_1_pre_treatment():
 
     assert got["tree_density_tpa"] == pytest.approx(280.0)
     assert got["canopy_cover_pct"] == pytest.approx(48.77, abs=0.005)
-    assert got["canopy_base_height_ft"] == pytest.approx(1.0)
     assert got["stand_height_ft"] == pytest.approx(103.0)
 
-    # FuelCalc reports 0.044 and 3.79. Both deviate by LARCH.
+    # FuelCalc reports 1 ft, 0.044 and 3.79. All three deviate by LARCH.
+    assert got["canopy_base_height_ft"] == pytest.approx(2.0)
     assert got["canopy_bulk_density_kg_m3"] == pytest.approx(0.0447, abs=5e-5)
-    assert got["canopy_fuel_load_ton_ac"] == pytest.approx(3.854, abs=5e-4)
+    assert got["canopy_fuel_load_ton_ac"] == pytest.approx(3.848, abs=5e-4)
 
 
 def test_plot_1_post_thinning():
@@ -195,11 +213,9 @@ def test_plot_1_post_thinning():
     assert got["canopy_base_height_ft"] == pytest.approx(2.0)
     assert got["stand_height_ft"] == pytest.approx(103.0)
 
-    # FuelCalc reports 0.044. Deviates by LARCH.
+    # FuelCalc reports 0.044 and 3.24. Both deviate by LARCH.
     assert got["canopy_bulk_density_kg_m3"] == pytest.approx(0.0447, abs=5e-5)
-    # FuelCalc reports 3.24. LARCH accounts for all but +0.27%, which is
-    # unexplained; see test_plot_2_pre_treatment for the same residual.
-    assert got["canopy_fuel_load_ton_ac"] == pytest.approx(3.309, abs=5e-4)
+    assert got["canopy_fuel_load_ton_ac"] == pytest.approx(3.303, abs=5e-4)
 
 
 def test_plot_2_pre_treatment():
@@ -210,16 +226,11 @@ def test_plot_2_pre_treatment():
     assert got["canopy_base_height_ft"] == pytest.approx(1.0)
     assert got["canopy_bulk_density_kg_m3"] == pytest.approx(0.046, abs=5e-4)
 
-    # FuelCalc reports 123 ft. Deviates by LARCH: larch is the tallest
-    # tree here, so its crown weight sets where the profile crosses the
-    # threshold near the canopy top.
+    # FuelCalc reports 123 ft and 2.76. Both deviate by LARCH: larch is
+    # the tallest tree here, so its crown weight also sets where the
+    # profile crosses the threshold near the canopy top.
     assert got["stand_height_ft"] == pytest.approx(125.0)
-    # FuelCalc reports 2.76. LARCH accounts for most of it and leaves
-    # +1.1%, the largest unexplained residual in the four cases. This is
-    # the plot carrying by far the most regeneration -- 425 stems/acre
-    # at 0.5 in dbh, inside the small-tree table, and 258 more at 1.5 in,
-    # just outside it -- so the residual most likely sits at that seam.
-    assert got["canopy_fuel_load_ton_ac"] == pytest.approx(2.980, abs=5e-4)
+    assert got["canopy_fuel_load_ton_ac"] == pytest.approx(2.952, abs=5e-4)
 
 
 def test_plot_2_post_thinning():
@@ -228,18 +239,12 @@ def test_plot_2_post_thinning():
 
     assert got["tree_density_tpa"] == pytest.approx(200.0)
     assert got["canopy_cover_pct"] == pytest.approx(31.54, abs=0.005)
+    assert got["canopy_base_height_ft"] == pytest.approx(3.0)
 
-    # FuelCalc reports 0.023 and 2.07 and 126 ft. All three deviate by LARCH.
+    # FuelCalc reports 0.023, 126 ft and 2.07. All three deviate by LARCH.
     assert got["canopy_bulk_density_kg_m3"] == pytest.approx(0.0236, abs=5e-5)
-    assert got["canopy_fuel_load_ton_ac"] == pytest.approx(2.259, abs=5e-4)
     assert got["stand_height_ft"] == pytest.approx(129.0)
-
-    # FuelCalc reports 3 ft; larch does not explain this one. Both
-    # numbers are the ground: the thinned stand keeps a 53 ft subalpine
-    # fir whose crown reaches the litter, so the lowest layers sit
-    # within a factor of 1.4 of a threshold that is itself a tenth of
-    # the stand maximum, and our scan crosses it two layers early.
-    assert got["canopy_base_height_ft"] == pytest.approx(1.0)
+    assert got["canopy_fuel_load_ton_ac"] == pytest.approx(2.254, abs=5e-4)
 
 
 def test_our_thinning_reproduces_the_fuelcalc_stand():
@@ -265,13 +270,13 @@ def test_our_thinning_reproduces_the_fuelcalc_stand():
 
 
 def test_the_larch_coefficient_accounts_for_the_deviations():
-    """Substitute FuelCalc's larch P2 and the deviations close.
+    """Substitute FuelCalc's larch P2 and every deviation closes.
 
     The substitution happens here, never in the package, which
-    implements the published coefficient. Running the same four stands
-    both ways turns the attribution into a measurement: seven of the ten
-    values we do not reproduce are this one coefficient and nothing
-    else. The three left over are named in the tests above.
+    implements Brown's published coefficient. Running the same four
+    stands both ways turns the attribution into a measurement: all ten
+    values the tests above flag are this one coefficient, and with it
+    the four plot reports come back exactly.
     """
     original = {i: brown.P2_EQUATIONS[i] for i in ("WL", "AL")}
     brown.P2_EQUATIONS.update({i: FUELCALC_LARCH_P2 for i in ("WL", "AL")})
@@ -284,19 +289,31 @@ def test_the_larch_coefficient_accounts_for_the_deviations():
         plot_2_post = canopy_metrics(
             FUELCALC_THINNING.apply(stems(plot=2), dia_column_name="dbh")
         )
+        # FuelCalc's own post-thinning counts, to separate the thinning
+        # from the canopy fuel chain in the one value that needs it.
+        plot_2_post_their_stand = canopy_metrics(
+            stems(plot=2, expansion_factors="TPA_POST")
+        )
     finally:
         brown.P2_EQUATIONS.update(original)
 
-    # Every value the tests above flagged as LARCH now lands on FuelCalc's.
+    assert plot_1_pre["canopy_base_height_ft"] == pytest.approx(1.0)
     assert round(plot_1_pre["canopy_bulk_density_kg_m3"], 3) == 0.044
     assert round(plot_1_pre["canopy_fuel_load_ton_ac"], 2) == 3.79
+
     assert round(plot_1_post["canopy_bulk_density_kg_m3"], 3) == 0.044
+    assert round(plot_1_post["canopy_fuel_load_ton_ac"], 2) == 3.24
+
     assert plot_2_pre["stand_height_ft"] == pytest.approx(123.0)
+    assert round(plot_2_pre["canopy_fuel_load_ton_ac"], 2) == 2.76
+
     assert round(plot_2_post["canopy_bulk_density_kg_m3"], 3) == 0.023
-    assert round(plot_2_post["canopy_fuel_load_ton_ac"], 2) == 2.07
     assert plot_2_post["stand_height_ft"] == pytest.approx(126.0)
 
-    # And the three it does not explain stay unexplained.
-    assert round(plot_1_post["canopy_fuel_load_ton_ac"], 2) == 3.25  # vs 3.24
-    assert round(plot_2_pre["canopy_fuel_load_ton_ac"], 2) == 2.79  # vs 2.76
-    assert plot_2_post["canopy_base_height_ft"] == pytest.approx(1.0)  # vs 3.0
+    # Plot 2's post-thinning fuel load lands on the rounding boundary.
+    # FuelCalc reports 2.07; its own thinned stand gives us 2.06508,
+    # which rounds there, and ours gives 2.06497, which does not. The
+    # 0.2 lb/acre between them is the tenth of a stem per acre that
+    # test_our_thinning_reproduces_the_fuelcalc_stand describes.
+    assert round(plot_2_post_their_stand["canopy_fuel_load_ton_ac"], 2) == 2.07
+    assert plot_2_post["canopy_fuel_load_ton_ac"] == pytest.approx(2.065, abs=5e-4)
