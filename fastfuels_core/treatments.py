@@ -238,12 +238,19 @@ class DirectionalThinToTreeDensity:
     """
     Thinning treatment to reach a target number of trees.
 
-    Trees are removed a record at a time, working through the eligible
-    trees in diameter order, until the stand is down to ``target``. Each
-    record gives up at most ``cut_efficiency`` of its trees before the
-    next one is touched, so a thinning that reaches its target part way
-    through the stand leaves the remaining records untouched and every
-    record it did reach still represented.
+    Eligible trees are walked in diameter order and removed at a steady
+    rate of ``cut_efficiency`` until the stand is down to ``target``, so
+    a partial cut leaves survivors spread evenly through the sizes it
+    passed rather than clearing them from one end. Stopping at the
+    target leaves everything beyond it untouched.
+
+    The steady rate is what makes a stand of identical trees behave the
+    way a stand table does. Where an inventory repeats a tree -- a plot
+    expanded by its trees-per-acre, say -- those repeats are a
+    contiguous run in diameter order, and a steady rate takes
+    ``cut_efficiency`` of each run. It degrades correctly the other way
+    too: on a stem list where every tree is distinct, it removes that
+    fraction of the trees.
 
     ``min_diameter`` and ``max_diameter`` bound which trees may be cut
     at all. A treatment that removes ladder fuels without entering the
@@ -262,8 +269,8 @@ class DirectionalThinToTreeDensity:
         Diameter bounds on eligibility, in centimeters (cm), exclusive
         at both ends. By default every tree is eligible.
     cut_efficiency : float, optional
-        Largest fraction of any one tree record that may be removed, in
-        [0, 1]. By default 1.0, which allows a record to be cleared.
+        Fraction of the eligible trees that may be removed, in [0, 1].
+        By default 1.0, which allows every eligible tree to be cut.
 
     Methods
     -------
@@ -312,7 +319,7 @@ class DirectionalThinToTreeDensity:
         RuntimeWarning
             If the target could not be reached, because too few trees
             fall inside the diameter bounds or because
-            ``cut_efficiency`` held records back.
+            ``cut_efficiency`` held trees back.
         """
         df = trees.copy()
 
@@ -333,21 +340,21 @@ class DirectionalThinToTreeDensity:
             by=dia_column_name, ascending=ascending, kind="stable"
         )
 
-        # A record is a set of trees identical in every attribute, which
-        # is what cut_efficiency is a fraction of.
-        cut = []
-        for _, record in eligible.groupby(list(eligible.columns), sort=False):
-            if len(cut) >= surplus:
-                break
-            take = min(int(len(record) * self.cut_efficiency), surplus - len(cut))
-            cut.extend(record.index[:take])
+        # Remove at a steady rate along the eligible trees: the nth is
+        # cut when the running quota n * cut_efficiency crosses an
+        # integer. Over any run of equal trees this takes the same
+        # fraction of that run, and over a stem list of distinct trees
+        # it takes the same fraction of the trees.
+        quota = np.arange(1, len(eligible) + 1) * self.cut_efficiency
+        crossings = np.floor(quota) > np.floor(quota - self.cut_efficiency)
+        cut = eligible.index.to_numpy()[crossings][:surplus]
 
         if len(cut) < surplus:
             warnings.warn(
                 f"Thinning left {len(df) - len(cut)} trees, above the target "
                 f"of {self.target}: only {len(eligible)} trees fall within "
-                f"the diameter bounds, and cut_efficiency caps each record "
-                f"at {self.cut_efficiency:.0%} of its trees.",
+                f"the diameter bounds, and cut_efficiency caps the cut at "
+                f"{self.cut_efficiency:.0%} of them.",
                 RuntimeWarning,
             )
 

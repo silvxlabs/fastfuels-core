@@ -64,22 +64,35 @@ class TestDiameterBounds:
 
 
 class TestCutEfficiency:
-    def test_it_caps_what_one_record_gives_up(self):
+    """The cut runs at a steady rate along the eligible trees.
+
+    Every fixture above builds rows that are identical apart from
+    diameter, which is the shape a stand table expands to. A stem list
+    from a real inventory is the opposite -- every tree distinct -- and
+    :class:`TestDistinctStems` covers that, because a rate defined
+    per-group of identical trees silently removes nothing there.
+    """
+
+    def test_it_caps_the_cut(self):
         with pytest.warns(RuntimeWarning):
             out = DirectionalThinToTreeDensity(
                 target=1, direction=ThinningDirection.ABOVE, cut_efficiency=0.5
             ).apply(stand(d20=10))
         assert len(out) == 5
 
-    def test_records_are_reached_in_turn_rather_than_cleared(self):
-        """The second record is only touched once the first has given
-        up its share, and the target can stop the walk part way."""
+    def test_a_run_of_equal_trees_keeps_its_share(self):
+        """A steady rate takes cut_efficiency of each contiguous run.
+
+        The twenties are reached first and give up nine of ten; the
+        target stops the walk before the tens are touched at all.
+        """
         out = DirectionalThinToTreeDensity(
             target=12, direction=ThinningDirection.ABOVE, cut_efficiency=0.9
         ).apply(stand(d20=10, d10=10))
         assert sorted(out["DIA"]) == [10.0] * 10 + [20.0] * 2
 
-    def test_identical_trees_of_different_species_are_separate_records(self):
+    def test_the_rate_carries_across_a_tie_in_diameter(self):
+        """Two species at one diameter each keep their tenth."""
         trees = pd.DataFrame(
             {"DIA": [20.0] * 20, "SPECIES": ["PSME"] * 10 + ["PIPO"] * 10}
         )
@@ -92,7 +105,58 @@ class TestCutEfficiency:
             DirectionalThinToTreeDensity(target=1, cut_efficiency=bad)
 
 
+class TestDistinctStems:
+    """A stem list where no two trees are alike.
+
+    This is what a FastFuels inventory looks like -- one row per tree,
+    each with its own coordinates -- and it is the shape that breaks a
+    cut rate defined as a fraction of each group of identical trees.
+    """
+
+    @staticmethod
+    def stem_list(n=100):
+        rng = np.random.default_rng(0)
+        return pd.DataFrame(
+            {
+                "DIA": np.linspace(5.0, 25.0, n),
+                "X": rng.uniform(0, 100, n),
+                "Y": rng.uniform(0, 100, n),
+            }
+        )
+
+    def test_it_reaches_the_target(self):
+        out = DirectionalThinToTreeDensity(target=50, cut_efficiency=0.9).apply(
+            self.stem_list()
+        )
+        assert len(out) == 50
+
+    def test_cut_efficiency_is_a_fraction_of_the_trees(self):
+        """With no target to stop it, the rate is what remains."""
+        with pytest.warns(RuntimeWarning):
+            out = DirectionalThinToTreeDensity(target=0, cut_efficiency=0.4).apply(
+                self.stem_list()
+            )
+        assert len(out) == 60
+
+    def test_it_still_thins_from_below(self):
+        out = DirectionalThinToTreeDensity(target=50).apply(self.stem_list())
+        assert out["DIA"].min() > self.stem_list()["DIA"].median()
+
+    def test_a_column_of_nulls_does_not_protect_a_tree(self):
+        """Grouping on all columns would drop these from eligibility."""
+        trees = self.stem_list().assign(CROWN_CLASS=[None] * 80 + ["C"] * 20)
+        out = DirectionalThinToTreeDensity(target=50).apply(trees)
+        assert len(out) == 50
+
+
 class TestTargetIsUnreachable:
+    def test_cut_efficiency_can_hold_the_target_out_of_reach(self):
+        with pytest.warns(RuntimeWarning, match="above the target"):
+            out = DirectionalThinToTreeDensity(target=0, cut_efficiency=0.5).apply(
+                stand(d20=10)
+            )
+        assert len(out) == 5
+
     def test_it_warns_and_leaves_what_it_cannot_cut(self):
         with pytest.warns(RuntimeWarning, match="above the target"):
             out = DirectionalThinToTreeDensity(target=1, max_diameter=10.0).apply(

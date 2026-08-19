@@ -102,6 +102,7 @@ def _crown_projected_contributions(
     transform: tuple[float, float, float, float, float, float],
     shape: tuple[int, int],
     crown_radius_column: str | None,
+    crown_radius_equations: str,
 ) -> list[tuple[np.ndarray, np.ndarray]]:
     """(cell index, weight) pairs splitting each crown over the cells it covers.
 
@@ -115,7 +116,12 @@ def _crown_projected_contributions(
     x = trees["x"].to_numpy(dtype=np.float64)
     y = trees["y"].to_numpy(dtype=np.float64)
     radius = np.maximum(
-        max_crown_radius(trees, crown_radius_column=crown_radius_column), 1e-6
+        max_crown_radius(
+            trees,
+            crown_radius_column=crown_radius_column,
+            equations=crown_radius_equations,
+        ),
+        1e-6,
     )
     col_lo = np.floor((x - radius - c) / a).astype(np.int64)
     col_hi = np.floor((x + radius - c) / a).astype(np.int64)
@@ -184,6 +190,7 @@ def vertical_profile(
     vertical_distribution: str = "reinhardt_2006",
     horizontal_distribution: str = "crown_projected",
     crown_radius_column: str | None = None,
+    crown_radius_equations: str = "purves",
 ) -> np.ndarray:
     """Accumulate per-tree fuel into a per-cell vertical profile grid.
 
@@ -211,8 +218,12 @@ def vertical_profile(
         Number of profile layers; defaults to covering the tallest tree.
         A smaller value truncates fuel above the top layer.
     crown_radius_column : str, optional
-        Per-tree max crown radius (m) column; defaults to the Purves
-        allometric radius. Only read by ``crown_projected``.
+        Per-tree max crown radius (m) column, overriding
+        ``crown_radius_equations``. Only read by ``crown_projected``.
+    crown_radius_equations : str, optional
+        Allometry the crown radius comes from when no column is given;
+        see :func:`~fastfuels_core.canopy_fuel.crown_radius.max_crown_radius`.
+        Only read by ``crown_projected``.
 
     Returns
     -------
@@ -269,7 +280,7 @@ def vertical_profile(
         contributions = [(row * nx + col, np.ones(len(trees)))]
     else:
         contributions = _crown_projected_contributions(
-            trees, transform, shape, crown_radius_column
+            trees, transform, shape, crown_radius_column, crown_radius_equations
         )
 
     boundaries = np.arange(n_layers + 1, dtype=np.float64) * layer_depth

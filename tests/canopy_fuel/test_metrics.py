@@ -227,3 +227,64 @@ class TestExcludeHardwoods:
         out = self.metrics(trees, exclude_hardwoods=True)
         assert out.cbd.values[2, 1] == 0.0
         assert np.isnan(out.cbh.values[2, 1])
+
+
+class TestCrownRadiusReachesEveryStage:
+    """The radius allometry drives attribution as well as cover.
+
+    ``crown_projected`` spreads a tree's fuel over its crown footprint,
+    so the allometry that sizes that footprint changes ``cbd``,
+    ``cbh``, ``chm`` and ``cfl`` as surely as it changes ``cc``. The
+    tree here sits 2 m inside a cell corner so its disk straddles four
+    cells and the split is radius-dependent; a tree well inside one cell
+    would put all its weight there under any radius and hide the wiring.
+    """
+
+    BANDS = ["cbd", "cfl", "cc"]
+
+    @staticmethod
+    def straddling_tree():
+        """One ponderosa near the corner of cell (2, 1), with a dbh."""
+        return single_tree(x=1032.0, y=4912.0, dbh=30.0, height=20.0)
+
+    def metrics(self, equations):
+        return compute_canopy_metrics(
+            self.straddling_tree(),
+            band_template(self.BANDS),
+            crown_radius_equations=equations,
+        )
+
+    @pytest.mark.parametrize("band", BANDS)
+    def test_the_allometry_changes_every_band_it_feeds(self, band):
+        purves = self.metrics("purves")[band].values
+        crookston = self.metrics("crookston_stage")[band].values
+        assert not np.allclose(purves, crookston, equal_nan=True), (
+            f"{band} is unchanged by crown_radius_equations; the "
+            f"allometry is not reaching the stage that produces it."
+        )
+
+    def test_a_radius_column_still_overrides_the_allometry(self):
+        trees = self.straddling_tree().assign(crad=3.0)
+        by_column = {
+            equations: compute_canopy_metrics(
+                trees,
+                band_template(self.BANDS),
+                crown_radius_column="crad",
+                crown_radius_equations=equations,
+            ).cbd.values
+            for equations in ("purves", "crookston_stage")
+        }
+        np.testing.assert_array_equal(by_column["purves"], by_column["crookston_stage"])
+
+    def test_the_stem_arm_does_not_read_the_radius(self):
+        """It puts the whole tree in one cell, so nothing to size."""
+        stem = {
+            equations: compute_canopy_metrics(
+                self.straddling_tree(),
+                band_template(["cbd"]),
+                horizontal_distribution="stem",
+                crown_radius_equations=equations,
+            ).cbd.values
+            for equations in ("purves", "crookston_stage")
+        }
+        np.testing.assert_array_equal(stem["purves"], stem["crookston_stage"])

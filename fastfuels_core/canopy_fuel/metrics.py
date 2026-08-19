@@ -150,6 +150,7 @@ def compute_canopy_metrics(
             vertical_distribution=vertical_distribution,
             horizontal_distribution=horizontal_distribution,
             crown_radius_column=crown_radius_column,
+            crown_radius_equations=crown_radius_equations,
         )
         if "cbd" in bands:
             dataset["cbd"].data[...] = cbd_running_mean(
