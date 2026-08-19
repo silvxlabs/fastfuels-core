@@ -173,6 +173,7 @@ cython_debug/
 # Testing
 tests/figs/
 figures/
+/tests/onramps/duet-data/
 
 # IDE config files
 .idea/
