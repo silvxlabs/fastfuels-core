@@ -12,6 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from fastfuels_core.canopy_fuel.bulk_density import VALID_EDGES
 from fastfuels_core.canopy_fuel.canopy_height import profile_threshold_heights
 from tests.canopy_fuel.builders import column_profile
 
@@ -123,3 +124,72 @@ class TestSmoothing:
         defined = ~np.isnan(cbh)
         assert (cbh[defined] >= lowest[defined] - 1e-12).all()
         assert (chm[defined] <= highest[defined] + 1e-12).all()
+
+
+class TestSmoothingEdge:
+    """Which convention the scan smooths with moves the reported top.
+
+    ``smoothing_edge`` only matters when ``smoothing_window`` is set,
+    and only near the ends of the profile, but that is exactly where
+    both heights are read off.
+    """
+
+    # A crown occupying layers 3-6 of a 10 m column, over a threshold
+    # low enough that a diluted layer still clears it.
+    CANOPY = [0, 0, 0, 0.05, 0.05, 0.05, 0.05, 0, 0, 0]
+
+    def heights(self, values, **kwargs):
+        cbh, chm = profile_threshold_heights(
+            column_profile(values), layer_depth=1.0, **kwargs
+        )
+        return float(cbh[0, 0]), float(chm[0, 0])
+
+    @pytest.mark.parametrize("edge", VALID_EDGES)
+    def test_it_is_inert_without_a_smoothing_window(self, edge):
+        """With no window there is nothing for the convention to decide."""
+        assert self.heights(self.CANOPY, smoothing_edge=edge) == self.heights(
+            self.CANOPY
+        )
+
+    def test_truncate_carries_the_top_a_layer_higher(self):
+        """A sparse crown tip clears the threshold once inflated.
+
+        Layers 5-7 are dense and 8-9 are the thin top of the crown. The
+        topmost window runs past the profile, so truncating it divides
+        by three where the other two divide by five, and the tip clears
+        a threshold it otherwise misses. The extent bound cannot undo
+        this: those layers do hold fuel.
+        """
+        crown = [0, 0, 0, 0, 0, 0.05, 0.05, 0.05, 0.002, 0.002]
+        tops = {
+            edge: self.heights(
+                crown,
+                threshold=0.015,
+                relative_fraction=None,
+                smoothing_window=5.0,
+                smoothing_edge=edge,
+            )[1]
+            for edge in VALID_EDGES
+        }
+        assert tops["truncate"] == pytest.approx(10.0)
+        assert tops["fuelcalc"] == pytest.approx(9.0)
+        assert tops["slab"] == pytest.approx(9.0)
+
+    @pytest.mark.parametrize("edge", VALID_EDGES)
+    def test_a_canopy_clear_of_both_ends_reads_the_same(self, edge):
+        """The conventions differ only where the window runs off."""
+        assert self.heights(
+            self.CANOPY, smoothing_window=3.0, smoothing_edge=edge
+        ) == self.heights(self.CANOPY, smoothing_window=3.0)
+
+    def test_the_default_is_fuelcalcs(self):
+        """Pinned, because the three disagree on where the canopy ends."""
+        crown = [0, 0, 0, 0, 0, 0.05, 0.05, 0.05, 0.002, 0.002]
+        settings = dict(threshold=0.015, relative_fraction=None, smoothing_window=5.0)
+        assert self.heights(crown, **settings) == self.heights(
+            crown, smoothing_edge="fuelcalc", **settings
+        )
+
+    def test_an_unknown_convention_raises(self):
+        with pytest.raises(ValueError, match="bogus"):
+            self.heights(self.CANOPY, smoothing_window=5.0, smoothing_edge="bogus")

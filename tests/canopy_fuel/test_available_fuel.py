@@ -15,12 +15,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from fastfuels_core.allometry import nsvb
+from fastfuels_core.allometry import brown, nsvb
 from fastfuels_core.canopy_fuel.available_fuel import (
     available_canopy_fuel,
     crown_class_factor,
+    small_tree_crown_components,
 )
-from fastfuels_core.canopy_fuel.ref_data import fuelcalc_species
+from fastfuels_core.canopy_fuel.ref_data import (
+    fuelcalc_small_tree_biomass,
+    fuelcalc_species,
+)
 from tests.canopy_fuel.builders import random_stand
 
 
@@ -313,3 +317,172 @@ class TestCrownClassArguments:
             trees["fia_species_code"].to_numpy()
         )
         np.testing.assert_allclose(got, expected, rtol=1e-12)
+
+
+IN_TO_CM = 2.54
+FT_TO_M = 0.3048
+LB_TO_KG = 0.45359237
+
+
+def sapling(dia_in, height_ft, spcd=202):
+    """One tree given the way small trees are measured: inches and feet."""
+    return pd.DataFrame(
+        {
+            "fia_species_code": [spcd],
+            "dbh": [dia_in * IN_TO_CM],
+            "height": [height_ft * FT_TO_M],
+            "crown_ratio": [0.9],
+        }
+    )
+
+
+class TestSmallTreeComponents:
+    """Under an inch the crown equations give way to a lookup.
+
+    Brown fitted Table 1 to trees over one inch, and several of its
+    forms are additive in diameter squared, so below that the intercept
+    dominates and crown weight barely varies with diameter. The table
+    is read by equation code and by height in one-foot classes.
+    """
+
+    def test_a_sapling_takes_the_table_not_the_equations(self):
+        """Douglas-fir at 0.5 in and 6 ft: the DF row, class 6.
+
+        The table gives 1.032 lb of foliage and 0.466 lb of 1-hour
+        branchwood there, so available fuel is 1.032 + 0.466 / 2.
+        """
+        got = available_canopy_fuel(sapling(0.5, 6.0), equations="brown_1978")
+        expected = (1.032 + 0.466 / 2) * LB_TO_KG
+        np.testing.assert_allclose(got, [expected], rtol=1e-9)
+
+    def test_it_does_not_apply_to_the_nsvb_arm(self):
+        """NSVB is fitted nationally and is not out of range here."""
+        trees = sapling(0.5, 6.0)
+        table = available_canopy_fuel(trees, equations="brown_1978")
+        assert available_canopy_fuel(trees, equations="nsvb") != pytest.approx(table)
+
+    @pytest.mark.parametrize("dia_in", [0.1, 0.5, 1.0])
+    def test_it_covers_diameters_up_to_and_including_an_inch(self, dia_in):
+        """The same height gives the same weight at any sapling diameter.
+
+        The table is keyed by height alone, so a tree's diameter selects
+        which side of the cutoff it falls on and nothing more.
+        """
+        got = available_canopy_fuel(sapling(dia_in, 6.0), equations="brown_1978")
+        one_inch = available_canopy_fuel(sapling(1.0, 6.0), equations="brown_1978")
+        np.testing.assert_allclose(got, one_inch, rtol=1e-12)
+
+    def test_just_over_an_inch_goes_back_to_the_equations(self):
+        table = available_canopy_fuel(sapling(1.0, 6.0), equations="brown_1978")
+        equations = available_canopy_fuel(sapling(1.01, 6.0), equations="brown_1978")
+        assert equations != pytest.approx(table)
+
+    def test_a_stand_can_straddle_the_cutoff(self):
+        """Both arms in one call, each tree taking its own."""
+        trees = pd.concat([sapling(0.5, 6.0), sapling(4.0, 20.0)], ignore_index=True)
+        got = available_canopy_fuel(trees, equations="brown_1978")
+        np.testing.assert_allclose(
+            got[0],
+            available_canopy_fuel(sapling(0.5, 6.0), equations="brown_1978")[0],
+            rtol=1e-12,
+        )
+        np.testing.assert_allclose(
+            got[1],
+            available_canopy_fuel(sapling(4.0, 20.0), equations="brown_1978")[0],
+            rtol=1e-12,
+        )
+
+
+class TestSmallTreeHeightClasses:
+    """Height picks the row: ``h <= 1`` is class 1, over 9 ft is class 10."""
+
+    def sapling_fuel(self, height_ft):
+        return float(
+            available_canopy_fuel(sapling(0.5, height_ft), equations="brown_1978")[0]
+        )
+
+    @pytest.mark.parametrize("height_ft", [1.0, 2.0, 3.0, 6.0, 9.0])
+    def test_a_whole_foot_height_stays_in_its_own_class(self, height_ft):
+        """The class boundary is inclusive, and must survive the units.
+
+        Heights arrive in metres and are converted back to feet, so a
+        tree measured at a whole number of feet lands a few ulp either
+        side of it. Without rounding, half of them take the class above
+        -- and saplings are measured to the foot.
+        """
+        assert self.sapling_fuel(height_ft) == pytest.approx(
+            self.sapling_fuel(height_ft - 0.01)
+        )
+        assert self.sapling_fuel(height_ft) != pytest.approx(
+            self.sapling_fuel(height_ft + 0.01)
+        )
+
+    def test_it_rises_with_height(self):
+        heights = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 20.0]
+        fuel = [self.sapling_fuel(h) for h in heights]
+        assert fuel == sorted(fuel)
+        assert len(set(fuel)) == len(fuel)
+
+    def test_everything_over_nine_feet_shares_the_top_class(self):
+        assert self.sapling_fuel(9.5) == pytest.approx(self.sapling_fuel(40.0))
+
+    def test_a_seedling_under_a_foot_takes_the_bottom_class(self):
+        assert self.sapling_fuel(0.5) == pytest.approx(self.sapling_fuel(1.0))
+
+
+class TestSmallTreeSpeciesCoverage:
+    """The table carries fewer codes than the equations do."""
+
+    def test_a_species_the_table_covers_uses_its_own_row(self):
+        """Subalpine fir differs from Douglas-fir at the same size."""
+        subalpine_fir, douglas_fir = 19, 202
+        assert available_canopy_fuel(
+            sapling(0.5, 3.0, spcd=subalpine_fir), equations="brown_1978"
+        ) != pytest.approx(
+            available_canopy_fuel(
+                sapling(0.5, 3.0, spcd=douglas_fir), equations="brown_1978"
+            )
+        )
+
+    def test_the_table_covers_every_species_the_equations_do(self):
+        """So the arm never has to fall back for a species it accepts.
+
+        ``brown_1978`` raises for anything outside Brown's eleven
+        conifers, and the small-tree table carries exactly those eleven.
+        A new crown-weight equation without a matching table row would
+        silently start returning Douglas-fir weights; this catches it.
+        """
+        assert set(brown.CROWN_WEIGHT_EQUATIONS) == set(
+            fuelcalc_small_tree_biomass().index.get_level_values("CODE")
+        )
+
+    def test_an_uncovered_code_falls_back_to_douglas_fir(self):
+        """Reachable through the stage function, which takes any code."""
+        uncovered = small_tree_crown_components(
+            np.array(["ZZ"]), np.array([0.5]), np.array([6.0])
+        )
+        douglas_fir = small_tree_crown_components(
+            np.array(["DF"]), np.array([0.5]), np.array([6.0])
+        )
+        np.testing.assert_allclose(uncovered, douglas_fir, rtol=1e-12)
+
+    def test_a_tree_over_the_cutoff_takes_nothing_from_the_table(self):
+        """The stage returns zeros there; the caller chooses which trees."""
+        foliage, twig = small_tree_crown_components(
+            np.array(["DF"]), np.array([1.01]), np.array([6.0])
+        )
+        assert foliage == 0.0 and twig == 0.0
+
+    def test_the_crown_class_factor_still_scales_a_sapling(self):
+        trees = sapling(0.5, 6.0).assign(cc="I")
+        plain = available_canopy_fuel(trees, equations="brown_1978")
+        adjusted = available_canopy_fuel(
+            trees,
+            equations="brown_1978",
+            crown_class_adjustment="reinhardt_2006",
+            crown_class_column="cc",
+        )
+        expected = plain * crown_class_factor(
+            trees["fia_species_code"].to_numpy(), trees["cc"].to_numpy()
+        )
+        np.testing.assert_allclose(adjusted, expected, rtol=1e-12)
