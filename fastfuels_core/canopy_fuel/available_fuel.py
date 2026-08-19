@@ -14,11 +14,16 @@ import pandas as pd
 from fastfuels_core.allometry import brown, nsvb
 from fastfuels_core.canopy_fuel.ref_data import (
     fuelcalc_crown_class_factors,
+    fuelcalc_small_tree_biomass,
     fuelcalc_species,
 )
 from fastfuels_core.units import conversion_factor
 
 VALID_EQUATIONS = ("nsvb", "brown_1978")
+# Above this dbh the crown-weight equations apply; at or below it the
+# small-tree table does.
+SMALL_TREE_MAX_DIA_IN = 1.0
+SMALL_TREE_DEFAULT_CODE = "DF"
 NO_CROWN_CLASS_ADJUSTMENT = "none"
 REINHARDT_CROWN_CLASS_ADJUSTMENT = "reinhardt_2006"
 VALID_CROWN_CLASS_ADJUSTMENTS = (
@@ -201,6 +206,51 @@ def _brown_1978_crown_components(
     return crown_kg * p1, crown_kg * (1.0 - p1)
 
 
+def small_tree_crown_components(
+    total_equation_code: np.ndarray, dia_in: np.ndarray, height_ft: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Tabulated foliage and fine branchwood (kg) for saplings.
+
+    Brown (1978) fitted Table 1 to dominant and codominant trees over
+    one inch dbh, so below that the crown-weight equations are outside
+    the range of the data behind them. Several are additive in
+    diameter squared, and their intercepts dominate at sapling size:
+    subalpine fir predicts 7.7 lb of crown at 0.5 in against 10.2 lb
+    at 1.5 in, so crown weight is nearly flat across the whole range
+    where the equations no longer apply.
+
+    Under one inch, this reads measured component weights from
+    :func:`~fastfuels_core.canopy_fuel.ref_data.fuelcalc_small_tree_biomass`
+    instead, keyed by the species' crown-weight equation code and the
+    tree's height. The table gives foliage and 1-hour weights directly,
+    so the accumulative proportions that split a fitted crown weight do
+    not enter. Species the table does not cover take the Douglas-fir
+    row, which is the table's own default.
+
+    Returns
+    -------
+    tuple of numpy.ndarray
+        Foliage and fine branchwood, kg per tree. Entries for trees
+        over one inch are zero; callers select which trees to take
+        from here.
+    """
+    table = fuelcalc_small_tree_biomass()
+    codes = np.asarray(total_equation_code, dtype=object)
+    # Codes the table does not carry take Douglas-fir, its default.
+    covered = table.index.get_level_values("CODE").unique()
+    codes = np.where(np.isin(codes, covered), codes, SMALL_TREE_DEFAULT_CODE)
+    # h <= 1 is class 1, h <= 2 class 2, ..., anything over 9 class 10.
+    ht_class = np.clip(np.ceil(np.asarray(height_ft, dtype=np.float64)), 1, 10)
+    ht_class = ht_class.astype(int)
+    keys = pd.MultiIndex.from_arrays([codes, ht_class])
+    rows = table.reindex(keys)
+    in_range = np.asarray(dia_in, dtype=np.float64) <= SMALL_TREE_MAX_DIA_IN
+    lb_to_kg = conversion_factor("lb", "kg")
+    foliage = np.where(in_range, rows["FOL_LB"].to_numpy(), 0.0) * lb_to_kg
+    twig = np.where(in_range, rows["ONE_HR_LB"].to_numpy(), 0.0) * lb_to_kg
+    return foliage, twig
+
+
 def _nsvb_crown_components(
     trees: pd.DataFrame, species_code: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -325,8 +375,21 @@ def available_canopy_fuel(
         )
     else:
         foliage_kg, branch_kg = _nsvb_crown_components(trees, spcd)
+    fine_branch_kg = fine_share * branch_kg
 
-    fuel = foliage_fraction * foliage_kg + branchwood_fraction * fine_share * branch_kg
+    # Brown's crown weights are out of range below an inch; take the
+    # tabulated small-tree weights there instead.
+    if equations == "brown_1978":
+        sapling = dia_in <= SMALL_TREE_MAX_DIA_IN
+        if sapling.any():
+            height_ft = trees["height"].to_numpy() * conversion_factor("m", "ft")
+            small_fol, small_twig = small_tree_crown_components(
+                species["TOTAL"].loc[spcd].to_numpy(), dia_in, height_ft
+            )
+            foliage_kg = np.where(sapling, small_fol, foliage_kg)
+            fine_branch_kg = np.where(sapling, small_twig, fine_branch_kg)
+
+    fuel = foliage_fraction * foliage_kg + branchwood_fraction * fine_branch_kg
     return _apply_crown_class_adjustment(
         fuel, trees, spcd, crown_class_adjustment, crown_class_column
     )

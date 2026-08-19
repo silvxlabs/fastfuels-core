@@ -16,9 +16,7 @@ Both sources define the same accumulative structure over total live
 crown weight: P1 is the foliage fraction, P2 the foliage *plus* 0-1/4 in
 branchwood fraction, so the fine (0-1/4 in) branchwood fraction is
 ``P2 - P1`` — the individual fractions "must be subtracted from one
-another" (SL-83 p. 4). The FuelCalc 1.7 guide (p. 70) reprints these
-equations but labels P2 as "percent of small branch", which it is not;
-this module follows the primary sources.
+another" (SL-83 p. 4).
 
 Species are keyed by FuelCalc's two-letter equation Ids (the FuelCalc
 Default Equation Table maps FIA species codes to Ids; see

@@ -71,3 +71,25 @@ def fuelcalc_crown_width() -> pd.DataFrame:
         files("fastfuels_core.data") / "FUELCALC_CROWN_WIDTH.csv",
         index_col="COVER_EQ",
     )
+
+
+@lru_cache(maxsize=1)
+def fuelcalc_small_tree_biomass() -> pd.DataFrame:
+    """Small-tree component weights (lb), indexed by (CODE, HT_CLASS_FT).
+
+    Measured crown component weights for trees of one inch dbh and
+    under, tabulated by the same equation code the crown-weight
+    equations use and by height in ten one-foot classes -- class 1 is
+    ``h <= 1`` and class 10 everything over 9 ft. Diameter selects the
+    table, height selects the row.
+
+    Transcribed from ``sr_STB[]`` in ``FC_DLL/Sml_Tre.cpp``, which is
+    the only published form of it. The source lists its rows in code
+    order and repeats the code ``LP``; the first row for a code is the
+    one its lookup resolves to, and is the one kept here.
+    """
+    table = pd.read_csv(
+        files("fastfuels_core.data") / "FUELCALC_SMALL_TREE_BIOMASS.csv",
+    )
+    first = table.drop_duplicates(subset=["CODE", "HT_CLASS_FT"], keep="first")
+    return first.set_index(["CODE", "HT_CLASS_FT"])

@@ -27,7 +27,11 @@ from fastfuels_core.canopy_fuel.available_fuel import (
     NO_CROWN_CLASS_ADJUSTMENT,
     available_canopy_fuel,
 )
-from fastfuels_core.canopy_fuel.bulk_density import cbd_running_mean
+from fastfuels_core.canopy_fuel.bulk_density import (
+    FUELCALC_EDGE,
+    SLAB_EDGE,
+    cbd_running_mean,
+)
 from fastfuels_core.canopy_fuel.cover import canopy_cover
 from fastfuels_core.canopy_fuel.canopy_height import profile_threshold_heights
 from fastfuels_core.canopy_fuel.fuel_load import canopy_fuel_load
@@ -69,6 +73,8 @@ def compute_canopy_metrics(
     cbh_threshold: float = 0.012,
     cbh_relative_fraction: float | None = 0.1,
     threshold_smoothing_window: float | None = None,
+    cbd_window_edge: str = SLAB_EDGE,
+    threshold_smoothing_edge: str = FUELCALC_EDGE,
 ) -> xr.Dataset:
     """Fill a georeferenced Dataset with canopy fuel metrics.
 
@@ -147,7 +153,10 @@ def compute_canopy_metrics(
         )
         if "cbd" in bands:
             dataset["cbd"].data[...] = cbd_running_mean(
-                profile, layer_depth=layer_depth, window=cbd_window
+                profile,
+                layer_depth=layer_depth,
+                window=cbd_window,
+                edge=cbd_window_edge,
             )
         if bands & {"cbh", "chm"}:
             cbh, chm = profile_threshold_heights(
@@ -156,6 +165,7 @@ def compute_canopy_metrics(
                 threshold=cbh_threshold,
                 relative_fraction=cbh_relative_fraction,
                 smoothing_window=threshold_smoothing_window,
+                smoothing_edge=threshold_smoothing_edge,
             )
             if "cbh" in bands:
                 dataset["cbh"].data[...] = cbh

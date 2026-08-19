@@ -9,27 +9,11 @@ from __future__ import annotations
 
 import numpy as np
 
+from fastfuels_core.canopy_fuel.bulk_density import (
+    FUELCALC_EDGE,
+    profile_running_mean,
+)
 from fastfuels_core.canopy_fuel.profile import FT_TO_M
-
-
-def _centered_running_mean(profile: np.ndarray, window_layers: int) -> np.ndarray:
-    """Running mean over the layer axis, truncated at the profile ends.
-
-    The denominator is the number of layers actually averaged, so the
-    outermost layers are means of a shorter window rather than being
-    diluted by padding. That is FFE-FVS's smoothing, and the skirt it
-    spreads past the canopy is what the extent bounds below undo.
-    """
-    n_layers = profile.shape[0]
-    cumsum = np.concatenate(
-        [np.zeros((1, *profile.shape[1:])), np.cumsum(profile, axis=0)], axis=0
-    )
-    k = np.arange(n_layers)
-    lo = np.clip(k - (window_layers - 1) // 2, 0, n_layers)
-    hi = np.clip(k + window_layers // 2 + 1, 0, n_layers)
-    return (cumsum[hi] - cumsum[lo]) / (hi - lo).reshape(
-        -1, *([1] * (profile.ndim - 1))
-    )
 
 
 def _fuel_extent(
@@ -50,15 +34,22 @@ def profile_threshold_heights(
     threshold: float = 0.012,
     relative_fraction: float | None = 0.1,
     smoothing_window: float | None = None,
+    smoothing_edge: str = FUELCALC_EDGE,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Canopy base height and canopy height from a bulk-density threshold.
 
     Per cell, the effective threshold is ``min(relative_fraction *
     profile_max, threshold)`` (FuelCalc's rule; ``relative_fraction=None``
     uses the flat threshold alone). ``smoothing_window`` (m) optionally
-    smooths the profile first with a centered running mean truncated at
-    the profile ends (FFE-FVS uses 0.9144 m). Cells with no layer at or
-    above threshold — including empty cells — are NaN.
+    smooths the profile first with a centered running mean, whose
+    behaviour past the ends of the profile ``smoothing_edge`` selects —
+    see :func:`~fastfuels_core.canopy_fuel.bulk_density.profile_running_mean`.
+    The default is FuelCalc's, which zero-pads above the canopy against
+    a full denominator; ``"truncate"`` is FFE-FVS's and reports canopy
+    height a layer higher on the same profile, because dividing the
+    topmost window by a short denominator inflates it over the
+    threshold. Cells with no layer at or above threshold — including
+    empty cells — are NaN.
 
     The pair spans the qualifying layers: CBH is the *bottom* of the
     lowest layer at or above threshold and canopy height the *top* of the
@@ -71,9 +62,7 @@ def profile_threshold_heights(
     the same way — FuelCalc labels every layer by its top
     (``NC_PTL.C:663-667``), and a midpoint would too — understates the
     depth by one layer and collapses it to zero in the single-layer case,
-    which would divide by zero in a load-over-depth CBD. The consequence
-    is that our CBH sits one layer below FuelCalc's on the same profile;
-    see ``tests/canopy_fuel/test_fuelcalc_parity.py``.
+    which would divide by zero in a load-over-depth CBD.
 
     Both heights are then bounded by the layers that actually hold fuel:
     CBH may not fall below the lowest layer with positive density in the
@@ -95,8 +84,10 @@ def profile_threshold_heights(
 
     scanned = profile
     if smoothing_window is not None:
-        scanned = _centered_running_mean(
-            profile, max(1, int(round(smoothing_window / layer_depth)))
+        scanned = profile_running_mean(
+            profile,
+            max(1, int(round(smoothing_window / layer_depth))),
+            edge=smoothing_edge,
         )
 
     profile_max = scanned.max(axis=0)
