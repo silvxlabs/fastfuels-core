@@ -19,6 +19,7 @@ columns. Units: meters, centimeters (dbh), kilograms.
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import rioxarray  # noqa: F401 — registers the .rio accessor
 import xarray as xr
@@ -45,10 +46,25 @@ PROFILE_BANDS = ("cbd", "cbh", "chm", "cfl")
 
 
 def _conifers_only(trees: pd.DataFrame) -> pd.DataFrame:
-    """Drop broadleaf species, by the species table's CBD inclusion flag."""
-    conifer = fuelcalc_species()["INCL_CBD"].reindex(
-        trees["fia_species_code"].to_numpy()
-    )
+    """Drop broadleaf species, by the species table's CBD inclusion flag.
+
+    Species the table does not carry raise rather than dropping out.
+    They have no inclusion flag to read, so silently excluding them
+    would lose their fuel without saying so, and the caller would have
+    no way to tell a hardwood the flag excluded from a species code
+    this package cannot price at all.
+    """
+    spcd = trees["fia_species_code"].to_numpy()
+    species = fuelcalc_species()
+    unknown = np.setdiff1d(spcd, species.index.to_numpy())
+    if unknown.size:
+        raise ValueError(
+            f"Species code(s) {unknown.tolist()} are not in the FuelCalc "
+            f"species table, so they have no canopy fuel inclusion flag. "
+            f"Drop them before calling, or pass exclude_hardwoods=False "
+            f"to keep every species in the profile."
+        )
+    conifer = species["INCL_CBD"].reindex(spcd)
     return trees[(conifer == "Yes").to_numpy()]
 
 

@@ -334,3 +334,68 @@ class TestCrownRadiusReachesEveryStage:
             for equations in ("purves", "crookston_stage")
         }
         np.testing.assert_array_equal(stem["purves"], stem["crookston_stage"])
+
+
+class TestUnknownSpeciesAreNotSilentlyDropped:
+    """Excluding hardwoods must not also swallow unpriced species.
+
+    The exclusion reads a flag from the FuelCalc species table, and a
+    code the table does not carry has no flag to read. Dropping those
+    rows would lose their fuel with no signal, and it is the default
+    path, so it would be the common case rather than an opt-in trap.
+    """
+
+    @staticmethod
+    def stand():
+        """One ponderosa and one code no species table carries."""
+        return pd.concat(
+            [
+                single_tree(dbh=30.0, fia_species_code=122, crown_class="C"),
+                single_tree(
+                    x=1050.0,
+                    y=4925.0,
+                    dbh=30.0,
+                    fia_species_code=9999,
+                    crown_class="C",
+                ),
+            ],
+            ignore_index=True,
+        )
+
+    def test_it_raises_under_the_exclusion(self):
+        with pytest.raises(ValueError, match="9999"):
+            compute_canopy_metrics(
+                self.stand(),
+                band_template(["cfl"]),
+                crown_class_column="crown_class",
+            )
+
+    def test_it_raises_without_the_exclusion_too(self):
+        """The allometry rejects the same code, so neither path is quiet."""
+        with pytest.raises(ValueError, match="9999"):
+            compute_canopy_metrics(
+                self.stand(),
+                band_template(["cfl"]),
+                crown_class_column="crown_class",
+                exclude_hardwoods=False,
+            )
+
+    def test_a_known_hardwood_is_still_dropped_quietly(self):
+        """Exclusion is for species the table covers and flags as out."""
+        trees = pd.concat(
+            [
+                single_tree(dbh=30.0, fia_species_code=122, crown_class="C"),
+                single_tree(
+                    x=1050.0,
+                    y=4925.0,
+                    dbh=30.0,
+                    fia_species_code=351,
+                    crown_class="C",
+                ),
+            ],
+            ignore_index=True,
+        )
+        ds = compute_canopy_metrics(
+            trees, band_template(["cfl"]), crown_class_column="crown_class"
+        )
+        assert float(ds.cfl.values[2, 1]) > 0.0
