@@ -92,6 +92,7 @@ class TestSmoothing:
             layer_depth=1.0,
             threshold=0.012,
             relative_fraction=None,
+            smoothing_window=None,
         )
         np.testing.assert_allclose(cbh, [[1.0]])
         np.testing.assert_allclose(chm, [[2.0]])

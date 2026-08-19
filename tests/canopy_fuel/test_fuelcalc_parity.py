@@ -202,7 +202,9 @@ class TestCrownProportionParity:
                     "crown_ratio": 0.5,
                 }
             )
-            ours = available_canopy_fuel(trees, equations="brown_1978")
+            ours = available_canopy_fuel(
+                trees, equations="brown_1978", crown_class_adjustment="none"
+            )
             theirs = np.array(
                 [
                     fc.available_canopy_fuel_lb(eq_id, float(d))
@@ -448,6 +450,7 @@ class TestProfileReductionParity:
                 profile[:, None, None],
                 layer_depth=LAYER_FT_M,
                 window=self.WINDOW,
+                edge="slab",
             )[0, 0]
             assert ours == pytest.approx(reference.cbd, abs=1e-12)
 
@@ -472,6 +475,7 @@ class TestProfileReductionParity:
                             profile[:, None, None],
                             layer_depth=LAYER_FT_M,
                             window=self.WINDOW,
+                            edge="slab",
                         )[0, 0]
                     ),
                     12,
@@ -525,7 +529,7 @@ class TestProfileReductionParity:
         profile = np.zeros((10, 1, 1))
         profile[4:7, 0, 0] = 0.05
         cbh, chm = profile_threshold_heights(
-            profile, layer_depth=layer, relative_fraction=None
+            profile, layer_depth=layer, relative_fraction=None, smoothing_window=None
         )
         assert cbh[0, 0] == pytest.approx(4 * layer)  # bottom of layer 4
         assert chm[0, 0] == pytest.approx(7 * layer)  # top of layer 6
@@ -538,7 +542,7 @@ class TestProfileReductionParity:
         single = np.zeros((10, 1, 1))
         single[4, 0, 0] = 0.05
         lo, hi = profile_threshold_heights(
-            single, layer_depth=layer, relative_fraction=None
+            single, layer_depth=layer, relative_fraction=None, smoothing_window=None
         )
         assert hi[0, 0] - lo[0, 0] == pytest.approx(layer), (
             "a single qualifying layer must have positive depth; a top "

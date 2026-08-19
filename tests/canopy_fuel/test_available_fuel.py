@@ -69,19 +69,35 @@ class TestComposition:
         expected = nsvb.foliage_biomass(
             [202], [25.4], [15.24]
         ) + 0.5 * fine_share * nsvb.branch_biomass([202], [25.4], [15.24])
-        np.testing.assert_allclose(available_canopy_fuel(trees), expected, rtol=1e-10)
+        np.testing.assert_allclose(
+            available_canopy_fuel(
+                trees, equations="nsvb", crown_class_adjustment="none"
+            ),
+            expected,
+            rtol=1e-10,
+        )
 
     def test_the_two_fractions_decompose_the_default(self):
         """Default fuel is the foliage term plus half the branchwood term."""
         trees = random_stand(20)
         foliage_only = available_canopy_fuel(
-            trees, foliage_fraction=1.0, branchwood_fraction=0.0
+            trees,
+            foliage_fraction=1.0,
+            branchwood_fraction=0.0,
+            equations="nsvb",
+            crown_class_adjustment="none",
         )
         fine_only = available_canopy_fuel(
-            trees, foliage_fraction=0.0, branchwood_fraction=1.0
+            trees,
+            foliage_fraction=0.0,
+            branchwood_fraction=1.0,
+            equations="nsvb",
+            crown_class_adjustment="none",
         )
         np.testing.assert_allclose(
-            available_canopy_fuel(trees),
+            available_canopy_fuel(
+                trees, equations="nsvb", crown_class_adjustment="none"
+            ),
             foliage_only + 0.5 * fine_only,
             rtol=1e-12,
         )
@@ -89,23 +105,39 @@ class TestComposition:
     def test_every_tree_carries_foliage(self):
         trees = random_stand(20)
         assert (
-            available_canopy_fuel(trees, foliage_fraction=1.0, branchwood_fraction=0.0)
+            available_canopy_fuel(
+                trees,
+                foliage_fraction=1.0,
+                branchwood_fraction=0.0,
+                equations="nsvb",
+                crown_class_adjustment="none",
+            )
             > 0
         ).all()
 
     def test_the_fine_branchwood_term_is_never_negative(self):
         trees = random_stand(20)
         assert (
-            available_canopy_fuel(trees, foliage_fraction=0.0, branchwood_fraction=1.0)
+            available_canopy_fuel(
+                trees,
+                foliage_fraction=0.0,
+                branchwood_fraction=1.0,
+                equations="nsvb",
+                crown_class_adjustment="none",
+            )
             >= 0
         ).all()
 
     def test_one_fuel_value_per_tree(self):
-        assert available_canopy_fuel(random_stand(7)).shape == (7,)
+        assert available_canopy_fuel(
+            random_stand(7), equations="nsvb", crown_class_adjustment="none"
+        ).shape == (7,)
 
     def test_an_empty_stand_gives_an_empty_result(self):
         """Reachable through exclude_hardwoods on an all-hardwood stand."""
-        fuel = available_canopy_fuel(random_stand(0))
+        fuel = available_canopy_fuel(
+            random_stand(0), equations="nsvb", crown_class_adjustment="none"
+        )
         assert fuel.shape == (0,)
 
 
@@ -114,7 +146,9 @@ class TestFuelColumn:
         trees = random_stand(5)
         trees["acf_kg"] = [1.0, 2.0, 3.0, 4.0, 5.0]
         np.testing.assert_array_equal(
-            available_canopy_fuel(trees, fuel_column="acf_kg"),
+            available_canopy_fuel(
+                trees, fuel_column="acf_kg", crown_class_adjustment="none"
+            ),
             trees["acf_kg"].to_numpy(),
         )
 
@@ -122,7 +156,10 @@ class TestFuelColumn:
         """Species the equations do not cover still pass through."""
         trees = one_tree(999, 20.0, 15.0, acf_kg=7.0)
         np.testing.assert_array_equal(
-            available_canopy_fuel(trees, fuel_column="acf_kg"), [7.0]
+            available_canopy_fuel(
+                trees, fuel_column="acf_kg", crown_class_adjustment="none"
+            ),
+            [7.0],
         )
 
 
@@ -133,17 +170,21 @@ class TestSpeciesCoverage:
         trees = random_stand(3)
         trees.loc[1, "fia_species_code"] = 999
         with pytest.raises(ValueError, match="999"):
-            available_canopy_fuel(trees)
+            available_canopy_fuel(trees, crown_class_adjustment="none")
 
     def test_pinyon_juniper_raises(self):
         """106 two-needle pinyon resolves to PY, which has no equations."""
         with pytest.raises(ValueError, match="PY"):
-            available_canopy_fuel(one_tree(106, 20.0, 8.0))
+            available_canopy_fuel(
+                one_tree(106, 20.0, 8.0), crown_class_adjustment="none"
+            )
 
     def test_an_eastern_newer_species_raises(self):
         """833 northern red oak is in the table; its Ids have no equations."""
         with pytest.raises(ValueError, match="RO"):
-            available_canopy_fuel(one_tree(833, 30.0, 20.0))
+            available_canopy_fuel(
+                one_tree(833, 30.0, 20.0), crown_class_adjustment="none"
+            )
 
     def test_quaking_aspen_raises(self):
         """746 used to borrow whitebark pine P1 and western larch P2.
@@ -153,12 +194,16 @@ class TestSpeciesCoverage:
         Roussopoulos 1978 (NC-156). Raising beats an unsourced number.
         """
         with pytest.raises(ValueError, match="QA"):
-            available_canopy_fuel(one_tree(746, 20.0, 15.0))
+            available_canopy_fuel(
+                one_tree(746, 20.0, 15.0), crown_class_adjustment="none"
+            )
 
 
 def test_unknown_equations_raises():
     with pytest.raises(ValueError, match="bogus"):
-        available_canopy_fuel(random_stand(3), equations="bogus")
+        available_canopy_fuel(
+            random_stand(3), equations="bogus", crown_class_adjustment="none"
+        )
 
 
 class TestEquationsArm:
@@ -173,8 +218,12 @@ class TestEquationsArm:
             [two_trees(), one_tree(108, 40.0, 18.0)], ignore_index=True
         ).assign(dbh=40.0)
         assert not np.allclose(
-            available_canopy_fuel(trees, equations="brown_1978"),
-            available_canopy_fuel(trees, equations="nsvb"),
+            available_canopy_fuel(
+                trees, equations="brown_1978", crown_class_adjustment="none"
+            ),
+            available_canopy_fuel(
+                trees, equations="nsvb", crown_class_adjustment="none"
+            ),
             rtol=0.01,
         )
 
@@ -234,7 +283,7 @@ class TestCrownClassArguments:
     def test_no_adjustment_is_the_default(self):
         trees = two_trees()
         np.testing.assert_array_equal(
-            available_canopy_fuel(trees),
+            available_canopy_fuel(trees, crown_class_adjustment="none"),
             available_canopy_fuel(trees, crown_class_adjustment="none"),
         )
 
@@ -242,7 +291,7 @@ class TestCrownClassArguments:
         """Otherwise the tests above would pass on a no-op."""
         trees = two_trees(cc="D")
         assert not np.allclose(
-            available_canopy_fuel(trees),
+            available_canopy_fuel(trees, crown_class_adjustment="none"),
             available_canopy_fuel(
                 trees,
                 crown_class_adjustment="reinhardt_2006",
@@ -282,7 +331,11 @@ class TestCrownClassArguments:
         that makes the adjustment more than a constant.
         """
         with pytest.raises(ValueError, match="would be ignored"):
-            available_canopy_fuel(two_trees(cc="D"), crown_class_column="cc")
+            available_canopy_fuel(
+                two_trees(cc="D"),
+                crown_class_column="cc",
+                crown_class_adjustment="none",
+            )
 
     def test_the_adjustment_without_a_column_raises(self):
         """Allowing it would apply the Other/none factor to everything,
@@ -313,9 +366,9 @@ class TestCrownClassArguments:
             crown_class_adjustment="reinhardt_2006",
             crown_class_column="cc",
         )
-        expected = available_canopy_fuel(trees) * crown_class_factor(
-            trees["fia_species_code"].to_numpy()
-        )
+        expected = available_canopy_fuel(
+            trees, crown_class_adjustment="none"
+        ) * crown_class_factor(trees["fia_species_code"].to_numpy())
         np.testing.assert_allclose(got, expected, rtol=1e-12)
 
 
@@ -351,15 +404,21 @@ class TestSmallTreeComponents:
         The table gives 1.032 lb of foliage and 0.466 lb of 1-hour
         branchwood there, so available fuel is 1.032 + 0.466 / 2.
         """
-        got = available_canopy_fuel(sapling(0.5, 6.0), equations="brown_1978")
+        got = available_canopy_fuel(
+            sapling(0.5, 6.0), equations="brown_1978", crown_class_adjustment="none"
+        )
         expected = (1.032 + 0.466 / 2) * LB_TO_KG
         np.testing.assert_allclose(got, [expected], rtol=1e-9)
 
     def test_it_does_not_apply_to_the_nsvb_arm(self):
         """NSVB is fitted nationally and is not out of range here."""
         trees = sapling(0.5, 6.0)
-        table = available_canopy_fuel(trees, equations="brown_1978")
-        assert available_canopy_fuel(trees, equations="nsvb") != pytest.approx(table)
+        table = available_canopy_fuel(
+            trees, equations="brown_1978", crown_class_adjustment="none"
+        )
+        assert available_canopy_fuel(
+            trees, equations="nsvb", crown_class_adjustment="none"
+        ) != pytest.approx(table)
 
     @pytest.mark.parametrize("dia_in", [0.1, 0.5, 1.0])
     def test_it_covers_diameters_up_to_and_including_an_inch(self, dia_in):
@@ -368,27 +427,43 @@ class TestSmallTreeComponents:
         The table is keyed by height alone, so a tree's diameter selects
         which side of the cutoff it falls on and nothing more.
         """
-        got = available_canopy_fuel(sapling(dia_in, 6.0), equations="brown_1978")
-        one_inch = available_canopy_fuel(sapling(1.0, 6.0), equations="brown_1978")
+        got = available_canopy_fuel(
+            sapling(dia_in, 6.0), equations="brown_1978", crown_class_adjustment="none"
+        )
+        one_inch = available_canopy_fuel(
+            sapling(1.0, 6.0), equations="brown_1978", crown_class_adjustment="none"
+        )
         np.testing.assert_allclose(got, one_inch, rtol=1e-12)
 
     def test_just_over_an_inch_goes_back_to_the_equations(self):
-        table = available_canopy_fuel(sapling(1.0, 6.0), equations="brown_1978")
-        equations = available_canopy_fuel(sapling(1.01, 6.0), equations="brown_1978")
+        table = available_canopy_fuel(
+            sapling(1.0, 6.0), equations="brown_1978", crown_class_adjustment="none"
+        )
+        equations = available_canopy_fuel(
+            sapling(1.01, 6.0), equations="brown_1978", crown_class_adjustment="none"
+        )
         assert equations != pytest.approx(table)
 
     def test_a_stand_can_straddle_the_cutoff(self):
         """Both arms in one call, each tree taking its own."""
         trees = pd.concat([sapling(0.5, 6.0), sapling(4.0, 20.0)], ignore_index=True)
-        got = available_canopy_fuel(trees, equations="brown_1978")
+        got = available_canopy_fuel(
+            trees, equations="brown_1978", crown_class_adjustment="none"
+        )
         np.testing.assert_allclose(
             got[0],
-            available_canopy_fuel(sapling(0.5, 6.0), equations="brown_1978")[0],
+            available_canopy_fuel(
+                sapling(0.5, 6.0), equations="brown_1978", crown_class_adjustment="none"
+            )[0],
             rtol=1e-12,
         )
         np.testing.assert_allclose(
             got[1],
-            available_canopy_fuel(sapling(4.0, 20.0), equations="brown_1978")[0],
+            available_canopy_fuel(
+                sapling(4.0, 20.0),
+                equations="brown_1978",
+                crown_class_adjustment="none",
+            )[0],
             rtol=1e-12,
         )
 
@@ -398,7 +473,11 @@ class TestSmallTreeHeightClasses:
 
     def sapling_fuel(self, height_ft):
         return float(
-            available_canopy_fuel(sapling(0.5, height_ft), equations="brown_1978")[0]
+            available_canopy_fuel(
+                sapling(0.5, height_ft),
+                equations="brown_1978",
+                crown_class_adjustment="none",
+            )[0]
         )
 
     @pytest.mark.parametrize("height_ft", [1.0, 2.0, 3.0, 6.0, 9.0])
@@ -437,10 +516,14 @@ class TestSmallTreeSpeciesCoverage:
         """Subalpine fir differs from Douglas-fir at the same size."""
         subalpine_fir, douglas_fir = 19, 202
         assert available_canopy_fuel(
-            sapling(0.5, 3.0, spcd=subalpine_fir), equations="brown_1978"
+            sapling(0.5, 3.0, spcd=subalpine_fir),
+            equations="brown_1978",
+            crown_class_adjustment="none",
         ) != pytest.approx(
             available_canopy_fuel(
-                sapling(0.5, 3.0, spcd=douglas_fir), equations="brown_1978"
+                sapling(0.5, 3.0, spcd=douglas_fir),
+                equations="brown_1978",
+                crown_class_adjustment="none",
             )
         )
 
@@ -475,7 +558,9 @@ class TestSmallTreeSpeciesCoverage:
 
     def test_the_crown_class_factor_still_scales_a_sapling(self):
         trees = sapling(0.5, 6.0).assign(cc="I")
-        plain = available_canopy_fuel(trees, equations="brown_1978")
+        plain = available_canopy_fuel(
+            trees, equations="brown_1978", crown_class_adjustment="none"
+        )
         adjusted = available_canopy_fuel(
             trees,
             equations="brown_1978",

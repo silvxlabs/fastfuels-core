@@ -59,6 +59,7 @@ are the report's numbers, so comparisons round.
 
 from __future__ import annotations
 
+import inspect
 import math
 from importlib.resources import files
 
@@ -90,8 +91,11 @@ SPECIES_CODES = {
     "ABGR": 17,
 }
 
-# FuelCalc 1.7's options at every stage where this package offers more
-# than one. The defaults are FastFuels-native and would not reproduce it.
+# FuelCalc 1.7's option at every stage where this package offers more
+# than one. These are also the module's defaults, which
+# test_the_module_defaults_are_this_parameterization pins; the dict is
+# kept as the explicit record of what FuelCalc does, so a default that
+# drifts away from it fails there rather than quietly here.
 FUELCALC_1_7 = dict(
     equations="brown_1978",
     crown_class_adjustment="reinhardt_2006",
@@ -245,6 +249,23 @@ def test_plot_2_post_thinning():
     assert got["canopy_bulk_density_kg_m3"] == pytest.approx(0.0236, abs=5e-5)
     assert got["stand_height_ft"] == pytest.approx(129.0)
     assert got["canopy_fuel_load_ton_ac"] == pytest.approx(2.254, abs=5e-4)
+
+
+def test_the_module_defaults_are_this_parameterization():
+    """compute_canopy_metrics defaults to FuelCalc at every stage.
+
+    ``crown_class_column`` is the one setting with no default: it names
+    a column in the caller's inventory, so the module cannot guess it,
+    and it will not fall back to the table's Other/none factor because
+    that is 0.5 for 50 of the 54 species.
+    """
+    defaults = inspect.signature(compute_canopy_metrics).parameters
+    drifted = {
+        name: (wanted, defaults[name].default)
+        for name, wanted in FUELCALC_1_7.items()
+        if name != "crown_class_column" and defaults[name].default != wanted
+    }
+    assert not drifted, f"defaults no longer match FuelCalc: {drifted}"
 
 
 def test_our_thinning_reproduces_the_fuelcalc_stand():

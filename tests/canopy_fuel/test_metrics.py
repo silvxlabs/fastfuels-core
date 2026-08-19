@@ -46,6 +46,7 @@ def hand_metrics(hand_stand):
         vertical_distribution="uniform",
         layer_depth=HAND_LAYER_DEPTH,
         cbd_window=None,
+        crown_class_adjustment="none",
     )
 
 
@@ -96,12 +97,17 @@ class TestBandSelection:
             hand_stand.drop(columns=["acf"]),
             band_template(["cc"]),
             crown_radius_column="crad",
+            crown_class_adjustment="none",
         )
         assert float(ds.cc.values[2, 1]) > 0.0
 
     def test_an_unknown_band_raises(self, hand_stand):
         with pytest.raises(ValueError, match="bogus"):
-            compute_canopy_metrics(hand_stand, band_template(["cbd", "bogus"]))
+            compute_canopy_metrics(
+                hand_stand,
+                band_template(["cbd", "bogus"]),
+                crown_class_adjustment="none",
+            )
 
 
 class TestStandFilters:
@@ -115,6 +121,7 @@ class TestStandFilters:
             min_tree_height=2.0,
             horizontal_distribution="stem",
             vertical_distribution="uniform",
+            crown_class_adjustment="none",
         )
         np.testing.assert_allclose(
             ds.cfl.values[2, 1], HAND_FUEL_KG / CELL_AREA, rtol=1e-6
@@ -126,6 +133,7 @@ class TestStandFilters:
             band_template(["cbd", "cbh", "cc"]),
             fuel_column="acf",
             crown_radius_column="crad",
+            crown_class_adjustment="none",
         )
         assert (ds.cbd.values == 0).all() and (ds.cc.values == 0).all()
 
@@ -135,43 +143,66 @@ class TestStandFilters:
             band_template(["cbh"]),
             fuel_column="acf",
             crown_radius_column="crad",
+            crown_class_adjustment="none",
         )
         assert np.isnan(ds.cbh.values).all()
 
 
+# Brown's equations cover eleven Rocky Mountain conifers; the random
+# stand draws from a wider list, so mass-conservation tests of the
+# default pipeline take the subset it can price.
+BROWN_SPECIES = [202, 122, 73, 17, 108]
+
+
+def brown_stand(n, seed=0):
+    """An interior stand Brown's arm covers, with crown positions."""
+    trees = interior_stand(n, seed=seed)
+    trees = trees[trees["fia_species_code"].isin(BROWN_SPECIES)]
+    return trees.assign(crown_class="C")
+
+
 def test_the_default_pipeline_conserves_fuel_mass():
-    """NSVB + Reinhardt cubics + crown_projected, end to end.
+    """Brown + Reinhardt cubics + stem attribution, end to end.
 
     Every stage conserves mass on its own; this checks the chain does
     too, on a stand kept clear of the lattice boundary.
     """
-    trees = interior_stand(120, seed=23)
-    ds = compute_canopy_metrics(trees, band_template(["cfl", "cbd"]))
+    trees = brown_stand(120, seed=23)
+    ds = compute_canopy_metrics(
+        trees, band_template(["cfl", "cbd"]), crown_class_column="crown_class"
+    )
     np.testing.assert_allclose(
         (ds.cfl.values * CELL_AREA).sum(),
-        available_canopy_fuel(trees).sum(),
+        available_canopy_fuel(trees, crown_class_column="crown_class").sum(),
         rtol=1e-3,
     )
 
 
 def test_the_default_pipeline_gives_non_negative_bulk_density():
-    ds = compute_canopy_metrics(interior_stand(120, seed=23), band_template(["cbd"]))
+    ds = compute_canopy_metrics(
+        interior_stand(120, seed=23),
+        band_template(["cbd"]),
+        crown_class_adjustment="none",
+    )
     assert (ds.cbd.values >= 0).all()
 
 
 class TestExcludeHardwoods:
     """Hardwoods leave the bulk-density profile but stay in cover.
 
-    The crown fire models CBD feeds are built for conifer crowns, so a
-    hardwood understorey would otherwise raise CBD and lower CBH. Its
-    canopy still occupies ground, so cover counts it either way.
+    Whether excluding one lowers CBD depends on where its crown sits:
+    CBD is a maximum over the profile, so a hardwood below the densest
+    layer does not set it and dropping it changes nothing. The stand
+    here puts the two crowns in the same layers, which is the case the
+    flag exists for. Cover counts the hardwood either way, since its
+    canopy occupies ground whatever the crown fire model does with it.
     """
 
     BANDS = ["cbd", "cbh", "cc"]
 
     @staticmethod
     def mixed_stand():
-        """202 Douglas-fir (conifer) and 351 red alder (hardwood), one cell."""
+        """202 Douglas-fir and 351 red alder, crowns overlapping, one cell."""
         return pd.concat(
             [
                 single_tree(
@@ -187,7 +218,7 @@ class TestExcludeHardwoods:
                     y=4925.0,
                     fia_species_code=351,
                     dbh=30.0,
-                    height=14.0,
+                    height=19.0,
                     crown_ratio=0.7,
                 ),
             ],
@@ -195,7 +226,17 @@ class TestExcludeHardwoods:
         )
 
     def metrics(self, trees, **kwargs):
-        return compute_canopy_metrics(trees, band_template(self.BANDS), **kwargs)
+        # NSVB, because Brown's arm has no equations for red alder, and
+        # inclusion by default, so each test asks for the exclusion it
+        # is about rather than inheriting it.
+        kwargs.setdefault("exclude_hardwoods", False)
+        return compute_canopy_metrics(
+            trees,
+            band_template(self.BANDS),
+            equations="nsvb",
+            crown_class_adjustment="none",
+            **kwargs,
+        )
 
     def test_dropping_the_hardwood_lowers_cbd(self):
         trees = self.mixed_stand()
@@ -252,6 +293,8 @@ class TestCrownRadiusReachesEveryStage:
             self.straddling_tree(),
             band_template(self.BANDS),
             crown_radius_equations=equations,
+            crown_class_adjustment="none",
+            horizontal_distribution="crown_projected",
         )
 
     @pytest.mark.parametrize("band", BANDS)
@@ -271,6 +314,8 @@ class TestCrownRadiusReachesEveryStage:
                 band_template(self.BANDS),
                 crown_radius_column="crad",
                 crown_radius_equations=equations,
+                crown_class_adjustment="none",
+                horizontal_distribution="crown_projected",
             ).cbd.values
             for equations in ("purves", "crookston_stage")
         }
@@ -284,6 +329,7 @@ class TestCrownRadiusReachesEveryStage:
                 band_template(["cbd"]),
                 horizontal_distribution="stem",
                 crown_radius_equations=equations,
+                crown_class_adjustment="none",
             ).cbd.values
             for equations in ("purves", "crookston_stage")
         }

@@ -208,7 +208,9 @@ class TestCrownProjectedAttribution:
     def test_conserves_mass_for_crowns_inside_the_lattice(self):
         trees = interior_stand(200, seed=13)
         fuel = np.abs(np.random.default_rng(14).normal(8.0, 2.0, len(trees)))
-        profile = vertical_profile(trees, fuel, TRANSFORM, SHAPE)
+        profile = vertical_profile(
+            trees, fuel, TRANSFORM, SHAPE, horizontal_distribution="crown_projected"
+        )
         np.testing.assert_allclose(total_mass(profile), fuel.sum(), rtol=1e-3)
 
     def test_a_crown_fully_inside_one_cell_matches_stem_attribution(self):
@@ -218,7 +220,14 @@ class TestCrownProjectedAttribution:
         trees["crad"] = 2.0  # well inside the 30 m cell around its center
         fuel = np.full(len(trees), 5.0)
         np.testing.assert_allclose(
-            vertical_profile(trees, fuel, TRANSFORM, SHAPE, crown_radius_column="crad"),
+            vertical_profile(
+                trees,
+                fuel,
+                TRANSFORM,
+                SHAPE,
+                crown_radius_column="crad",
+                horizontal_distribution="crown_projected",
+            ),
             stem_profile(trees, fuel),
             rtol=1e-9,
             atol=1e-12,
@@ -234,6 +243,7 @@ class TestCrownProjectedAttribution:
             SHAPE,
             vertical_distribution="uniform",
             crown_radius_column="crad",
+            horizontal_distribution="crown_projected",
         )
         d, r = 0.5, 3.0
         lost = r * r * np.arccos(d / r) - d * np.sqrt(r * r - d * d)
@@ -254,6 +264,7 @@ class TestCrownStraddlingACellEdge:
             SHAPE,
             vertical_distribution="uniform",
             crown_radius_column="crad",
+            horizontal_distribution="crown_projected",
         )
         return profile.sum(axis=0) * CELL_AREA * FT_TO_M
 

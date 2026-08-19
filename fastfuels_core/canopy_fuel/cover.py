@@ -127,8 +127,8 @@ def canopy_cover(
     shape: tuple[int, int],
     *,
     crown_radius_column: str | None = None,
-    crown_radius_equations: str = "purves",
-    method: str = "crown_union",
+    crown_radius_equations: str = "crookston_stage",
+    method: str = "crown_overlap",
     height_threshold: float = 2.0,
     supersample: int | None = None,
 ) -> np.ndarray:

@@ -51,7 +51,12 @@ class TestFixedDepthDenominator:
         does have a lower bulk density over any 3 m slab containing it.
         """
         np.testing.assert_allclose(
-            cbd_running_mean(column_profile([3.0, 3.0]), layer_depth=1.0, window=3.0),
+            cbd_running_mean(
+                column_profile([3.0, 3.0]),
+                layer_depth=1.0,
+                window=3.0,
+                edge="slab",
+            ),
             [[2.0]],
         )
 
@@ -130,14 +135,14 @@ class TestCbdEdgeSelection:
             profile, layer_depth=1.0, window=3.0, edge="fuelcalc"
         ) == pytest.approx(3.0)
 
-    def test_the_default_is_the_fixed_depth_slab(self):
-        """Pinned: CBD stays invariant to how high the canopy sits."""
+    def test_the_default_is_fuelcalcs(self):
+        """Pinned, because the three disagree against the ground."""
         profile = column_profile([3.0, 3.0])
         assert cbd_running_mean(profile, layer_depth=1.0, window=3.0) == pytest.approx(
-            cbd_running_mean(profile, layer_depth=1.0, window=3.0, edge="slab")
+            cbd_running_mean(profile, layer_depth=1.0, window=3.0, edge="fuelcalc")
         )
         assert cbd_running_mean(profile, layer_depth=1.0, window=3.0) != pytest.approx(
-            cbd_running_mean(profile, layer_depth=1.0, window=3.0, edge="fuelcalc")
+            cbd_running_mean(profile, layer_depth=1.0, window=3.0, edge="slab")
         )
 
     @pytest.mark.parametrize("edge", VALID_EDGES)

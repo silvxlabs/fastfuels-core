@@ -33,7 +33,7 @@ def profile_threshold_heights(
     layer_depth: float = FT_TO_M,
     threshold: float = 0.012,
     relative_fraction: float | None = 0.1,
-    smoothing_window: float | None = None,
+    smoothing_window: float | None = 5 * FT_TO_M,
     smoothing_edge: str = FUELCALC_EDGE,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Canopy base height and canopy height from a bulk-density threshold.

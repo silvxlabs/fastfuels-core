@@ -27,7 +27,9 @@ class TestPurvesEquations:
                 for row in trees.itertuples()
             ]
         )
-        np.testing.assert_allclose(max_crown_radius(trees), reference, rtol=1e-12)
+        np.testing.assert_allclose(
+            max_crown_radius(trees, equations="purves"), reference, rtol=1e-12
+        )
 
     def test_returns_one_radius_per_tree(self):
         assert max_crown_radius(random_stand(50)).shape == (50,)

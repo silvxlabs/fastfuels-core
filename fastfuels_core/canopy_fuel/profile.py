@@ -188,9 +188,9 @@ def vertical_profile(
     n_layers: int | None = None,
     layer_depth: float = FT_TO_M,
     vertical_distribution: str = "reinhardt_2006",
-    horizontal_distribution: str = "crown_projected",
+    horizontal_distribution: str = "stem",
     crown_radius_column: str | None = None,
-    crown_radius_equations: str = "purves",
+    crown_radius_equations: str = "crookston_stage",
 ) -> np.ndarray:
     """Accumulate per-tree fuel into a per-cell vertical profile grid.
 

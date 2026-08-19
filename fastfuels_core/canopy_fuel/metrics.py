@@ -24,12 +24,11 @@ import rioxarray  # noqa: F401 — registers the .rio accessor
 import xarray as xr
 
 from fastfuels_core.canopy_fuel.available_fuel import (
-    NO_CROWN_CLASS_ADJUSTMENT,
+    REINHARDT_CROWN_CLASS_ADJUSTMENT,
     available_canopy_fuel,
 )
 from fastfuels_core.canopy_fuel.bulk_density import (
     FUELCALC_EDGE,
-    SLAB_EDGE,
     cbd_running_mean,
 )
 from fastfuels_core.canopy_fuel.cover import canopy_cover
@@ -37,6 +36,9 @@ from fastfuels_core.canopy_fuel.canopy_height import profile_threshold_heights
 from fastfuels_core.canopy_fuel.fuel_load import canopy_fuel_load
 from fastfuels_core.canopy_fuel.profile import FT_TO_M, vertical_profile
 from fastfuels_core.canopy_fuel.ref_data import fuelcalc_species
+
+# Five one-foot layers, the running-mean depth FuelCalc smooths over.
+FUELCALC_WINDOW = 5 * FT_TO_M
 
 KNOWN_BANDS = ("cbd", "cbh", "chm", "cc", "cfl")
 PROFILE_BANDS = ("cbd", "cbh", "chm", "cfl")
@@ -56,24 +58,24 @@ def compute_canopy_metrics(
     *,
     fuel_column: str | None = None,
     crown_radius_column: str | None = None,
-    crown_radius_equations: str = "purves",
-    cover_method: str = "crown_union",
+    crown_radius_equations: str = "crookston_stage",
+    cover_method: str = "crown_overlap",
     cover_height_threshold: float = 2.0,
-    equations: str = "nsvb",
-    crown_class_adjustment: str = NO_CROWN_CLASS_ADJUSTMENT,
+    equations: str = "brown_1978",
+    crown_class_adjustment: str = REINHARDT_CROWN_CLASS_ADJUSTMENT,
     crown_class_column: str | None = None,
     foliage_fraction: float = 1.0,
     branchwood_fraction: float = 0.5,
     min_tree_height: float = 0.0,
-    exclude_hardwoods: bool = False,
+    exclude_hardwoods: bool = True,
     layer_depth: float = FT_TO_M,
     vertical_distribution: str = "reinhardt_2006",
-    horizontal_distribution: str = "crown_projected",
-    cbd_window: float | None = 3.0,
+    horizontal_distribution: str = "stem",
+    cbd_window: float | None = FUELCALC_WINDOW,
     cbh_threshold: float = 0.012,
     cbh_relative_fraction: float | None = 0.1,
-    threshold_smoothing_window: float | None = None,
-    cbd_window_edge: str = SLAB_EDGE,
+    threshold_smoothing_window: float | None = FUELCALC_WINDOW,
+    cbd_window_edge: str = FUELCALC_EDGE,
     threshold_smoothing_edge: str = FUELCALC_EDGE,
 ) -> xr.Dataset:
     """Fill a georeferenced Dataset with canopy fuel metrics.
@@ -98,11 +100,18 @@ def compute_canopy_metrics(
     stage for parameter semantics.
 
     Each stage is an independent choice, so a run is a point in that
-    space rather than one fixed method. The defaults are
-    FastFuels-native (NSVB biomass, a 3.0 m bulk-density window,
-    unsmoothed heights); ``equations="brown_1978"`` with
-    ``cbd_window=1.524`` and ``threshold_smoothing_window=1.524`` moves
-    the biomass and reduction stages onto FuelCalc's.
+    space rather than one fixed method. Every default is FuelCalc 1.7's,
+    which is the parameterization
+    ``tests/canopy_fuel/test_fuelcalc_comparison.py`` verifies against
+    the numbers FuelCalc itself reported. A caller wanting national
+    species coverage takes ``equations="nsvb"``; one with tree positions
+    finer than a crown takes ``horizontal_distribution="crown_projected"``
+    and ``cover_method="crown_union"``, which use those positions where
+    FuelCalc's stand-table methods cannot.
+
+    ``crown_class_adjustment`` defaults to ``"reinhardt_2006"`` and so
+    requires ``crown_class_column``; see :func:`available_canopy_fuel`
+    for why it will not fall back silently.
 
     Cells with no canopy come back as 0 for ``cbd``, ``cfl``, and ``cc``
     (zero density is physical) and NaN for ``cbh`` and ``chm`` (no

@@ -48,20 +48,22 @@ def cover_of(trees, **kwargs):
 
 class TestSingleCrown:
     def test_cover_is_the_crown_area_over_the_cell_area(self):
-        cover = cover_of(single_tree(crad=4.0), supersample=FINE)
+        cover = cover_of(single_tree(crad=4.0), supersample=FINE, method="crown_union")
         np.testing.assert_allclose(
             cover[2, 1], 100.0 * np.pi * 16.0 / CELL_AREA, rtol=0.01
         )
 
     def test_no_other_cell_is_touched(self):
-        cover = cover_of(single_tree(crad=4.0), supersample=FINE)
+        cover = cover_of(single_tree(crad=4.0), supersample=FINE, method="crown_union")
         assert cover.sum() == cover[2, 1]
 
     @pytest.mark.parametrize("cell", [(1, 0), (1, 1), (2, 0), (2, 1)])
     def test_a_straddling_crown_matches_the_analytic_overlap(self, cell):
         """Rasterized per-cell cover against the closed-form disk/cell area."""
         row, col = cell
-        cover = cover_of(single_tree(x=1031.0, y=4941.0, crad=5.0))
+        cover = cover_of(
+            single_tree(x=1031.0, y=4941.0, crad=5.0), method="crown_union"
+        )
         x_lo = 1000.0 + col * 30.0
         y_hi = 5000.0 - row * 30.0
         analytic = disk_rect_overlap_area(
@@ -79,12 +81,16 @@ class TestOverlapIsCountedOnce:
     def test_two_identical_crowns_cover_what_one_covers(self):
         one = single_tree(crad=5.0)
         two = pd.concat([one, one], ignore_index=True)
-        np.testing.assert_array_equal(cover_of(one), cover_of(two))
+        np.testing.assert_array_equal(
+            cover_of(one, method="crown_union"), cover_of(two, method="crown_union")
+        )
 
     def test_a_crown_nested_inside_another_adds_nothing(self):
         big = single_tree(crad=6.0)
         nested = pd.concat([big, single_tree(crad=2.0)], ignore_index=True)
-        np.testing.assert_array_equal(cover_of(big), cover_of(nested))
+        np.testing.assert_array_equal(
+            cover_of(big, method="crown_union"), cover_of(nested, method="crown_union")
+        )
 
     def test_disjoint_crowns_add_up(self):
         """12 m apart with 3 m radii, so the two disks cannot touch."""
@@ -93,7 +99,7 @@ class TestOverlapIsCountedOnce:
             ignore_index=True,
         )
         np.testing.assert_allclose(
-            cover_of(trees, supersample=FINE)[2, 1],
+            cover_of(trees, supersample=FINE, method="crown_union")[2, 1],
             100.0 * 2 * np.pi * 9.0 / CELL_AREA,
             rtol=0.01,
         )
@@ -172,7 +178,7 @@ class TestCrownOverlap:
                 dbh=np.full(n, 25.0),
             )
             overlap.append(one_cell_cover(trees, method="crown_overlap"))
-            union.append(one_cell_cover(trees))
+            union.append(one_cell_cover(trees, method="crown_union"))
         assert max(overlap) - min(overlap) < 1e-9
         assert max(union) - min(union) > 20.0
 
@@ -198,7 +204,7 @@ class TestCoverFraction:
         trees = one_cell_stand(np.linspace(0.5, 25.0, 30))
         assert one_cell_cover(
             trees, method="cover_fraction", height_threshold=0.0
-        ) == pytest.approx(one_cell_cover(trees), abs=1e-12)
+        ) == pytest.approx(one_cell_cover(trees, method="crown_union"), abs=1e-12)
 
     def test_raising_the_threshold_can_only_lower_cover(self):
         trees = one_cell_stand(np.linspace(0.5, 25.0, 30))

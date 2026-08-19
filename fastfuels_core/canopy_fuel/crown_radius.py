@@ -22,7 +22,7 @@ def max_crown_radius(
     trees: pd.DataFrame,
     *,
     crown_radius_column: str | None = None,
-    equations: str = "purves",
+    equations: str = "crookston_stage",
 ) -> np.ndarray:
     """Per-tree maximum crown radius (m).
 

@@ -77,8 +77,8 @@ def cbd_running_mean(
     profile: np.ndarray,
     *,
     layer_depth: float = FT_TO_M,
-    window: float | None = 3.0,
-    edge: str = SLAB_EDGE,
+    window: float | None = 5 * FT_TO_M,
+    edge: str = FUELCALC_EDGE,
 ) -> np.ndarray:
     """Canopy bulk density: per-cell maximum running mean of the profile.
 
