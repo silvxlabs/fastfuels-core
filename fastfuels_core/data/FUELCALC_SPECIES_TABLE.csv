@@ -1,0 +1,55 @@
+COMMON_NAME,SPCD,INCL_CBD,TOTAL,FOL,TWIG,IN1,IN3,IN3PLUS,VDIST_CODE,CROWN_REDUC_CODE,COVER_EQ
+Red Alder,351,No,RA,RA,RA,RA,RA,RA,UN,DF,22
+White Alder,352,No,RA,RA,RA,RA,RA,RA,UN,DF,23
+Alaska Cedar,42,Yes,WC,WC,WC,WC,WC,WC,IC,IC,9
+Incense Cedar,81,Yes,WC,WC,WC,WC,WC,WC,IC,IC,18
+Western Redcedar,242,Yes,WC,WC,WC,WC,WC,WC,IC,WC,18
+Douglas Fir,202,Yes,DF,DF,DF,DF,DF,DF,DF,DF,16
+Grand Fir,17,Yes,GF,GF,GF,GF,GF,GF,DF,WF,3
+Noble Fir,22,Yes,GF,GF,GF,GF,GF,GF,DF,WF,7
+Pacific Silver Fir,11,Yes,GF,GF,GF,GF,GF,GF,DF,WF,1
+Subalpine Fir,19,Yes,SF,SF,SF,SF,SF,SF,DF,WF,4
+White Fir,15,Yes,GF,GF,GF,GF,GF,GF,DF,WF,2
+Mountain Hemlock,264,Yes,WH,WH,WH,WH,WH,WH,DF,DF,20
+Western Hemlock,263,Yes,WH,WH,WH,WH,WH,WH,DF,DF,19
+Rocky Mountain Juniper,66,Yes,JP,JP,JP,JP,JP,JP,DF,PJ,29
+Utah Juniper,65,Yes,JP,JP,JP,JP,JP,JP,DF,PJ,29
+Subalpine Larch,72,Yes,WL,WL,WL,WL,WL,WL,DF,WF,30
+Western Larch,73,Yes,WL,WL,WL,WL,WL,WL,PP,PP,14
+Madrone,361,No,MA,MA,MA,MA,MA,MA,UN,DF,39
+Mountain Maple,321,No,BM,BM,BM,BM,BM,BM,UN,WF,21
+Tanoak,631,No,TO,TO,TO,TO,TO,TO,UN,DF,39
+Bristlecone Pine,102,Yes,LP,LP,LP,LP,LP,LP,LP,LP,11
+Jeffrey Pine,116,Yes,PP,PP,PP,PP,PP,PP,PP,PP,12
+Limber Pine,113,Yes,LP,LP,LP,LP,LP,LP,PP,PP,31
+Lodgepole Pine,108,Yes,LP,LP,LP,LP,LP,LP,LP,LP,11
+Ponderosa Pine,122,Yes,PP,PP,PP,PP,PP,PP,PP,PP,15
+Ponderosa Pine SW,135,Yes,PP,PP,PP,PP,PP,PP,PS,PS,15
+Sugar Pine,117,Yes,PP,PP,PP,PP,PP,PP,PP,PP,13
+Western White Pine,119,Yes,WP,WP,WP,WP,WP,WP,LP,LP,14
+Whitebark Pine,101,Yes,WB,WB,WB,WB,WB,WB,LP,LP,31
+Colorado Pinyon,106,Yes,PY,PY,PY,PY,PY,PY,DF,PJ,29
+Coast Redwood,211,Yes,WC,WC,WC,WC,WC,WC,DF,DF,17
+Giant Sequoia,212,Yes,WC,WC,WC,WC,WC,WC,DF,DF,17
+Blue Spruce,96,Yes,ES,ES,ES,ES,ES,ES,DF,DF,10
+Brewer Spruce,92,Yes,ES,ES,ES,ES,ES,ES,DF,DF,10
+Engelmann Spruce,93,Yes,ES,ES,ES,ES,ES,ES,DF,WF,10
+Sitka Spruce,98,Yes,ES,ES,ES,ES,ES,ES,DF,DF,10
+White Spruce,94,Yes,ES,ES,ES,ES,ES,ES,DF,DF,10
+Pacific Yew,231,Yes,WC,WC,WC,WC,WC,WC,DF,WF,33
+Quaking Aspen,746,No,QA,QA,QA,BM,BM,BM,UN,WF,26
+Paper Birch,375,No,PB,PB,PB,RA,RA,RA,UN,DF,24
+Yellow Birch,371,No,YB,YB,YB,RA,RA,RA,UN,DF,24
+Atlantic White Cedar,43,Yes,AC,AC,AC,WC,WC,WC,IC,IC,9
+Balsam Fir,12,Yes,BF,BF,BF,GF,GF,GF,DF,WF,2
+Eastern Hemlock,261,Yes,EH,EH,EH,WH,WH,WH,DF,DF,19
+Red Maple,316,No,RM,RM,RM,BM,BM,BM,UN,WF,21
+Sugar Maple,318,No,SM,SM,SM,BM,BM,BM,UN,WF,21
+Calif Black Oak,818,No,TO,TO,TO,TO,TO,TO,UN,DF,39
+Giant Chinkapin Oak,431,No,GC,GC,GC,GC,GC,GC,UN,DF,28
+Northern Red Oak,833,No,RO,RO,RO,GC,GC,GC,UN,DF,28
+Eastern White Pine,129,Yes,EP,EP,EP,DF,DF,DF,DF,DF,14
+Loblolly Pine,131,Yes,LO,LO,LO,DF,DF,DF,DF,PP,15
+Pitch Pine,126,Yes,PI,PI,PI,PP,PP,PP,PP,PP,11
+Black Spruce,95,Yes,BS,BS,BS,DF,DF,DF,DF,DF,10
+Red Spruce,97,Yes,RS,RS,RS,DF,DF,DF,DF,DF,10
