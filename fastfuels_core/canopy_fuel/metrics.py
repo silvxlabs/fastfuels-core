@@ -28,13 +28,26 @@ from fastfuels_core.canopy_fuel.available_fuel import (
     FUELCALC_CROWN_CLASS_ADJUSTMENT,
     available_canopy_fuel,
 )
-from fastfuels_core.canopy_fuel.bulk_density import FUELCALC_EDGE, cbd_running_mean
+from fastfuels_core.canopy_fuel.bulk_density import (
+    BIOMASS_PERCENTILE_DEPTH,
+    CANOPY_DEPTH,
+    FUELCALC_EDGE,
+    LOAD_OVER_DEPTH_METHOD,
+    MEAN_CROWN_LENGTH_DEPTH,
+    biomass_percentile_depth,
+    cbd_load_over_depth,
+    cbd_running_mean,
+    validate_cbd_depth,
+    validate_cbd_method,
+)
 from fastfuels_core.canopy_fuel.cover import canopy_cover
 from fastfuels_core.canopy_fuel.canopy_height import (
     HEIGHT_PERCENTILE_METHOD,
     MEAN_CROWN_BASE_METHOD,
     height_percentile,
+    height_percentile_depth,
     mean_crown_base_height,
+    mean_crown_length,
     profile_threshold_heights,
     validate_cbh_method,
     validate_chm_method,
@@ -94,6 +107,7 @@ def compute_canopy_metrics(
     vertical_distribution: str = "reinhardt_2006",
     horizontal_distribution: str = "stem",
     cbd_method: str = "maximum_running_mean",
+    cbd_depth: str = "canopy_depth",
     cbd_window: float | None = FUELCALC_WINDOW,
     cbd_window_edge: str = FUELCALC_EDGE,
     cbh_method: str = "bulk_density_threshold",
@@ -136,7 +150,14 @@ def compute_canopy_metrics(
         ``horizontal_distribution``, and under ``crown_projected`` the
         crown radius pair below.
     :func:`~fastfuels_core.canopy_fuel.bulk_density.cbd_running_mean`
-        ``cbd_window``, ``cbd_window_edge``.
+        ``cbd_window``, ``cbd_window_edge``, read when ``cbd_method`` is
+        the default ``"maximum_running_mean"``. ``cbd_method="load_over_depth"``
+        instead divides canopy fuel load by a canopy depth
+        (:func:`~fastfuels_core.canopy_fuel.bulk_density.cbd_load_over_depth`),
+        which ``cbd_depth`` selects: ``"canopy_depth"`` (the threshold
+        ``chm - cbh``, read off the ``cbh_``/``chm_`` scans),
+        ``"mean_crown_length"``, ``"biomass_percentile"``, or
+        ``"height_percentile"``.
     :func:`~fastfuels_core.canopy_fuel.canopy_height.profile_threshold_heights`
         ``cbh_threshold``, ``cbh_relative_fraction``,
         ``cbh_smoothing_window``, ``cbh_smoothing_edge``, and the same
@@ -193,6 +214,8 @@ def compute_canopy_metrics(
             f"Unknown dataset variable(s) {sorted(unknown)}; expected a "
             f"subset of {sorted(KNOWN_BANDS)}."
         )
+    validate_cbd_method(cbd_method)
+    validate_cbd_depth(cbd_depth)
     validate_cbh_method(cbh_method)
     validate_chm_method(chm_method)
 
@@ -228,13 +251,6 @@ def compute_canopy_metrics(
             crown_radius_column=crown_radius_column,
             crown_radius_equations=crown_radius_equations,
         )
-        if "cbd" in bands:
-            dataset["cbd"].data[...] = cbd_running_mean(
-                profile,
-                layer_depth=layer_depth,
-                window=cbd_window,
-                edge=cbd_window_edge,
-            )
         scans = {}
 
         def threshold_heights(threshold, relative_fraction, window, edge):
@@ -249,6 +265,41 @@ def compute_canopy_metrics(
                     smoothing_edge=edge,
                 )
             return scans[key]
+
+        def load_over_depth_cbd():
+            fuel_load = canopy_fuel_load(profile, layer_depth=layer_depth)
+            if cbd_depth == CANOPY_DEPTH:
+                cbh_height = threshold_heights(
+                    cbh_threshold,
+                    cbh_relative_fraction,
+                    cbh_smoothing_window,
+                    cbh_smoothing_edge,
+                )[0]
+                chm_height = threshold_heights(
+                    chm_threshold,
+                    chm_relative_fraction,
+                    chm_smoothing_window,
+                    chm_smoothing_edge,
+                )[1]
+                depth = chm_height - cbh_height
+            elif cbd_depth == MEAN_CROWN_LENGTH_DEPTH:
+                depth = mean_crown_length(fuel_trees, transform, shape)
+            elif cbd_depth == BIOMASS_PERCENTILE_DEPTH:
+                depth = biomass_percentile_depth(profile, layer_depth=layer_depth)
+            else:
+                depth = height_percentile_depth(fuel_trees, transform, shape)
+            return cbd_load_over_depth(fuel_load, depth)
+
+        if "cbd" in bands:
+            if cbd_method == LOAD_OVER_DEPTH_METHOD:
+                dataset["cbd"].data[...] = load_over_depth_cbd()
+            else:
+                dataset["cbd"].data[...] = cbd_running_mean(
+                    profile,
+                    layer_depth=layer_depth,
+                    window=cbd_window,
+                    edge=cbd_window_edge,
+                )
 
         if "cbh" in bands:
             if cbh_method == MEAN_CROWN_BASE_METHOD:

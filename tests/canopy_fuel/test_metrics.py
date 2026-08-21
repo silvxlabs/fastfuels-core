@@ -202,6 +202,85 @@ class TestHeightPercentileChm:
             )
 
 
+class TestLoadOverDepthCbd:
+    """``cbd_method="load_over_depth"`` divides canopy fuel load by one of
+    the four canopy depths ``cbd_depth`` selects.
+    """
+
+    DEPTHS = [
+        "canopy_depth",
+        "mean_crown_length",
+        "biomass_percentile",
+        "height_percentile",
+    ]
+
+    @staticmethod
+    def two_trees():
+        # 10 m and 30 m ponderosa in cell (2, 1), 2 kg of fuel each.
+        return pd.concat(
+            [
+                single_tree(x=1045.0, y=4915.0, height=10.0, crown_ratio=0.5, acf=2.0),
+                single_tree(x=1045.0, y=4915.0, height=30.0, crown_ratio=0.5, acf=2.0),
+            ],
+            ignore_index=True,
+        )
+
+    def cbd(self, **kwargs):
+        # Only cbd is requested, so canopy_depth also proves it computes
+        # its own chm - cbh scan rather than reading the other bands.
+        ds = compute_canopy_metrics(
+            self.two_trees(),
+            band_template(["cbd"]),
+            fuel_column="acf",
+            horizontal_distribution="stem",
+            vertical_distribution="uniform",
+            crown_class_adjustment="none",
+            cbd_method="load_over_depth",
+            **kwargs,
+        )
+        return ds.cbd.values
+
+    def test_mean_crown_length_divides_the_load_by_the_mean_crown(self):
+        # CFL = 4 kg / 900 m2; mean crown length = mean(5, 15) = 10 m.
+        cbd = self.cbd(cbd_depth="mean_crown_length")
+        assert cbd[2, 1] == pytest.approx((4.0 / CELL_AREA) / 10.0)
+
+    @pytest.mark.parametrize("depth", DEPTHS)
+    def test_every_depth_gives_a_positive_density(self, depth):
+        assert self.cbd(cbd_depth=depth)[2, 1] > 0.0
+
+    @pytest.mark.parametrize("depth", DEPTHS)
+    def test_an_empty_cell_is_zero_density(self, depth):
+        assert self.cbd(cbd_depth=depth)[0, 0] == 0.0
+
+    def test_load_over_depth_is_lower_than_the_running_mean_maximum(self):
+        # The average-density convention sits below the running-mean peak.
+        load_over = self.cbd(cbd_depth="canopy_depth")[2, 1]
+        running_mean = compute_canopy_metrics(
+            self.two_trees(),
+            band_template(["cbd"]),
+            fuel_column="acf",
+            horizontal_distribution="stem",
+            vertical_distribution="uniform",
+            crown_class_adjustment="none",
+        ).cbd.values[2, 1]
+        assert 0.0 < load_over < running_mean
+
+    def test_an_unknown_cbd_method_raises(self):
+        with pytest.raises(ValueError, match="bogus"):
+            compute_canopy_metrics(
+                self.two_trees(),
+                band_template(["cbd"]),
+                fuel_column="acf",
+                crown_class_adjustment="none",
+                cbd_method="bogus",
+            )
+
+    def test_an_unknown_cbd_depth_raises(self):
+        with pytest.raises(ValueError, match="bogus"):
+            self.cbd(cbd_depth="bogus")
+
+
 class TestBandSelection:
     def test_only_the_requested_bands_are_computed(self, hand_stand):
         """Cover alone must not enter the allometry path.

@@ -11,31 +11,48 @@ FUELCALC_EDGE = "fuelcalc"
 TRUNCATE_EDGE = "truncate"
 VALID_EDGES = (SLAB_EDGE, FUELCALC_EDGE, TRUNCATE_EDGE)
 
-# CBD reduction methods. Only the maximum running mean is built (see
-# :func:`cbd_running_mean`); ``load_over_depth`` is named in the FastFuels
-# API schema but not yet implemented, so it is held apart from an unknown
-# string to keep a recognized-but-unbuilt method (NotImplementedError)
-# distinct from a typo (ValueError). See fastfuels-core#97.
+# CBD reduction methods. The maximum running mean (see
+# :func:`cbd_running_mean`) is the effective-CBD convention; load over
+# depth (see :func:`cbd_load_over_depth`) is the van Wagner average
+# density, canopy fuel load divided by one of the canopy depths below.
 MAX_RUNNING_MEAN_METHOD = "maximum_running_mean"
-CBD_METHODS = (MAX_RUNNING_MEAN_METHOD,)
-UNIMPLEMENTED_CBD_METHODS = ("load_over_depth",)
+LOAD_OVER_DEPTH_METHOD = "load_over_depth"
+CBD_METHODS = (MAX_RUNNING_MEAN_METHOD, LOAD_OVER_DEPTH_METHOD)
+
+# Canopy depths that divide the fuel load under ``load_over_depth``. Two
+# are per-tree cell statistics and live in :mod:`canopy_height`
+# (:func:`~fastfuels_core.canopy_fuel.canopy_height.mean_crown_length`,
+# :func:`~fastfuels_core.canopy_fuel.canopy_height.height_percentile_depth`);
+# ``canopy_depth`` is the threshold ``chm - cbh`` and ``biomass_percentile``
+# is :func:`biomass_percentile_depth` below.
+CANOPY_DEPTH = "canopy_depth"
+MEAN_CROWN_LENGTH_DEPTH = "mean_crown_length"
+BIOMASS_PERCENTILE_DEPTH = "biomass_percentile"
+HEIGHT_PERCENTILE_DEPTH = "height_percentile"
+CBD_DEPTHS = (
+    CANOPY_DEPTH,
+    MEAN_CROWN_LENGTH_DEPTH,
+    BIOMASS_PERCENTILE_DEPTH,
+    HEIGHT_PERCENTILE_DEPTH,
+)
+
+# The central biomass fraction Albini (1996) spans for the depth: the
+# 10th to the 90th percentile of cumulative canopy biomass by height.
+BIOMASS_LOWER_FRACTION = 0.10
+BIOMASS_UPPER_FRACTION = 0.90
 
 
 def validate_cbd_method(method: str) -> None:
-    """Split an unbuilt CBD method arm from an unknown one.
-
-    ``NotImplementedError`` for a method the API schema defines but this
-    package has not built yet, ``ValueError`` for an unrecognized name.
-    """
-    if method in UNIMPLEMENTED_CBD_METHODS:
-        raise NotImplementedError(
-            f"cbd method {method!r} is defined in the FastFuels API schema "
-            f"but is not yet implemented in fastfuels-core; implemented: "
-            f"{list(CBD_METHODS)}."
-        )
     if method not in CBD_METHODS:
         raise ValueError(
             f"Unknown cbd method {method!r}; expected one of {list(CBD_METHODS)}."
+        )
+
+
+def validate_cbd_depth(depth: str) -> None:
+    if depth not in CBD_DEPTHS:
+        raise ValueError(
+            f"Unknown cbd depth {depth!r}; expected one of {list(CBD_DEPTHS)}."
         )
 
 
@@ -146,3 +163,66 @@ def cbd_running_mean(
         return profile.max(axis=0)
     w = window_in_layers(window, layer_depth)
     return profile_running_mean(profile, w, edge=edge).max(axis=0)
+
+
+def cbd_load_over_depth(fuel_load: np.ndarray, depth: np.ndarray) -> np.ndarray:
+    """Canopy bulk density as canopy fuel load over a canopy depth.
+
+    The van Wagner average-density convention: ``cfl / depth``
+    (kg/m**2 over m, giving kg/m**3). Cells with no positive depth —
+    empty cells, whose ``depth`` is NaN, and any degenerate cell whose
+    depth came out non-positive — report zero density, matching the
+    no-canopy convention CBD uses elsewhere.
+
+    Returns
+    -------
+    numpy.ndarray
+        CBD (kg/m**3), the shape of ``depth``.
+    """
+    fuel_load = np.asarray(fuel_load, dtype=np.float64)
+    depth = np.asarray(depth, dtype=np.float64)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(depth > 0.0, fuel_load / depth, 0.0)
+
+
+def biomass_percentile_depth(
+    profile: np.ndarray,
+    *,
+    layer_depth: float = FUELCALC_LAYER_DEPTH,
+    lower: float = BIOMASS_LOWER_FRACTION,
+    upper: float = BIOMASS_UPPER_FRACTION,
+) -> np.ndarray:
+    """Height span holding the central canopy biomass, per cell (m).
+
+    The depth between the heights where cumulative canopy biomass reaches
+    ``lower`` and ``upper`` of the column total (10% and 90% by default,
+    Albini's central 80%). Biomass accumulates linearly with height
+    within a layer, so each crossing height is interpolated inside the
+    layer that carries it rather than snapped to a layer edge. Cells with
+    no fuel are NaN.
+
+    Returns
+    -------
+    numpy.ndarray
+        Depth (m), shape ``(ny, nx)``.
+    """
+    profile = np.asarray(profile, dtype=np.float64)
+    total = profile.sum(axis=0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        fraction = profile / total
+    cumulative = np.cumsum(fraction, axis=0)
+    below = cumulative - fraction
+    rows, cols = np.indices(total.shape)
+
+    def height_at(target):
+        # The first layer whose cumulative fraction reaches the target;
+        # cumulative is monotone, so argmax picks the crossing layer.
+        layer = np.argmax(cumulative >= target, axis=0)
+        into_layer = fraction[layer, rows, cols]
+        start = below[layer, rows, cols]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            offset = np.where(into_layer > 0, (target - start) / into_layer, 0.0)
+        return (layer + offset) * layer_depth
+
+    depth = height_at(upper) - height_at(lower)
+    return np.where(total > 0.0, depth, np.nan)

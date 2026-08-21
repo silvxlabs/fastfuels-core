@@ -107,6 +107,65 @@ def height_percentile(
     return out.reshape(ny, nx)
 
 
+def mean_crown_length(
+    trees: pd.DataFrame,
+    transform: tuple[float, float, float, float, float, float],
+    shape: tuple[int, int],
+) -> np.ndarray:
+    """Per-cell mean of the per-tree crown length ``height * crown_ratio`` (m).
+
+    A canopy depth for the load-over-depth CBD, the one Cruz et al. (2003)
+    used. Each tree is binned to its stem cell and the crown lengths are
+    averaged over the cell (an unweighted mean, one tree one vote). Cells
+    with no trees are NaN.
+    """
+    ny, nx = shape
+    out = np.full(ny * nx, np.nan)
+    if len(trees):
+        row, col = stem_cells(trees, transform, shape)
+        flat = row * nx + col
+        height = trees["height"].to_numpy(dtype=np.float64)
+        crown_ratio = trees["crown_ratio"].to_numpy(dtype=np.float64)
+        crown_length = height * crown_ratio
+        num = np.bincount(flat, weights=crown_length, minlength=ny * nx)
+        count = np.bincount(flat, minlength=ny * nx)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            out = np.where(count > 0, num / count, np.nan)
+    return out.reshape(ny, nx)
+
+
+def height_percentile_depth(
+    trees: pd.DataFrame,
+    transform: tuple[float, float, float, float, float, float],
+    shape: tuple[int, int],
+    *,
+    top_percentile: float = 90.0,
+) -> np.ndarray:
+    """Per-cell canopy depth from tree-height and crown-base percentiles (m).
+
+    A canopy depth for the load-over-depth CBD: the ``top_percentile`` of
+    tree heights in the cell (90th by default, a robust stand top) minus
+    the median per-tree crown base height ``height * (1 - crown_ratio)``.
+    Each tree is binned to its stem cell; cells with no trees are NaN.
+    """
+    ny, nx = shape
+    out = np.full(ny * nx, np.nan)
+    if len(trees):
+        row, col = stem_cells(trees, transform, shape)
+        flat = row * nx + col
+        height = trees["height"].to_numpy(dtype=np.float64)
+        crown_ratio = trees["crown_ratio"].to_numpy(dtype=np.float64)
+        crown_base = height * (1.0 - crown_ratio)
+        grouped = pd.DataFrame(
+            {"cell": flat, "height": height, "base": crown_base}
+        ).groupby("cell")
+        top = grouped["height"].quantile(top_percentile / 100.0)
+        base = grouped["base"].median()
+        depth = top - base
+        out[depth.index.to_numpy()] = depth.to_numpy()
+    return out.reshape(ny, nx)
+
+
 def _fuel_extent(
     profile: np.ndarray, layer_depth: float
 ) -> tuple[np.ndarray, np.ndarray]:

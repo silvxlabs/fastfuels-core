@@ -16,7 +16,9 @@ import pytest
 from fastfuels_core.canopy_fuel.bulk_density import VALID_EDGES
 from fastfuels_core.canopy_fuel.canopy_height import (
     height_percentile,
+    height_percentile_depth,
     mean_crown_base_height,
+    mean_crown_length,
     profile_threshold_heights,
     validate_cbh_method,
     validate_chm_method,
@@ -336,3 +338,62 @@ class TestValidateChmMethod:
     def test_an_unknown_method_raises(self):
         with pytest.raises(ValueError, match="bogus"):
             validate_chm_method("bogus")
+
+
+class TestMeanCrownLength:
+    """The mean per-tree crown length, a load-over-depth canopy depth."""
+
+    def test_it_averages_the_crown_lengths_in_the_cell(self):
+        # Crown lengths height*crown_ratio: 5 m and 15 m, mean 10 m.
+        trees = pd.DataFrame(
+            {
+                "x": [15.0, 15.0],
+                "y": [-15.0, -15.0],
+                "height": [10.0, 30.0],
+                "crown_ratio": [0.5, 0.5],
+            }
+        )
+        out = mean_crown_length(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        np.testing.assert_allclose(out, [[10.0]])
+
+    def test_it_is_unweighted(self):
+        # One tree one vote, whatever the crown sizes; a 2 m and a 10 m
+        # crown length average to 6 m.
+        trees = pd.DataFrame(
+            {
+                "x": [15.0, 15.0],
+                "y": [-15.0, -15.0],
+                "height": [4.0, 20.0],
+                "crown_ratio": [0.5, 0.5],
+            }
+        )
+        out = mean_crown_length(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        np.testing.assert_allclose(out, [[6.0]])
+
+    def test_an_empty_stand_is_all_nan(self):
+        trees = pd.DataFrame({"x": [], "y": [], "height": [], "crown_ratio": []})
+        out = mean_crown_length(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        assert np.isnan(out).all()
+
+
+class TestHeightPercentileDepth:
+    """90th-percentile tree height minus median crown base, a canopy depth."""
+
+    def test_it_is_the_top_height_over_the_median_base(self):
+        # Heights 10/20/30 -> 90th percentile 28; crown bases (cr=0.5)
+        # 5/10/15 -> median 10. Depth 28 - 10 = 18 m.
+        trees = pd.DataFrame(
+            {
+                "x": [15.0, 15.0, 15.0],
+                "y": [-15.0, -15.0, -15.0],
+                "height": [10.0, 20.0, 30.0],
+                "crown_ratio": [0.5, 0.5, 0.5],
+            }
+        )
+        out = height_percentile_depth(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        np.testing.assert_allclose(out, [[18.0]])
+
+    def test_an_empty_stand_is_all_nan(self):
+        trees = pd.DataFrame({"x": [], "y": [], "height": [], "crown_ratio": []})
+        out = height_percentile_depth(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        assert np.isnan(out).all()
