@@ -14,11 +14,7 @@ species code. ``INCL_CBD`` is FuelCalc's default species inclusion
 "Ponderosa Pine SW" row; ``sr_ESD[]`` in ``FC_DLL/NC_ESD.C`` keys it
 to NRCS symbol PIAR5, which is *Pinus arizonica*, SPCD 135. That row
 is the one place the PS vertical distribution and the PS crown-class
-factors are reachable, and it carries the strongest empirical result
-in Gray & Reinhardt (2003): at their Flagstaff site Brown's ponderosa
-equations over-predicted crown biomass by 2.3x, which the PS factors
-(0.3/0.3/0.15/0.1) correct and the PP factors (0.55/0.55/0.3/0.15) do
-not.
+factors are reachable.
 
 Tables are read from disk on first use and cached, so importing
 fastfuels_core (or this module) does no I/O.
@@ -83,13 +79,10 @@ def fuelcalc_small_tree_biomass() -> pd.DataFrame:
     ``h <= 1`` and class 10 everything over 9 ft. Diameter selects the
     table, height selects the row.
 
-    Transcribed from ``sr_STB[]`` in ``FC_DLL/Sml_Tre.cpp``, which is
-    the only published form of it. The source lists its rows in code
-    order and repeats the code ``LP``; the first row for a code is the
-    one its lookup resolves to, and is the one kept here.
+    The rows are Brown (1978) Tables 6 and 19 evaluated per foot of
+    height, as the FuelCalc 1.7 User Guide (Appendix D) prints them.
     """
     table = pd.read_csv(
         files("fastfuels_core.data") / "FUELCALC_SMALL_TREE_BIOMASS.csv",
     )
-    first = table.drop_duplicates(subset=["CODE", "HT_CLASS_FT"], keep="first")
-    return first.set_index(["CODE", "HT_CLASS_FT"])
+    return table.set_index(["CODE", "HT_CLASS_FT"])

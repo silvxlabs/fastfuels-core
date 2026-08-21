@@ -1,22 +1,13 @@
-"""Unit conversion via pint, loaded lazily.
+"""Unit conversion factors for the imperial sources the allometry uses.
 
-Use :func:`conversion_factor` for scalar factors applied to numpy
-arrays — it avoids wrapping large arrays in Quantities while keeping
-every conversion constant derived from pint rather than hand-typed.
+Brown (1978), the FuelCalc tables and the FVS crown-width fits work in
+inches, feet and pounds; FastFuels works in centimetres, metres and
+kilograms. These are the exact definitions of the international inch,
+foot and avoirdupois pound.
 """
 
-from functools import lru_cache
-
-
-@lru_cache(maxsize=1)
-def unit_registry():
-    """The shared pint UnitRegistry, constructed on first use."""
-    import pint
-
-    return pint.UnitRegistry()
-
-
-@lru_cache(maxsize=None)
-def conversion_factor(source: str, target: str) -> float:
-    """Multiplicative factor converting ``source`` units to ``target``."""
-    return unit_registry().Quantity(1.0, source).to(target).magnitude
+IN_TO_CM = 2.54
+CM_TO_IN = 1.0 / IN_TO_CM
+FT_TO_M = 0.3048
+M_TO_FT = 1.0 / FT_TO_M
+LB_TO_KG = 0.45359237

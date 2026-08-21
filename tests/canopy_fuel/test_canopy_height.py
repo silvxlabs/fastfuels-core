@@ -10,11 +10,24 @@ keeps ``chm - cbh`` the true depth of qualifying canopy.
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from fastfuels_core.canopy_fuel.bulk_density import VALID_EDGES
-from fastfuels_core.canopy_fuel.canopy_height import profile_threshold_heights
-from tests.canopy_fuel.builders import column_profile
+from fastfuels_core.canopy_fuel.canopy_height import (
+    height_percentile,
+    height_percentile_depth,
+    mean_crown_base_height,
+    mean_crown_length,
+    profile_threshold_heights,
+    validate_cbh_method,
+    validate_chm_method,
+)
+from tests.canopy_fuel.builders import (
+    ONE_CELL_SHAPE,
+    ONE_CELL_TRANSFORM,
+    column_profile,
+)
 
 
 def sparse_profile(seed, occupancy):
@@ -34,6 +47,15 @@ class TestThresholdRule:
         )
         np.testing.assert_allclose(cbh, [[2.0]])
         np.testing.assert_allclose(chm, [[5.0]])
+
+    def test_a_layer_exactly_at_threshold_qualifies(self):
+        """The guide's rule is "greater than or equal to"; pin the equality."""
+        profile = column_profile([0, 0.012, 0.05, 0.012, 0])
+        cbh, chm = profile_threshold_heights(
+            profile, layer_depth=1.0, threshold=0.012, relative_fraction=None
+        )
+        np.testing.assert_allclose(cbh, [[1.0]])
+        np.testing.assert_allclose(chm, [[4.0]])
 
     def test_the_relative_rule_lowers_the_threshold_in_a_sparse_cell(self):
         """max = 0.05 -> min(0.005, 0.012) = 0.005, so 0.006 now qualifies."""
@@ -194,3 +216,184 @@ class TestSmoothingEdge:
     def test_an_unknown_convention_raises(self):
         with pytest.raises(ValueError, match="bogus"):
             self.heights(self.CANOPY, smoothing_window=5.0, smoothing_edge="bogus")
+
+
+class TestMeanCrownBaseHeight:
+    """The fuel-weighted mean per-tree crown base, an alternative to CBH.
+
+    The crown base of a tree is ``height * (1 - crown_ratio)``; a cell's
+    value is the mean of its trees' crown bases weighted by available
+    canopy fuel, so the heavier crown pulls the mean toward its base.
+    """
+
+    @staticmethod
+    def two_trees_in_one_cell(fuel):
+        # Crown bases 4 m (8 m tree) and 10 m (20 m tree), both at the
+        # centre of the single cell so they share one denominator.
+        trees = pd.DataFrame(
+            {
+                "x": [15.0, 15.0],
+                "y": [-15.0, -15.0],
+                "height": [8.0, 20.0],
+                "crown_ratio": [0.5, 0.5],
+            }
+        )
+        return mean_crown_base_height(
+            trees, np.asarray(fuel), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+        )
+
+    def test_it_weights_the_crown_bases_by_fuel(self):
+        # (1*4 + 3*10) / (1 + 3) = 8.5 m.
+        out = self.two_trees_in_one_cell([1.0, 3.0])
+        np.testing.assert_allclose(out, [[8.5]])
+
+    def test_equal_fuel_is_the_plain_mean(self):
+        out = self.two_trees_in_one_cell([2.0, 2.0])
+        np.testing.assert_allclose(out, [[7.0]])
+
+    def test_a_single_tree_is_its_own_crown_base(self):
+        trees = pd.DataFrame(
+            {"x": [15.0], "y": [-15.0], "height": [12.0], "crown_ratio": [0.4]}
+        )
+        out = mean_crown_base_height(
+            trees, np.array([5.0]), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+        )
+        np.testing.assert_allclose(out, [[12.0 * 0.6]])
+
+    def test_a_cell_with_no_fuel_is_nan(self):
+        out = self.two_trees_in_one_cell([0.0, 0.0])
+        assert np.isnan(out).all()
+
+    def test_an_empty_stand_is_all_nan(self):
+        trees = pd.DataFrame({"x": [], "y": [], "height": [], "crown_ratio": []})
+        out = mean_crown_base_height(
+            trees, np.array([]), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+        )
+        assert np.isnan(out).all()
+
+
+class TestValidateCbhMethod:
+    def test_the_two_methods_pass(self):
+        validate_cbh_method("bulk_density_threshold")
+        validate_cbh_method("mean_crown_base")
+
+    def test_an_unknown_method_raises(self):
+        with pytest.raises(ValueError, match="bogus"):
+            validate_cbh_method("bogus")
+
+
+class TestHeightPercentile:
+    """A per-cell percentile of tree heights, an alternative canopy height.
+
+    Unlike the threshold canopy height, this reads the tree heights
+    directly, so it is the measure to compare against a lidar canopy
+    height model.
+    """
+
+    @staticmethod
+    def three_trees(percentile):
+        # Heights 10, 20, 30 m, all in the single cell.
+        trees = pd.DataFrame(
+            {
+                "x": [15.0, 15.0, 15.0],
+                "y": [-15.0, -15.0, -15.0],
+                "height": [10.0, 20.0, 30.0],
+            }
+        )
+        return height_percentile(
+            trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE, percentile=percentile
+        )
+
+    def test_the_hundredth_percentile_is_the_tallest(self):
+        np.testing.assert_allclose(self.three_trees(100.0), [[30.0]])
+
+    def test_the_zeroth_percentile_is_the_shortest(self):
+        np.testing.assert_allclose(self.three_trees(0.0), [[10.0]])
+
+    def test_the_fiftieth_percentile_is_the_median(self):
+        np.testing.assert_allclose(self.three_trees(50.0), [[20.0]])
+
+    def test_it_interpolates_between_heights(self):
+        # 99th of [10, 20, 30] linearly interpolates to 29.8 m.
+        np.testing.assert_allclose(self.three_trees(99.0), [[29.8]])
+
+    def test_the_default_percentile_is_the_ninety_ninth(self):
+        trees = pd.DataFrame(
+            {"x": [15.0, 15.0], "y": [-15.0, -15.0], "height": [10.0, 30.0]}
+        )
+        out = height_percentile(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        np.testing.assert_allclose(out, [[29.8]])
+
+    def test_an_empty_stand_is_all_nan(self):
+        trees = pd.DataFrame({"x": [], "y": [], "height": []})
+        out = height_percentile(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        assert np.isnan(out).all()
+
+
+class TestValidateChmMethod:
+    def test_the_two_methods_pass(self):
+        validate_chm_method("bulk_density_threshold")
+        validate_chm_method("height_percentile")
+
+    def test_an_unknown_method_raises(self):
+        with pytest.raises(ValueError, match="bogus"):
+            validate_chm_method("bogus")
+
+
+class TestMeanCrownLength:
+    """The mean per-tree crown length, a load-over-depth canopy depth."""
+
+    def test_it_averages_the_crown_lengths_in_the_cell(self):
+        # Crown lengths height*crown_ratio: 5 m and 15 m, mean 10 m.
+        trees = pd.DataFrame(
+            {
+                "x": [15.0, 15.0],
+                "y": [-15.0, -15.0],
+                "height": [10.0, 30.0],
+                "crown_ratio": [0.5, 0.5],
+            }
+        )
+        out = mean_crown_length(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        np.testing.assert_allclose(out, [[10.0]])
+
+    def test_it_is_unweighted(self):
+        # One tree one vote, whatever the crown sizes; a 2 m and a 10 m
+        # crown length average to 6 m.
+        trees = pd.DataFrame(
+            {
+                "x": [15.0, 15.0],
+                "y": [-15.0, -15.0],
+                "height": [4.0, 20.0],
+                "crown_ratio": [0.5, 0.5],
+            }
+        )
+        out = mean_crown_length(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        np.testing.assert_allclose(out, [[6.0]])
+
+    def test_an_empty_stand_is_all_nan(self):
+        trees = pd.DataFrame({"x": [], "y": [], "height": [], "crown_ratio": []})
+        out = mean_crown_length(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        assert np.isnan(out).all()
+
+
+class TestHeightPercentileDepth:
+    """90th-percentile tree height minus median crown base, a canopy depth."""
+
+    def test_it_is_the_top_height_over_the_median_base(self):
+        # Heights 10/20/30 -> 90th percentile 28; crown bases (cr=0.5)
+        # 5/10/15 -> median 10. Depth 28 - 10 = 18 m.
+        trees = pd.DataFrame(
+            {
+                "x": [15.0, 15.0, 15.0],
+                "y": [-15.0, -15.0, -15.0],
+                "height": [10.0, 20.0, 30.0],
+                "crown_ratio": [0.5, 0.5, 0.5],
+            }
+        )
+        out = height_percentile_depth(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        np.testing.assert_allclose(out, [[18.0]])
+
+    def test_an_empty_stand_is_all_nan(self):
+        trees = pd.DataFrame({"x": [], "y": [], "height": [], "crown_ratio": []})
+        out = height_percentile_depth(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        assert np.isnan(out).all()

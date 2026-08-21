@@ -24,25 +24,17 @@ Default Equation Table maps FIA species codes to Ids; see
 map onto them as L->WL, S->ES, AF->SF, WBP->WB, C->WC. Diameters are in
 inches throughout, matching the sources.
 
-The AL Id is a FuelCalc cross-reference that borrows whitebark pine's P1
-and western larch's P2. Neither primary source sanctions that pairing,
-so it is kept only because nothing resolves to it -- subalpine larch
-uses the WL Ids for every component. The QA Id was the same borrow and
-*was* reachable, via SPCD 746; it has been dropped rather than left to
-return an unsourced number, so quaking aspen now raises like any other
-species without equations. Its real source is Loomis & Roussopoulos
-1978 (NC-156), not yet implemented.
+FuelCalc's table also carries two cross-referenced Ids, AL and QA, that
+borrow whitebark pine's P1 and western larch's P2. Neither primary source
+sanctions that pairing, so neither is carried here: nothing resolves to
+AL, and quaking aspen (QA, SPCD 746) raises like any other species
+without equations. Its real source is Loomis & Roussopoulos 1978
+(NC-156), not yet implemented.
 """
 
 from __future__ import annotations
 
 import numpy as np
-
-# Proportions are clipped to [0, 0.95]: the linear and sqrt forms go
-# negative at large diameters, and FuelCalc's own code caps proportions
-# at 0.95. The upper clip also bounds the fine-share denominator away
-# from zero.
-PROPORTION_MAX = 0.95
 
 
 def _exponential(dia, a, b):
@@ -129,8 +121,6 @@ P1_EQUATIONS = {
     "BM": (_reciprocal, {"a": 4.6762, "b": 0.1091, "c": 2.0390}),
     "MA": (_reciprocal, {"a": 1.6013, "b": 0.3591, "c": 1.3090}),
     "TO": (_reciprocal, {"a": 1.7936, "b": 0.5952, "c": 0.7239}),
-    # FuelCalc cross-reference Id: whitebark pine's foliage fraction.
-    "AL": (_exponential, {"a": 0.512, "b": -0.0374}),
 }
 
 # P2: foliage plus 0-1/4 in branchwood fraction of total live crown
@@ -152,8 +142,6 @@ P2_EQUATIONS = {
     "BM": (_reciprocal, {"a": 3.3212, "b": 0.0777, "c": 2.0496}),
     "MA": (_reciprocal, {"a": 1.0357, "b": 0.2263, "c": 1.3567}),
     "TO": (_reciprocal, {"a": 0.9940, "b": 0.4229, "c": 0.6520}),
-    # FuelCalc cross-reference Id: western larch's P2.
-    "AL": (_exponential, {"a": 0.745, "b": -0.0362}),
 }
 
 # Large-diameter constant overrides from Brown Table 16's Conditions
@@ -204,7 +192,9 @@ def _evaluate(equations: dict, equation_id: np.ndarray, dia: np.ndarray) -> np.n
         form, params = equations[eq_id]
         mask = equation_id == eq_id
         result[mask] = form(dia[mask], **params)
-    return np.clip(result, 0.0, PROPORTION_MAX)
+    # The linear and sqrt forms go negative at large diameters; floor
+    # them as FuelCalc's BT_Eq does.
+    return np.maximum(result, 0.0)
 
 
 def foliage_fraction(equation_id: np.ndarray, dia_in: np.ndarray) -> np.ndarray:
@@ -231,22 +221,18 @@ def foliage_plus_fine_fraction(
     return p2
 
 
-def fine_branchwood_share(
-    fol_id: np.ndarray, twig_id: np.ndarray, dia_in: np.ndarray
-) -> np.ndarray:
+def fine_branchwood_share(equation_id: np.ndarray, dia_in: np.ndarray) -> np.ndarray:
     """Fine (0-1/4 in) share of total branchwood weight.
 
     ``(P2 - P1) / (1 - P1)``: the fine fraction of crown weight over the
-    branchwood fraction of crown weight. ``fol_id`` resolves P1 and
-    ``twig_id`` resolves P2 (they differ only for FuelCalc's
-    cross-referenced Ids); the difference is floored at zero since
-    cross-Id subtraction can dip negative.
+    branchwood fraction of crown weight. The difference is floored at
+    zero, as FuelCalc's ``BT_GetWC`` floors it, because two separately
+    fitted curves can cross at large diameters.
 
     Parameters
     ----------
-    fol_id, twig_id : numpy.ndarray
-        FuelCalc equation Ids from the species table's FOL and TWIG
-        columns, aligned with ``dia_in``.
+    equation_id : numpy.ndarray
+        FuelCalc equation Ids, aligned with ``dia_in``.
     dia_in : numpy.ndarray
         Diameter at breast height, inches.
 
@@ -255,8 +241,8 @@ def fine_branchwood_share(
     numpy.ndarray
         Fine share in [0, 1].
     """
-    p1 = foliage_fraction(fol_id, dia_in)
-    p2 = foliage_plus_fine_fraction(twig_id, dia_in)
+    p1 = foliage_fraction(equation_id, dia_in)
+    p2 = foliage_plus_fine_fraction(equation_id, dia_in)
     fine = np.maximum(p2 - p1, 0.0)
     return np.minimum(fine / (1.0 - p1), 1.0)
 

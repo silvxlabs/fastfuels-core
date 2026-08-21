@@ -1,14 +1,16 @@
 """Reference implementation of the canopy fuel arithmetic.
 
-The *structure* is transcribed line-for-line from the FuelCalc 1.8 C
-source (FC_DLL, DLL version 1.6), which is the canonical implementation
-of these equations, so the module can serve as an oracle in parity
-tests. The *coefficients* are the ones the equations are published with.
-Where the shipped C table disagrees with the paper it implements, this
-module follows the paper: the point of the oracle is to pin our
-algorithm against the reference implementation, not to reproduce that
-implementation's transcription slips. Nothing here should be imported by
-library code.
+The *structure* is transcribed line-for-line from the FuelCalc C source
+(FC_DLL in the FOF-FC repository; its GUI reports 1.8, and none of the
+canopy-path files have changed since the repository began, so it is the
+code behind the 1.7 tutorial output as well). It is the canonical
+implementation of these equations, so the module can serve as an oracle
+in parity tests. The *coefficients* are the ones the equations are
+published with. Where the shipped C table disagrees with the paper it
+implements, this module follows the paper and says so at the value: the
+point of the oracle is to pin our algorithm against the reference
+implementation, not to reproduce that implementation's transcription
+slips. Nothing here should be imported by library code.
 
 Provenance, by section:
 
@@ -29,13 +31,13 @@ Provenance, by section:
   ``FC_DLL/NC_PTL.C:613-698`` ``_BulkDensity()`` — the running mean, the
   threshold rule, and the two raw-profile clamps on CBH and SH.
 
-Two deliberate departures from a literal transcription, both noted where
-they occur: this module works in SI (a bulk-density profile in kg m^-3
-and depths in metres) rather than lb ac^-1 and feet, because FuelCalc's
-conversion helper ``lbAc_To_kgm3`` lives in ``nc_util.c``, which is not
-part of the distributed source; and every quantity the running mean and
-threshold touch is linear in those units, so the conversion cancels.
-Diameters stay in inches, matching Brown and Snell & Little.
+One deliberate departure from a literal transcription: this module
+works in SI (a bulk-density profile in kg m^-3 and depths in metres)
+rather than lb ac^-1 and feet, because FuelCalc's conversion helper
+``lbAc_To_kgm3`` lives in ``nc_util.c``, which is not part of the
+distributed source; every quantity the running mean and threshold touch
+is linear in those units, so the conversion cancels. Diameters stay in
+inches, matching Brown and Snell & Little.
 """
 
 from __future__ import annotations
@@ -71,6 +73,8 @@ BT: dict[str, dict[str, tuple[float, ...]]] = {
     "GF": {
         "Tot": (1.3094, 1.6076, 0.0, 0.0, 0.0, 0.0, 1),
         "Fol": (1.5920, 0.0529, 0.0, 0.0, 36.0, 0.286, 5),
+        # The C has HiVal 0.286 here, equal to P1; Brown Table 16 and the
+        # User Guide print 0.378.
         "Twg": (1.1500, 0.0416, 0.0, 0.0, 36.0, 0.378, 5),
         "1in": (1.0270, 0.0150, 2.9, 1.0, 36.0, 0.488, 4),
         "3in": (1.000, 0.0000, 0.0, 0.0, 0.0, 0.0, 0),
@@ -95,6 +99,8 @@ BT: dict[str, dict[str, tuple[float, ...]]] = {
     "WL": {
         "Tot": (0.4373, 1.6786, 0.0, 0.0, 0.0, 0.0, 1),
         "Fol": (0.3470, -0.0434, 0.0, 0.0, 0.0, 0.0, 3),
+        # The C has B = -0.0632; Brown Table 16 and the User Guide print
+        # -0.0362.
         "Twg": (0.7450, -0.0362, 0.0, 0.0, 0.0, 0.0, 3),
         "1in": (1.0540, -0.0213, 2.9, 1.0, 0.0, 0.0, 3),
         "3in": (0.9220, 0.7200, 11.0, 1.0, 0.0, 0.0, 6),
@@ -532,32 +538,23 @@ def bulk_density(
 
     Heights are reported the way the C reports them, as ``(i+1) *
     layer_depth`` — the *top* of the layer — for both CBH and SH.
+
+    The running mean is the C's: ``blay`` clamps to 0 at the ground and
+    the divisor is the number of layers actually summed, while above
+    the canopy it reads past the end of a zeroed array with the full
+    divisor. ``bulk_density.FUELCALC_EDGE`` is this rule; the fixed-depth
+    alternative is ``SLAB_EDGE`` there, not here.
     """
     n = len(profile)
     half = spread // 2
     n_ra = n + half
 
-    # Running mean over a window of fixed depth: the mean density of any
-    # slab `spread` layers deep, so the denominator is the slab depth
-    # wherever the slab sits. Layers outside the profile contribute zero
-    # at both ends.
-    #
-    # The C divides by the number of layers it actually summed, which
-    # differs only at the ground, where blay clamps to 0 -- above the
-    # canopy it reads past the end of a zeroed array with the
-    # denominator intact. That asymmetry makes the reported density
-    # depend on how high the canopy sits: three layers of uniform
-    # density 1.0 report 1.0 resting on the ground and 0.6 further up,
-    # for the same slab of fuel. Reinhardt et al. (2006) define CBD as
-    # the maximum mean over a fixed-depth layer, so the fixed
-    # denominator is the published quantity and is used here.
-    width = 2 * half + 1
     smoothed = []
     for i in range(n_ra):
         top = i + half
-        bottom = i - half
-        total = sum(profile[j] for j in range(max(bottom, 0), top + 1) if j < n)
-        smoothed.append(total / width)
+        bottom = max(i - half, 0)
+        total = sum(profile[j] for j in range(bottom, top + 1) if j < n)
+        smoothed.append(total / (top - bottom + 1))
 
     effective = min(max(smoothed) / 10.0, threshold)
 

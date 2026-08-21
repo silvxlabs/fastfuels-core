@@ -86,6 +86,201 @@ class TestEmptyCellConventions:
         assert np.isnan(hand_metrics[band].values[0, 0])
 
 
+class TestPerBandThresholds:
+    """``cbh`` and ``chm`` each read their own scan when asked to."""
+
+    def run(self, hand_stand, **thresholds):
+        return compute_canopy_metrics(
+            hand_stand,
+            band_template(["cbh", "chm"]),
+            fuel_column="acf",
+            horizontal_distribution="stem",
+            vertical_distribution="uniform",
+            layer_depth=HAND_LAYER_DEPTH,
+            crown_class_adjustment="none",
+            cbh_relative_fraction=None,
+            chm_relative_fraction=None,
+            **thresholds,
+        )
+
+    def test_a_threshold_only_chm_fails_leaves_cbh_alone(self, hand_stand):
+        ds = self.run(hand_stand, cbh_threshold=0.0001, chm_threshold=1.0)
+        np.testing.assert_allclose(ds.cbh.values[2, 1], 6.0)
+        assert np.isnan(ds.chm.values[2, 1])
+
+    def test_a_threshold_only_cbh_fails_leaves_chm_alone(self, hand_stand):
+        ds = self.run(hand_stand, cbh_threshold=1.0, chm_threshold=0.0001)
+        assert np.isnan(ds.cbh.values[2, 1])
+        np.testing.assert_allclose(ds.chm.values[2, 1], 12.0)
+
+
+class TestMeanCrownBaseCbh:
+    """``cbh_method="mean_crown_base"`` swaps the threshold scan for the
+    fuel-weighted per-tree crown base, reading none of the ``cbh_`` scan
+    settings.
+    """
+
+    @staticmethod
+    def two_crowns():
+        # Both stems in cell (2, 1): crown bases 4 m (8 m tree) and 10 m
+        # (20 m tree), with 1 and 3 kg of fuel supplied directly.
+        return pd.concat(
+            [
+                single_tree(x=1045.0, y=4915.0, height=8.0, crown_ratio=0.5, acf=1.0),
+                single_tree(x=1045.0, y=4915.0, height=20.0, crown_ratio=0.5, acf=3.0),
+            ],
+            ignore_index=True,
+        )
+
+    def cbh(self, **kwargs):
+        ds = compute_canopy_metrics(
+            self.two_crowns(),
+            band_template(["cbh"]),
+            fuel_column="acf",
+            horizontal_distribution="stem",
+            vertical_distribution="uniform",
+            crown_class_adjustment="none",
+            **kwargs,
+        )
+        return ds.cbh.values[2, 1]
+
+    def test_it_is_the_fuel_weighted_mean_crown_base(self):
+        # (1*4 + 3*10) / (1 + 3) = 8.5 m, a value no threshold scan of
+        # this profile can produce, so it also proves the dispatch switched.
+        assert self.cbh(cbh_method="mean_crown_base") == pytest.approx(8.5)
+
+    def test_an_unknown_cbh_method_raises(self):
+        with pytest.raises(ValueError, match="bogus"):
+            self.cbh(cbh_method="bogus")
+
+
+class TestHeightPercentileChm:
+    """``chm_method="height_percentile"`` swaps the threshold scan for a
+    per-cell percentile of tree heights, reading none of the ``chm_``
+    scan settings.
+    """
+
+    @staticmethod
+    def two_heights():
+        # 10 m and 30 m trees in cell (2, 1).
+        return pd.concat(
+            [
+                single_tree(x=1045.0, y=4915.0, height=10.0, acf=1.0),
+                single_tree(x=1045.0, y=4915.0, height=30.0, acf=1.0),
+            ],
+            ignore_index=True,
+        )
+
+    def chm(self, **kwargs):
+        ds = compute_canopy_metrics(
+            self.two_heights(),
+            band_template(["chm"]),
+            fuel_column="acf",
+            horizontal_distribution="stem",
+            vertical_distribution="uniform",
+            crown_class_adjustment="none",
+            chm_method="height_percentile",
+            **kwargs,
+        )
+        return ds.chm.values[2, 1]
+
+    def test_the_hundredth_percentile_is_the_tallest_tree(self):
+        assert self.chm(chm_percentile=100.0) == pytest.approx(30.0)
+
+    def test_the_default_percentile_is_the_ninety_ninth(self):
+        # 99th of [10, 30] linearly interpolates to 29.8 m.
+        assert self.chm() == pytest.approx(29.8)
+
+    def test_an_unknown_chm_method_raises(self):
+        with pytest.raises(ValueError, match="bogus"):
+            compute_canopy_metrics(
+                self.two_heights(),
+                band_template(["chm"]),
+                fuel_column="acf",
+                crown_class_adjustment="none",
+                chm_method="bogus",
+            )
+
+
+class TestLoadOverDepthCbd:
+    """``cbd_method="load_over_depth"`` divides canopy fuel load by one of
+    the four canopy depths ``cbd_depth`` selects.
+    """
+
+    DEPTHS = [
+        "canopy_depth",
+        "mean_crown_length",
+        "biomass_percentile",
+        "height_percentile",
+    ]
+
+    @staticmethod
+    def two_trees():
+        # 10 m and 30 m ponderosa in cell (2, 1), 2 kg of fuel each.
+        return pd.concat(
+            [
+                single_tree(x=1045.0, y=4915.0, height=10.0, crown_ratio=0.5, acf=2.0),
+                single_tree(x=1045.0, y=4915.0, height=30.0, crown_ratio=0.5, acf=2.0),
+            ],
+            ignore_index=True,
+        )
+
+    def cbd(self, **kwargs):
+        # Only cbd is requested, so canopy_depth also proves it computes
+        # its own chm - cbh scan rather than reading the other bands.
+        ds = compute_canopy_metrics(
+            self.two_trees(),
+            band_template(["cbd"]),
+            fuel_column="acf",
+            horizontal_distribution="stem",
+            vertical_distribution="uniform",
+            crown_class_adjustment="none",
+            cbd_method="load_over_depth",
+            **kwargs,
+        )
+        return ds.cbd.values
+
+    def test_mean_crown_length_divides_the_load_by_the_mean_crown(self):
+        # CFL = 4 kg / 900 m2; mean crown length = mean(5, 15) = 10 m.
+        cbd = self.cbd(cbd_depth="mean_crown_length")
+        assert cbd[2, 1] == pytest.approx((4.0 / CELL_AREA) / 10.0)
+
+    @pytest.mark.parametrize("depth", DEPTHS)
+    def test_every_depth_gives_a_positive_density(self, depth):
+        assert self.cbd(cbd_depth=depth)[2, 1] > 0.0
+
+    @pytest.mark.parametrize("depth", DEPTHS)
+    def test_an_empty_cell_is_zero_density(self, depth):
+        assert self.cbd(cbd_depth=depth)[0, 0] == 0.0
+
+    def test_load_over_depth_is_lower_than_the_running_mean_maximum(self):
+        # The average-density convention sits below the running-mean peak.
+        load_over = self.cbd(cbd_depth="canopy_depth")[2, 1]
+        running_mean = compute_canopy_metrics(
+            self.two_trees(),
+            band_template(["cbd"]),
+            fuel_column="acf",
+            horizontal_distribution="stem",
+            vertical_distribution="uniform",
+            crown_class_adjustment="none",
+        ).cbd.values[2, 1]
+        assert 0.0 < load_over < running_mean
+
+    def test_an_unknown_cbd_method_raises(self):
+        with pytest.raises(ValueError, match="bogus"):
+            compute_canopy_metrics(
+                self.two_trees(),
+                band_template(["cbd"]),
+                fuel_column="acf",
+                crown_class_adjustment="none",
+                cbd_method="bogus",
+            )
+
+    def test_an_unknown_cbd_depth_raises(self):
+        with pytest.raises(ValueError, match="bogus"):
+            self.cbd(cbd_depth="bogus")
+
+
 class TestBandSelection:
     def test_only_the_requested_bands_are_computed(self, hand_stand):
         """Cover alone must not enter the allometry path.
@@ -114,6 +309,22 @@ class TestStandFilters:
     def test_trees_below_min_tree_height_are_dropped(self, hand_stand):
         trees = pd.concat([hand_stand, hand_stand], ignore_index=True)
         trees.loc[1, "height"] = 1.0
+        ds = compute_canopy_metrics(
+            trees,
+            band_template(["cfl"]),
+            fuel_column="acf",
+            min_tree_height=2.0,
+            horizontal_distribution="stem",
+            vertical_distribution="uniform",
+            crown_class_adjustment="none",
+        )
+        np.testing.assert_allclose(
+            ds.cfl.values[2, 1], HAND_FUEL_KG / CELL_AREA, rtol=1e-6
+        )
+
+    def test_a_tree_exactly_at_min_tree_height_is_kept(self, hand_stand):
+        trees = hand_stand.copy()
+        trees["height"] = 2.0
         ds = compute_canopy_metrics(
             trees,
             band_template(["cfl"]),

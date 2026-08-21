@@ -3,7 +3,7 @@
 The National Scale Volume and Biomass system (Westfall et al. 2024,
 USDA GTR WO-104; the ``nsvb`` package) works in inches, feet, and
 pounds. These wrappers take the FastFuels metric convention (cm, m) and
-return kilograms, with all conversions handled by pint.
+return kilograms.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 from nsvb import estimators
 
-from fastfuels_core.units import conversion_factor
+from fastfuels_core.units import CM_TO_IN, LB_TO_KG, M_TO_FT
 
 
 def foliage_biomass(
@@ -20,10 +20,10 @@ def foliage_biomass(
     """Per-tree NSVB total foliage dry weight (kg)."""
     foliage_lb = estimators.total_foliage_dry_weight(
         np.asarray(species_code),
-        np.asarray(dbh_cm, dtype=np.float64) * conversion_factor("cm", "inch"),
-        np.asarray(height_m, dtype=np.float64) * conversion_factor("m", "foot"),
+        np.asarray(dbh_cm, dtype=np.float64) * CM_TO_IN,
+        np.asarray(height_m, dtype=np.float64) * M_TO_FT,
     )
-    return foliage_lb * conversion_factor("lb", "kg")
+    return foliage_lb * LB_TO_KG
 
 
 def branch_biomass(
@@ -32,7 +32,7 @@ def branch_biomass(
     """Per-tree NSVB total branch dry weight (kg)."""
     branch_lb = estimators.total_branch_weight(
         np.asarray(species_code),
-        np.asarray(dbh_cm, dtype=np.float64) * conversion_factor("cm", "inch"),
-        np.asarray(height_m, dtype=np.float64) * conversion_factor("m", "foot"),
+        np.asarray(dbh_cm, dtype=np.float64) * CM_TO_IN,
+        np.asarray(height_m, dtype=np.float64) * M_TO_FT,
     )
-    return branch_lb * conversion_factor("lb", "kg")
+    return branch_lb * LB_TO_KG

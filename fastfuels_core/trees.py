@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 
 # Internal imports
+from fastfuels_core.allometry import jenkins
 from fastfuels_core.base import ObjectIterableDataFrame
 from fastfuels_core.point_process import run_point_process
 from fastfuels_core.voxelization import VoxelizedTree, voxelize_tree, CenteringMode
@@ -612,9 +613,10 @@ class NSVBEquations(BiomassAllometryModel):
 
 class JenkinsBiomassEquations(BiomassAllometryModel):
     """
-    This class implements the National-Scale Biomass Estimators developed by
-    Jenkins et al. (2003). These equations are used to estimate above ground and
-    component biomass for 10 species groups in the United States.
+    Per-tree adapter over the Jenkins et al. (2003) National-Scale Biomass
+    Estimators. The vectorized equations live in
+    :mod:`fastfuels_core.allometry.jenkins`; this class is the scalar,
+    per-``Tree`` view of them and validates a single tree's inputs.
     """
 
     def __init__(self, species_code, diameter):
@@ -635,62 +637,20 @@ class JenkinsBiomassEquations(BiomassAllometryModel):
         ]
 
     def _estimate_above_ground_biomass(self):
-        """
-        Uses Equation 1 and parameters in Table 4 of Jenkins et al. 2003 to
-        estimate the above ground biomass of a tree based on species group and
-        diameter at breast height.
-
-        Biomass equation: bm = Exp(β_0 + (β_1 * ln(dbh))) Where bm is above
-        ground biomass (kg) for trees 2.5cm dbh and larger, dbh is the
-        diameter at breast height (cm), and β_0 and β_1 are parameters
-        estimated from the data.
-
-        NOTE: This method also applies a sapling adjustment factor (sapadj) for
-        trees with dbh <= 12.7cm (5 inches).
-        """
-        # Read beta parameters from reference table.
-        # NOTE: in the reference table the parameters are named b1 and b2.
-        # BUT in the paper they are named b0 and b1 :(.
-        beta_0 = REF_JENKINS.loc[self._species_group]["JENKINS_TOTAL_B1"]
-        beta_1 = REF_JENKINS.loc[self._species_group]["JENKINS_TOTAL_B2"]
-
-        # Estimate the above ground biomass
-        biomass = np.exp(beta_0 + (beta_1 * np.log(self.diameter)))
-
-        # Apply the sapling adjustment factor
-        if self.diameter <= 12.7 and self._sapling_adjustment > 0:
-            biomass *= self._sapling_adjustment
-
-        return biomass
+        """Total aboveground biomass (kg); see :func:`jenkins.above_ground_biomass`."""
+        return float(
+            jenkins.above_ground_biomass(
+                np.array([self.species_code]), np.array([self.diameter])
+            )[0]
+        )
 
     def estimate_foliage_biomass(self):
-        """
-        Uses Equation 2 and parameters in Table 6 of Jenkins et al. 2003 to
-        estimate component ratio and foliage biomass of a tree based on species
-        group, hardwood classification, and diameter at breast height.
-
-        Biomass ratio equation:
-        r = Exp(β_0 + (β_1 / dbh))
-        Where r is the ratio of component to total aboveground biomass for
-        trees 2.5cm dbh and larger, dbh is the diameter at breast height in cm,
-        and β_0 and β_1 are parameters estimated from the data.
-
-        r is multiplied by the above ground biomass to estimate the
-        foliage biomass in kg.
-        """
-        # Read beta parameters from reference table.
-        # NOTE: in the reference table the parameters are named b1 and b2.
-        # BUT in the paper they are named b0 and b1 :(.
-        beta_0 = REF_JENKINS.loc[self._species_group]["JENKINS_FOLIAGE_RATIO_B1"]
-        beta_1 = REF_JENKINS.loc[self._species_group]["JENKINS_FOLIAGE_RATIO_B2"]
-
-        # Estimate the foliage component ratio
-        ratio = np.exp(beta_0 + (beta_1 / self.diameter))
-
-        # Estimate the foliage biomass
-        foliage_biomass = self._estimate_above_ground_biomass() * ratio
-
-        return foliage_biomass
+        """Foliage dry weight (kg); see :func:`jenkins.foliage_biomass`."""
+        return float(
+            jenkins.foliage_biomass(
+                np.array([self.species_code]), np.array([self.diameter])
+            )[0]
+        )
 
 
 def _is_valid_spcd(spcd: int) -> bool:

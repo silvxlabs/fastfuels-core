@@ -15,7 +15,7 @@ from affine import Affine
 from rasterio.features import rasterize
 
 from fastfuels_core.canopy_fuel.crown_radius import max_crown_radius
-from fastfuels_core.canopy_fuel.geometry import disk_rect_overlap_area
+from fastfuels_core.canopy_fuel.geometry import disk_cell_overlaps
 
 VALID_METHODS = ("crown_union", "crown_overlap", "cover_fraction")
 
@@ -38,35 +38,15 @@ def _crown_overlap_cover(
     stems placed at random, the expected uncovered fraction of a patch
     of ground is ``exp(-crown area / patch area)``.
     """
-    a, _, c, _, e, f = transform
-    ny, nx = shape
+    a, _, _, _, e, _ = transform
     area = np.zeros(shape, dtype=np.float64)
     if len(x) == 0:
         return area
 
     radius = np.maximum(radius, 0.0)
-    col_lo = np.floor((x - radius - c) / a).astype(np.int64)
-    col_hi = np.floor((x + radius - c) / a).astype(np.int64)
-    row_lo = np.floor((y + radius - f) / e).astype(np.int64)  # e < 0
-    row_hi = np.floor((y - radius - f) / e).astype(np.int64)
     flat = area.reshape(-1)
-    for row_offset in range(int((row_hi - row_lo).max()) + 1):
-        rows = row_lo + row_offset
-        y_hi = f + rows * e
-        y_lo = y_hi + e
-        for col_offset in range(int((col_hi - col_lo).max()) + 1):
-            cols = col_lo + col_offset
-            x_lo = c + cols * a
-            overlap = disk_rect_overlap_area(x, y, radius, x_lo, x_lo + a, y_lo, y_hi)
-            inside = (cols >= 0) & (cols < nx) & (rows >= 0) & (rows < ny)
-            overlap = np.where(inside, overlap, 0.0)
-            if not overlap.any():
-                continue
-            flat += np.bincount(
-                np.where(inside, rows * nx + cols, 0),
-                weights=overlap,
-                minlength=flat.size,
-            )
+    for cell, overlap in disk_cell_overlaps(x, y, radius, transform, shape):
+        flat += np.bincount(cell, weights=overlap, minlength=flat.size)
     cell_area = abs(a * e)
     return 100.0 * (1.0 - np.exp(-area / cell_area))
 
@@ -135,30 +115,27 @@ def canopy_cover(
     """Per-cell projected canopy cover (%).
 
     ``method`` decides how crowns that overlap each other are counted.
-    Both methods clip crowns to the cell the same way, so they differ
+    Every method clips crowns to the cell the same way, so they differ
     only in that treatment and can be compared directly.
 
-    ``"crown_union"`` (default)
+    ``"crown_overlap"`` (default)
+        Crookston & Stage (1999) random-overlap correction,
+        ``100 * (1 - exp(-crown area in cell / cell area))``: the cover
+        expected if stems were placed at random. This is FuelCalc's
+        estimator, and it is the one to use when reproducing FuelCalc
+        or LANDFIRE. It answers the question a stand table forces; with
+        known stem positions the union below resolves overlap exactly
+        rather than in expectation. The crown area in a cell is the
+        exact disk/cell intersection, so a crown straddling a boundary
+        contributes to both cells in proportion.
+    ``"crown_union"``
         The geometric union of the crown disks: overlapping crowns count
         once. Crown disks are rasterized as a binary union on a fine
         grid of ``supersample x supersample`` pixels per output cell,
         then block-reduced to covered fractions. ``supersample``
         defaults to a fine pixel of at most 0.5 m so crown edges are
-        resolved at any output resolution. The union internals are an
-        implementation detail (fastfuels-core#95 keeps them swappable
-        against a kd-tree analytic candidate pending profiling); only
-        the covered fractions are contract.
-    ``"crown_overlap"``
-        Crookston & Stage (1999) random-overlap correction,
-        ``100 * (1 - exp(-crown area in cell / cell area))``: the cover
-        expected if stems were placed at random. This is FuelCalc's
-        estimator, and it is the one to use when reproducing FuelCalc
-        or LANDFIRE. It is otherwise the weaker of the two here — it
-        answers the question you are forced to ask when you know only a
-        stand table, and we know where the stems are, so the union
-        resolves overlap exactly rather than in expectation. The crown
-        area in a cell is the exact disk/cell intersection, so a crown
-        straddling a boundary contributes to both cells in proportion.
+        resolved at any output resolution; only the covered fractions
+        are contract.
 
     ``"cover_fraction"``
         The union again, but only over trees taller than
