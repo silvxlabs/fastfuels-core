@@ -1,4 +1,4 @@
-"""Parity of the canopy_fuel module against the FuelCalc 1.8 C source.
+"""Parity of the canopy_fuel module against the FuelCalc C source.
 
 Every assertion here compares our code to
 :mod:`tests.canopy_fuel.fuelcalc_reference`, which implements the same
@@ -49,12 +49,12 @@ from fastfuels_core.canopy_fuel.bulk_density import cbd_running_mean
 from fastfuels_core.canopy_fuel.cover import canopy_cover
 from fastfuels_core.canopy_fuel.canopy_height import profile_threshold_heights
 from fastfuels_core.canopy_fuel.fuel_load import canopy_fuel_load
+from fastfuels_core.units import FT_TO_M
 from fastfuels_core.canopy_fuel.profile import (
-    FT_TO_M,
     cumulative_fuel_fraction,
     vertical_profile,
 )
-from fastfuels_core.units import conversion_factor
+from fastfuels_core.units import CM_TO_IN, IN_TO_CM, LB_TO_KG, M_TO_FT
 from fastfuels_core.canopy_fuel.ref_data import (
     fuelcalc_crown_class_factors,
     fuelcalc_crown_width,
@@ -105,13 +105,10 @@ EXPECTED_TABLE_DIVERGENCES: dict[int, str] = {
     ),
 }
 
-# SPCDs present in the source table and absent from ours.
-EXPECTED_TABLE_OMISSIONS: dict[int, str] = {
-    312: (
-        "Bigleaf Maple (ACMA3). The guide's Default Equation Table skips "
-        "this row; the source has it."
-    ),
-}
+# SPCDs present in the source table and absent from ours. Empty: the
+# guide's Default Equation Table skips Bigleaf Maple (ACMA3, 312); we
+# carry the source's row.
+EXPECTED_TABLE_OMISSIONS: dict[int, str] = {}
 
 # Two NRCS symbols in sr_ESD are not valid FIA symbols. The intended
 # species is unambiguous from the common name and FOFEM mortality code.
@@ -141,7 +138,7 @@ def _ours(quantity: str, equation_id: str, dia: np.ndarray) -> np.ndarray:
         return brown.foliage_plus_fine_fraction(ids, dia)
     # Our fine share is a fraction of branchwood; FuelCalc's is a
     # fraction of total crown weight. (1 - P1) converts between them.
-    return brown.fine_branchwood_share(ids, ids, dia) * (
+    return brown.fine_branchwood_share(ids, dia) * (
         1.0 - brown.foliage_fraction(ids, dia)
     )
 
@@ -197,7 +194,7 @@ class TestCrownProportionParity:
             trees = pd.DataFrame(
                 {
                     "fia_species_code": spcd,
-                    "dbh": dia_in * conversion_factor("inch", "cm"),
+                    "dbh": dia_in * IN_TO_CM,
                     "height": 20.0,
                     "crown_ratio": 0.5,
                 }
@@ -207,8 +204,7 @@ class TestCrownProportionParity:
             )
             theirs = np.array(
                 [
-                    fc.available_canopy_fuel_lb(eq_id, float(d))
-                    * conversion_factor("lb", "kg")
+                    fc.available_canopy_fuel_lb(eq_id, float(d)) * LB_TO_KG
                     for d in dia_in
                 ]
             )
@@ -254,7 +250,7 @@ class TestCrownProportionParity:
                 trees = pd.DataFrame(
                     {
                         "fia_species_code": spcd,
-                        "dbh": dia_in * conversion_factor("inch", "cm"),
+                        "dbh": dia_in * IN_TO_CM,
                         "height": 20.0,
                         "crown_ratio": 0.5,
                         "cc": crown_class,
@@ -263,14 +259,14 @@ class TestCrownProportionParity:
                 ours = available_canopy_fuel(
                     trees,
                     equations="brown_1978",
-                    crown_class_adjustment="reinhardt_2006",
+                    crown_class_adjustment="fuelcalc_table",
                     crown_class_column="cc",
                 )
                 theirs = np.array(
                     [
                         fc.available_canopy_fuel_lb(eq_id, float(d))
                         * fc.crown_class_factor(reduc, crown_class)
-                        * conversion_factor("lb", "kg")
+                        * LB_TO_KG
                         for d in dia_in
                     ]
                 )
@@ -282,18 +278,15 @@ class TestCrownProportionParity:
                     err_msg=f"{eq_id}/{crown_class}",
                 )
 
-    def test_no_unaccounted_equation_ids(self):
-        """Every Id we define is either in the source or explained here."""
+    def test_the_equation_ids_are_exactly_the_sourced_ones(self):
+        """No Id without a primary source, no sourced Id left out.
+
+        sr_BT and sr_SL between them define every Id we carry. FuelCalc's
+        AL and QA cross-references (whitebark P1 with larch P2) have no
+        primary source and are deliberately absent.
+        """
         ours = set(brown.P1_EQUATIONS) & set(brown.P2_EQUATIONS)
-        vestigial = {
-            # sr_EFD has no AL entry at all; Subalpine Larch (LALY) uses
-            # the WL Ids for all six components. Unreachable, so it is
-            # harmless -- unlike QA, which resolved SPCD 746 to the same
-            # unsourced borrow and has been dropped.
-            "AL",
-        }
-        assert ours - set(fc.ALL_IDS) == vestigial
-        assert set(fc.ALL_IDS) - ours == set(), "source Id we do not define"
+        assert ours == set(fc.ALL_IDS)
 
     @pytest.mark.parametrize("equation_id", SHARED_IDS)
     def test_fine_share_conversion_is_consistent(self, equation_id):
@@ -301,7 +294,7 @@ class TestCrownProportionParity:
         one differ only by the (1 - P1) factor, by construction."""
         ids = np.full(DIA_IN.shape, equation_id, dtype=object)
         p1 = brown.foliage_fraction(ids, DIA_IN)
-        share = brown.fine_branchwood_share(ids, ids, DIA_IN)
+        share = brown.fine_branchwood_share(ids, DIA_IN)
         assert ((share >= 0.0) & (share <= 1.0)).all()
         np.testing.assert_allclose(
             share * (1.0 - p1), _ours("fine", equation_id, DIA_IN), atol=1e-15
@@ -412,15 +405,10 @@ class TestVerticalDistributionParity:
 class TestProfileReductionParity:
     """metrics reductions against NC_PTL.C _BulkDensity().
 
-    Run with the window matched to FuelCalc's five 1-ft layers, which is
-    the configuration the `fuelcalc_compat` API example targets. Our
-    shipped defaults (3.0 m window, no CBH/CH smoothing) are a different
-    and deliberate choice; see fastfuels-core#95.
-
-    The running mean is over a slab of fixed depth, so its denominator
-    is that depth wherever the slab sits. See the note in
-    ``fuelcalc_reference.bulk_density`` for why that is the published
-    quantity and what the C does instead.
+    Run with the window matched to FuelCalc's five 1-ft layers and its
+    ground-clamped running mean, which are also the module's defaults.
+    The fixed-depth alternative (``edge="slab"``) has no counterpart in
+    the C and is pinned on its own terms below.
     """
 
     WINDOW = 5 * LAYER_FT_M
@@ -450,18 +438,17 @@ class TestProfileReductionParity:
                 profile[:, None, None],
                 layer_depth=LAYER_FT_M,
                 window=self.WINDOW,
-                edge="slab",
+                edge="fuelcalc",
             )[0, 0]
             assert ours == pytest.approx(reference.cbd, abs=1e-12)
 
     def test_cbd_is_invariant_to_how_high_the_canopy_sits(self):
-        """A slab of fuel has one bulk density wherever it sits.
+        """Under ``edge="slab"`` a slab of fuel has one bulk density wherever it sits.
 
-        The running mean is over a fixed depth, so translating a canopy
-        vertically cannot change its CBD. FuelCalc's C shrinks the
-        denominator at the ground and reports 1.0 for the profile below
-        resting on layer 0 against 0.6 higher up; the fixed-depth mean
-        that Reinhardt et al. (2006) define gives 0.6 for both.
+        The fixed-depth mean that Reinhardt et al. (2006) define gives
+        0.6 for three unit layers at any height. The C (and the
+        ``fuelcalc`` edge) shrinks the denominator at the ground and
+        reports 1.0 for the same slab resting on layer 0.
         """
         slab = np.array([1.0, 1.0, 1.0])
         densities = set()
@@ -644,12 +631,14 @@ class TestSpeciesTableParity:
         for code, expected in fc.CROWN_CLASS_FACTORS.items():
             assert tuple(ours.loc[code, columns]) == expected
 
-    def test_grand_fir_crown_class_row_is_unreachable(self):
+    def test_every_crown_reduction_code_has_a_factor_row(self):
         """sr_CCT's GF row is commented out in NC_CC.C ("doesn't seem to
         get used"), correctly: every GF-biomass species routes to WF for
-        crown reduction. We carry the row; nothing may reference it."""
-        assert "GF" in fuelcalc_crown_class_factors().index
-        assert "GF" not in set(fuelcalc_species()["CROWN_REDUC_CODE"])
+        crown reduction. We do not carry it, and every code the species
+        table does point at must resolve."""
+        assert "GF" not in fuelcalc_crown_class_factors().index
+        codes = set(fuelcalc_species()["CROWN_REDUC_CODE"])
+        assert codes <= set(fuelcalc_crown_class_factors().index)
 
 
 class TestCanopyCoverParity:
@@ -721,8 +710,8 @@ class TestCanopyCoverParity:
             total_sqft = sum(
                 fc.ca_crown_area(
                     int(species.loc[int(c), "COVER_EQ"]),
-                    float(d) * conversion_factor("cm", "inch"),
-                    float(h) * conversion_factor("m", "foot"),
+                    float(d) * CM_TO_IN,
+                    float(h) * M_TO_FT,
                 )
                 for c, d, h in zip(spcd, trees["dbh"], trees["height"])
             )

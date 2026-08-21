@@ -13,7 +13,7 @@ import pandas as pd
 
 from fastfuels_core.allometry import fvs
 from fastfuels_core.crown_profile_models.purves import PurvesCrownProfile
-from fastfuels_core.units import conversion_factor
+from fastfuels_core.units import CM_TO_IN, FT_TO_M, M_TO_FT
 
 VALID_EQUATIONS = ("purves", "crookston_stage")
 
@@ -30,14 +30,15 @@ def max_crown_radius(
     radii), which overrides ``equations``. Otherwise ``equations``
     selects an allometry:
 
-    ``"purves"`` (default)
-        Purves et al. (2007), from ``fia_species_code``, ``dbh``,
-        ``height`` and ``crown_ratio``.
-    ``"crookston_stage"``
+    ``"crookston_stage"`` (default)
         Half the crown width of Crookston & Stage (1999), reached
         through FVS (see :mod:`fastfuels_core.allometry.fvs`) — diameter
         alone above breast height, coefficients fitted regionally. This
         is the width behind FuelCalc's canopy cover.
+    ``"purves"``
+        Purves et al. (2007), from ``fia_species_code``, ``dbh``,
+        ``height`` and ``crown_ratio``; the allometry the rest of
+        fastfuels-core uses.
 
     The radius source is independent of how canopy cover treats
     overlap, so the two can be varied separately: a run can compare
@@ -64,10 +65,10 @@ def max_crown_radius(
     if equations == "crookston_stage":
         width_ft = fvs.crown_width_for_species(
             trees["fia_species_code"].to_numpy(),
-            trees["dbh"].to_numpy(dtype=np.float64) * conversion_factor("cm", "inch"),
-            trees["height"].to_numpy(dtype=np.float64) * conversion_factor("m", "foot"),
+            trees["dbh"].to_numpy(dtype=np.float64) * CM_TO_IN,
+            trees["height"].to_numpy(dtype=np.float64) * M_TO_FT,
         )
-        return 0.5 * width_ft * conversion_factor("foot", "m")
+        return 0.5 * width_ft * FT_TO_M
     model = PurvesCrownProfile(
         trees["fia_species_code"],
         trees["dbh"],

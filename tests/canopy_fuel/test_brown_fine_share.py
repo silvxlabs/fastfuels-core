@@ -25,7 +25,7 @@ from fastfuels_core.allometry.brown import (
 
 def share(eq_id, dia_in):
     ids = np.array([eq_id])
-    return fine_branchwood_share(ids, ids, np.array([float(dia_in)]))[0]
+    return fine_branchwood_share(ids, np.array([float(dia_in)]))[0]
 
 
 class TestComposition:
@@ -51,12 +51,12 @@ class TestClamps:
         assert share("LP", 60.0) == 0.0
 
     @pytest.mark.parametrize(
-        "eq_id", ["PP", "GF", "DF", "LP", "WP", "WB", "ES", "WH", "AL", "RA"]
+        "eq_id", ["PP", "GF", "DF", "LP", "WP", "WB", "ES", "WH", "RA"]
     )
     def test_the_share_stays_a_fraction_over_the_whole_range(self, eq_id):
         dia = np.linspace(1.0, 80.0, 200)
         ids = np.full(dia.shape, eq_id)
-        got = fine_branchwood_share(ids, ids, dia)
+        got = fine_branchwood_share(ids, dia)
         assert (got >= 0.0).all() and (got <= 1.0).all()
 
 

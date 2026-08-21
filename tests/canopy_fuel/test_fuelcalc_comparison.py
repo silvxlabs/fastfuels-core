@@ -32,23 +32,50 @@ package -- treelist in, thinned stand, canopy metrics out.
 thinned stand itself against the expansion factors FuelCalc reported,
 before any canopy fuel is computed.
 
-Where we differ, and why
-------------------------
+Where FuelCalc's build departs from the equations
+-------------------------------------------------
 This package implements the published equations, not FuelCalc's build
-of them, and on these stands the two disagree in exactly one place:
-FuelCalc's compiled crown-proportion table carries a western larch P2
-of ``0.745*exp(-0.0632d)`` where Brown 1978 Table 16 (p. 53) and
-FuelCalc's own User Guide (Appendix D) both print
-``0.745*exp(-0.0362d)``. We implement the published coefficient. Both
-tutorial stands carry larch, and on the largest of them the two put the
-fine branchwood fraction a factor of three apart, so the difference
-reaches every stand total that larch touches.
+of them. Checked against ``FC_DLL`` and the primary sources, the build
+departs from the equations in these places; the package follows the
+source in every one, so these bound where its output and FuelCalc's
+agree.
 
-Ten of the twenty-four reported values differ for that reason and no
-other. :func:`test_the_larch_coefficient_accounts_for_the_deviations`
+- **Western larch P2.** ``sr_BT[]`` carries ``0.745*exp(-0.0632d)``;
+  Brown 1978 Table 16 (p. 53) and FuelCalc's own User Guide (Appendix
+  D) print ``-0.0362``. Reaches every larch. On the largest tutorial
+  larch the two put the fine branchwood fraction a factor of three
+  apart, so it reaches every stand total larch touches -- and it is
+  the only one of these the tutorial stands exercise.
+- **Grand fir P2 above 36 in.** ``sr_BT[]`` has the large-diameter
+  constant ``0.286``, equal to P1, so FuelCalc gives big grand fir no
+  fine branchwood; Brown and the Guide print ``0.378``. About +16 %
+  available fuel for GF > 36 in.
+- **Douglas-fir crown weight at and above 17 in.** Brown Table 1 is
+  two-part (log form below 17 in, ``1.0237d**2 - 20.74`` from it);
+  ``sr_BT[]`` has one slot and keeps the log half. +33 % crown weight
+  at 30 in.
+- **Ponderosa P2 past the curve crossing.** Brown's Conditions column
+  holds ``P2 = P1 + 0.01`` there; ``sr_BT[]`` has no field for it and
+  floors the fine fraction at zero. About +4 % above 31 in.
+- **Lodgepole saplings.** ``sr_STB[]`` lists the code ``LP`` twice,
+  first on a "Limber pine" record that repeats the whitebark values,
+  and its first-match lookup weighs lodgepole saplings as limber pine;
+  the Guide prints lodgepole's own row, which is what the package
+  carries. +44 % fine fuel at 3 ft.
+- **Limber pine species row.** The shipped table follows the Guide's
+  pre-2018 row (LP equations, PP distribution); FuelCalc ticket 176
+  moved it to WB/LP/LP. Registered in ``test_fuelcalc_parity``.
+- **Canopy base height label.** FuelCalc labels a layer by its top; the
+  package anchors CBH to the layer bottom (``canopy_height.py``). Exactly
+  one layer, corrected for in :func:`canopy_metrics` below.
+- **Threshold equality.** The Guide says "greater than or equal to";
+  the C tests ``>``. The package follows the Guide.
+
+Ten of the twenty-four reported values differ, all for the larch
+coefficient and nothing else.
+:func:`test_the_larch_coefficient_accounts_for_the_deviations`
 substitutes FuelCalc's coefficient -- in this module, never in the
-package -- and every one of them lands on FuelCalc's number. Nothing
-else about these four stands is unaccounted for.
+package -- and every one of them lands on FuelCalc's number.
 
 Displayed precision
 -------------------
@@ -98,7 +125,7 @@ SPECIES_CODES = {
 # drifts away from it fails there rather than quietly here.
 FUELCALC_1_7 = dict(
     equations="brown_1978",
-    crown_class_adjustment="reinhardt_2006",
+    crown_class_adjustment="fuelcalc_table",
     crown_class_column="crown_class",
     exclude_hardwoods=True,
     horizontal_distribution="stem",
@@ -106,10 +133,14 @@ FUELCALC_1_7 = dict(
     layer_depth=FT_TO_M,  # one-foot layers
     cbd_window=5 * FT_TO_M,  # five-layer running mean
     cbd_window_edge="fuelcalc",
-    threshold_smoothing_window=5 * FT_TO_M,
-    threshold_smoothing_edge="fuelcalc",
     cbh_threshold=0.012,
     cbh_relative_fraction=0.1,
+    cbh_smoothing_window=5 * FT_TO_M,
+    cbh_smoothing_edge="fuelcalc",
+    chm_threshold=0.012,
+    chm_relative_fraction=0.1,
+    chm_smoothing_window=5 * FT_TO_M,
+    chm_smoothing_edge="fuelcalc",
     cover_method="crown_overlap",
     crown_radius_equations="crookston_stage",
     min_tree_height=0.0,
@@ -257,7 +288,7 @@ def test_the_module_defaults_are_this_parameterization():
     ``crown_class_column`` is the one setting with no default: it names
     a column in the caller's inventory, so the module cannot guess it,
     and it will not fall back to the table's Other/none factor because
-    that is 0.5 for 50 of the 54 species.
+    that is 0.5 for 51 of the 55 species.
     """
     defaults = inspect.signature(compute_canopy_metrics).parameters
     drifted = {
@@ -299,8 +330,8 @@ def test_the_larch_coefficient_accounts_for_the_deviations():
     values the tests above flag are this one coefficient, and with it
     the four plot reports come back exactly.
     """
-    original = {i: brown.P2_EQUATIONS[i] for i in ("WL", "AL")}
-    brown.P2_EQUATIONS.update({i: FUELCALC_LARCH_P2 for i in ("WL", "AL")})
+    original = brown.P2_EQUATIONS["WL"]
+    brown.P2_EQUATIONS["WL"] = FUELCALC_LARCH_P2
     try:
         plot_1_pre = canopy_metrics(stems(plot=1))
         plot_2_pre = canopy_metrics(stems(plot=2))
@@ -316,7 +347,7 @@ def test_the_larch_coefficient_accounts_for_the_deviations():
             stems(plot=2, expansion_factors="TPA_POST")
         )
     finally:
-        brown.P2_EQUATIONS.update(original)
+        brown.P2_EQUATIONS["WL"] = original
 
     assert plot_1_pre["canopy_base_height_ft"] == pytest.approx(1.0)
     assert round(plot_1_pre["canopy_bulk_density_kg_m3"], 3) == 0.044

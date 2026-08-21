@@ -62,6 +62,15 @@ class TestDiameterBounds:
             ).apply(stand(d10=3))
         assert len(out) == 3
 
+    @pytest.mark.parametrize("bound", ["min_diameter", "max_diameter"])
+    def test_each_bound_is_exclusive_on_its_own(self, bound):
+        """FuelCalc skips ``d <= min`` and ``d >= max`` (NC_PTL3.C)."""
+        with pytest.warns(RuntimeWarning):
+            out = DirectionalThinToTreeDensity(target=0, **{bound: 10.0}).apply(
+                stand(d10=3)
+            )
+        assert len(out) == 3
+
 
 class TestCutEfficiency:
     """The cut runs at a steady rate along the eligible trees.

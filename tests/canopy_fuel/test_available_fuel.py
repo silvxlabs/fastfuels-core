@@ -16,6 +16,7 @@ import pandas as pd
 import pytest
 
 from fastfuels_core.allometry import brown, nsvb
+from fastfuels_core.units import FT_TO_M, IN_TO_CM, LB_TO_KG
 from fastfuels_core.canopy_fuel.available_fuel import (
     available_canopy_fuel,
     crown_class_factor,
@@ -228,6 +229,79 @@ class TestEquationsArm:
         )
 
 
+class TestBranchwoodSizePartition:
+    """Which branchwood the fraction applies to, and what that costs in reach."""
+
+    def test_none_applies_the_fraction_to_total_branchwood(self):
+        trees = two_trees()
+        foliage = nsvb.foliage_biomass(
+            trees["fia_species_code"], trees["dbh"], trees["height"]
+        )
+        branch = nsvb.branch_biomass(
+            trees["fia_species_code"], trees["dbh"], trees["height"]
+        )
+        got = available_canopy_fuel(
+            trees,
+            equations="nsvb",
+            crown_class_adjustment="none",
+            branchwood_fraction=0.25,
+            branchwood_size_partition="none",
+        )
+        np.testing.assert_allclose(got, foliage + 0.25 * branch, rtol=1e-12)
+
+    def test_brown_proportions_takes_only_the_fine_class(self):
+        """The default reduces the branch total, so it is strictly less."""
+        trees = two_trees()
+        whole = available_canopy_fuel(
+            trees,
+            equations="nsvb",
+            crown_class_adjustment="none",
+            branchwood_size_partition="none",
+        )
+        fine = available_canopy_fuel(
+            trees, equations="nsvb", crown_class_adjustment="none"
+        )
+        assert (fine < whole).all()
+
+    def test_none_under_nsvb_reaches_species_outside_the_fuelcalc_table(self):
+        """White oak (802) is priced by NSVB and absent from FuelCalc's table."""
+        tree = one_tree(802, 30.0, 20.0)
+        with pytest.raises(ValueError, match="FuelCalc species table"):
+            available_canopy_fuel(tree, equations="nsvb", crown_class_adjustment="none")
+        got = available_canopy_fuel(
+            tree,
+            equations="nsvb",
+            crown_class_adjustment="none",
+            branchwood_size_partition="none",
+        )
+        assert got[0] > 0.0
+
+    def test_none_under_brown_1978_is_everything_p1_leaves(self):
+        """Brown gives one crown weight; ``none`` keeps all of its branchwood."""
+        tree = one_tree(122, 30.0, 20.0)
+        dia_in = np.array([30.0 / 2.54])
+        crown_kg = brown.crown_weight(np.array(["PP"]), dia_in) * LB_TO_KG
+        p1 = brown.foliage_fraction(np.array(["PP"]), dia_in)
+        got = available_canopy_fuel(
+            tree,
+            equations="brown_1978",
+            crown_class_adjustment="none",
+            branchwood_fraction=0.5,
+            branchwood_size_partition="none",
+        )
+        np.testing.assert_allclose(
+            got, crown_kg * p1 + 0.5 * crown_kg * (1.0 - p1), rtol=1e-12
+        )
+
+    def test_an_unknown_partition_raises(self):
+        with pytest.raises(ValueError, match="branchwood_size_partition"):
+            available_canopy_fuel(
+                two_trees(),
+                crown_class_adjustment="none",
+                branchwood_size_partition="equations",
+            )
+
+
 class TestCrownClassFactor:
     """The multiplier itself. Its values are pinned against FuelCalc in
     :mod:`tests.canopy_fuel.test_fuelcalc_parity`; what is here is how
@@ -262,7 +336,7 @@ class TestCrownClassFactor:
     def test_the_fallback_is_nearly_a_constant(self):
         """Without crown position the adjustment loses its content.
 
-        50 of the 54 species take 0.5, so turning the table on with no
+        51 of the 55 species take 0.5, so turning the table on with no
         column is close to halving every tree. Pinned because it is the
         difference between a species-and-position adjustment and a
         blanket scale factor, and it is invisible from the call site.
@@ -271,7 +345,7 @@ class TestCrownClassFactor:
             crown_class_factor(fuelcalc_species().index.to_numpy()),
             return_counts=True,
         )
-        assert dict(zip(np.round(values, 2), counts)) == {0.5: 50, 0.75: 1, 1.0: 3}
+        assert dict(zip(np.round(values, 2), counts)) == {0.5: 51, 0.75: 1, 1.0: 3}
 
 
 class TestCrownClassArguments:
@@ -294,7 +368,7 @@ class TestCrownClassArguments:
             available_canopy_fuel(trees, crown_class_adjustment="none"),
             available_canopy_fuel(
                 trees,
-                crown_class_adjustment="reinhardt_2006",
+                crown_class_adjustment="fuelcalc_table",
                 crown_class_column="cc",
             ),
         )
@@ -312,16 +386,15 @@ class TestCrownClassArguments:
         )
 
     def test_an_unknown_adjustment_raises(self):
-        """The arm is named for the paper, not for FuelCalc.
+        """The arm is named for the table, not for one of its sources.
 
-        The multipliers are Reinhardt, Scott, Gray & Keane (2006), the
-        same paper the vertical distribution cubics come from, so the
-        value matches ``vertical_distribution="reinhardt_2006"``.
-        FuelCalc is one program that applies them.
+        FuelCalc's factors come from two places — Gray's fits for
+        Reinhardt et al. (2006) and Keane's FIRESUM/Fire-BGC values —
+        so neither paper can name the whole table.
         """
         with pytest.raises(ValueError, match="crown_class_adjustment"):
             available_canopy_fuel(
-                two_trees(cc="D"), crown_class_adjustment="fuelcalc_table"
+                two_trees(cc="D"), crown_class_adjustment="reinhardt_2006"
             )
 
     def test_a_column_that_would_be_ignored_raises(self):
@@ -339,18 +412,18 @@ class TestCrownClassArguments:
 
     def test_the_adjustment_without_a_column_raises(self):
         """Allowing it would apply the Other/none factor to everything,
-        which halves 50 of the 54 species — a silent blanket scaling
+        which halves 51 of the 55 species — a silent blanket scaling
         wearing the name of a crown-class adjustment."""
         with pytest.raises(ValueError, match="needs crown_class_column"):
             available_canopy_fuel(
-                two_trees(cc="D"), crown_class_adjustment="reinhardt_2006"
+                two_trees(cc="D"), crown_class_adjustment="fuelcalc_table"
             )
 
     def test_a_column_that_is_not_in_the_frame_raises(self):
         with pytest.raises(ValueError, match="crown_class_column"):
             available_canopy_fuel(
                 two_trees(cc="D"),
-                crown_class_adjustment="reinhardt_2006",
+                crown_class_adjustment="fuelcalc_table",
                 crown_class_column="not_a_column",
             )
 
@@ -363,18 +436,13 @@ class TestCrownClassArguments:
         trees = two_trees(cc="N")
         got = available_canopy_fuel(
             trees,
-            crown_class_adjustment="reinhardt_2006",
+            crown_class_adjustment="fuelcalc_table",
             crown_class_column="cc",
         )
         expected = available_canopy_fuel(
             trees, crown_class_adjustment="none"
         ) * crown_class_factor(trees["fia_species_code"].to_numpy())
         np.testing.assert_allclose(got, expected, rtol=1e-12)
-
-
-IN_TO_CM = 2.54
-FT_TO_M = 0.3048
-LB_TO_KG = 0.45359237
 
 
 def sapling(dia_in, height_ft, spcd=202):
@@ -512,6 +580,13 @@ class TestSmallTreeHeightClasses:
 class TestSmallTreeSpeciesCoverage:
     """The table carries fewer codes than the equations do."""
 
+    def test_lodgepole_saplings_take_the_lodgepole_row(self):
+        """The Guide's lodgepole row, not the whitebark values FuelCalc's
+        first-match lookup lands on (see test_fuelcalc_comparison)."""
+        table = fuelcalc_small_tree_biomass()
+        assert tuple(table.loc[("LP", 3), ["FOL_LB", "ONE_HR_LB"]]) == (0.129, 0.061)
+        assert table.loc[("LP", 3), "NAME"] == "Lodgepole pine"
+
     def test_a_species_the_table_covers_uses_its_own_row(self):
         """Subalpine fir differs from Douglas-fir at the same size."""
         subalpine_fir, douglas_fir = 19, 202
@@ -539,15 +614,16 @@ class TestSmallTreeSpeciesCoverage:
             fuelcalc_small_tree_biomass().index.get_level_values("CODE")
         )
 
-    def test_an_uncovered_code_falls_back_to_douglas_fir(self):
-        """Reachable through the stage function, which takes any code."""
-        uncovered = small_tree_crown_components(
-            np.array(["ZZ"]), np.array([0.5]), np.array([6.0])
-        )
-        douglas_fir = small_tree_crown_components(
-            np.array(["DF"]), np.array([0.5]), np.array([6.0])
-        )
-        np.testing.assert_allclose(uncovered, douglas_fir, rtol=1e-12)
+    def test_an_uncovered_code_raises(self):
+        """Reachable only through the stage function, which takes any code.
+
+        FuelCalc substitutes its Douglas-fir row here; nothing the arm
+        accepts can reach that fallback, so it is not carried.
+        """
+        with pytest.raises(ValueError, match="ZZ"):
+            small_tree_crown_components(
+                np.array(["ZZ"]), np.array([0.5]), np.array([6.0])
+            )
 
     def test_a_tree_over_the_cutoff_takes_nothing_from_the_table(self):
         """The stage returns zeros there; the caller chooses which trees."""
@@ -564,7 +640,7 @@ class TestSmallTreeSpeciesCoverage:
         adjusted = available_canopy_fuel(
             trees,
             equations="brown_1978",
-            crown_class_adjustment="reinhardt_2006",
+            crown_class_adjustment="fuelcalc_table",
             crown_class_column="cc",
         )
         expected = plain * crown_class_factor(

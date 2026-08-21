@@ -35,6 +35,15 @@ class TestThresholdRule:
         np.testing.assert_allclose(cbh, [[2.0]])
         np.testing.assert_allclose(chm, [[5.0]])
 
+    def test_a_layer_exactly_at_threshold_qualifies(self):
+        """The guide's rule is "greater than or equal to"; pin the equality."""
+        profile = column_profile([0, 0.012, 0.05, 0.012, 0])
+        cbh, chm = profile_threshold_heights(
+            profile, layer_depth=1.0, threshold=0.012, relative_fraction=None
+        )
+        np.testing.assert_allclose(cbh, [[1.0]])
+        np.testing.assert_allclose(chm, [[4.0]])
+
     def test_the_relative_rule_lowers_the_threshold_in_a_sparse_cell(self):
         """max = 0.05 -> min(0.005, 0.012) = 0.005, so 0.006 now qualifies."""
         profile = column_profile([0, 0.006, 0.02, 0.05, 0.02, 0.006])

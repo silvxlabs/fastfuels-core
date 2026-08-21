@@ -13,8 +13,8 @@ import numpy as np
 import pytest
 
 from fastfuels_core.canopy_fuel.geometry import disk_rect_overlap_area
+from fastfuels_core.units import FT_TO_M
 from fastfuels_core.canopy_fuel.profile import (
-    FT_TO_M,
     cumulative_fuel_fraction,
     vertical_profile,
 )

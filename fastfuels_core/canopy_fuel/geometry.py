@@ -4,9 +4,13 @@ Both the vertical profile and canopy cover attribute a circular crown
 to the cells it covers, and both need the intersection area exactly
 rather than by sampling: a crown straddling a cell boundary must give
 each cell its true share, and the shares must sum to the crown area.
+:func:`disk_cell_overlaps` walks the cells each disk reaches and yields
+those areas per tree, so the two stages share one traversal.
 """
 
 from __future__ import annotations
+
+from collections.abc import Iterator
 
 import numpy as np
 
@@ -69,3 +73,39 @@ def disk_rect_overlap_area(
         + _unit_disk_corner_area(u0, v0)
     )
     return np.clip(area_unit, 0.0, np.pi) * r * r
+
+
+def disk_cell_overlaps(
+    x: np.ndarray,
+    y: np.ndarray,
+    radius: np.ndarray,
+    transform: tuple[float, float, float, float, float, float],
+    shape: tuple[int, int],
+) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+    """Yield ``(flat cell index, overlap area)`` per tree for every cell a disk reaches.
+
+    One pair per offset in the neighbourhood the largest disk spans;
+    each is aligned with the trees. Cells outside the lattice carry
+    area 0 and index 0, so a disk overhanging the boundary simply loses
+    the overhanging slice. Offsets that touch no in-bounds cell for any
+    tree are skipped.
+    """
+    a, _, c, _, e, f = transform
+    ny, nx = shape
+    col_lo = np.floor((x - radius - c) / a).astype(np.int64)
+    col_hi = np.floor((x + radius - c) / a).astype(np.int64)
+    row_lo = np.floor((y + radius - f) / e).astype(np.int64)  # e < 0
+    row_hi = np.floor((y - radius - f) / e).astype(np.int64)
+    for row_offset in range(int((row_hi - row_lo).max()) + 1):
+        rows = row_lo + row_offset
+        y_hi = f + rows * e  # north edge; e < 0 makes y_hi > y_lo
+        y_lo = y_hi + e
+        for col_offset in range(int((col_hi - col_lo).max()) + 1):
+            cols = col_lo + col_offset
+            x_lo = c + cols * a
+            area = disk_rect_overlap_area(x, y, radius, x_lo, x_lo + a, y_lo, y_hi)
+            in_bounds = (cols >= 0) & (cols < nx) & (rows >= 0) & (rows < ny)
+            area = np.where(in_bounds, area, 0.0)
+            if not area.any():
+                continue
+            yield np.where(in_bounds, rows * nx + cols, 0), area

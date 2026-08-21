@@ -86,6 +86,34 @@ class TestEmptyCellConventions:
         assert np.isnan(hand_metrics[band].values[0, 0])
 
 
+class TestPerBandThresholds:
+    """``cbh`` and ``chm`` each read their own scan when asked to."""
+
+    def run(self, hand_stand, **thresholds):
+        return compute_canopy_metrics(
+            hand_stand,
+            band_template(["cbh", "chm"]),
+            fuel_column="acf",
+            horizontal_distribution="stem",
+            vertical_distribution="uniform",
+            layer_depth=HAND_LAYER_DEPTH,
+            crown_class_adjustment="none",
+            cbh_relative_fraction=None,
+            chm_relative_fraction=None,
+            **thresholds,
+        )
+
+    def test_a_threshold_only_chm_fails_leaves_cbh_alone(self, hand_stand):
+        ds = self.run(hand_stand, cbh_threshold=0.0001, chm_threshold=1.0)
+        np.testing.assert_allclose(ds.cbh.values[2, 1], 6.0)
+        assert np.isnan(ds.chm.values[2, 1])
+
+    def test_a_threshold_only_cbh_fails_leaves_chm_alone(self, hand_stand):
+        ds = self.run(hand_stand, cbh_threshold=1.0, chm_threshold=0.0001)
+        assert np.isnan(ds.cbh.values[2, 1])
+        np.testing.assert_allclose(ds.chm.values[2, 1], 12.0)
+
+
 class TestBandSelection:
     def test_only_the_requested_bands_are_computed(self, hand_stand):
         """Cover alone must not enter the allometry path.
@@ -114,6 +142,22 @@ class TestStandFilters:
     def test_trees_below_min_tree_height_are_dropped(self, hand_stand):
         trees = pd.concat([hand_stand, hand_stand], ignore_index=True)
         trees.loc[1, "height"] = 1.0
+        ds = compute_canopy_metrics(
+            trees,
+            band_template(["cfl"]),
+            fuel_column="acf",
+            min_tree_height=2.0,
+            horizontal_distribution="stem",
+            vertical_distribution="uniform",
+            crown_class_adjustment="none",
+        )
+        np.testing.assert_allclose(
+            ds.cfl.values[2, 1], HAND_FUEL_KG / CELL_AREA, rtol=1e-6
+        )
+
+    def test_a_tree_exactly_at_min_tree_height_is_kept(self, hand_stand):
+        trees = hand_stand.copy()
+        trees["height"] = 2.0
         ds = compute_canopy_metrics(
             trees,
             band_template(["cfl"]),

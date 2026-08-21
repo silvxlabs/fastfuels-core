@@ -11,24 +11,30 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from fastfuels_core.allometry import brown, nsvb
+from fastfuels_core.allometry import brown, jenkins, nsvb
+from fastfuels_core.ref_data import REF_SPECIES
 from fastfuels_core.canopy_fuel.ref_data import (
     fuelcalc_crown_class_factors,
     fuelcalc_small_tree_biomass,
     fuelcalc_species,
 )
-from fastfuels_core.units import conversion_factor
+from fastfuels_core.units import CM_TO_IN, LB_TO_KG, M_TO_FT
 
-VALID_EQUATIONS = ("nsvb", "brown_1978")
+VALID_EQUATIONS = ("nsvb", "brown_1978", "jenkins")
+# Equation families that report only total branchwood, with no size class:
+# a branchwood size partition must be applied to reach the fine class.
+TOTAL_BRANCHWOOD_EQUATIONS = ("nsvb", "jenkins")
+BROWN_PROPORTIONS_PARTITION = "brown_proportions"
+NO_PARTITION = "none"
+VALID_BRANCHWOOD_SIZE_PARTITIONS = (BROWN_PROPORTIONS_PARTITION, NO_PARTITION)
 # Above this dbh the crown-weight equations apply; at or below it the
 # small-tree table does.
 SMALL_TREE_MAX_DIA_IN = 1.0
-SMALL_TREE_DEFAULT_CODE = "DF"
 NO_CROWN_CLASS_ADJUSTMENT = "none"
-REINHARDT_CROWN_CLASS_ADJUSTMENT = "reinhardt_2006"
+FUELCALC_CROWN_CLASS_ADJUSTMENT = "fuelcalc_table"
 VALID_CROWN_CLASS_ADJUSTMENTS = (
     NO_CROWN_CLASS_ADJUSTMENT,
-    REINHARDT_CROWN_CLASS_ADJUSTMENT,
+    FUELCALC_CROWN_CLASS_ADJUSTMENT,
 )
 
 
@@ -55,12 +61,16 @@ def crown_class_factor(
 ) -> np.ndarray:
     """FuelCalc's per-tree crown-class biomass multiplier.
 
-    Reinhardt, Scott, Gray & Keane (2006) fitted a multiplier per
-    species and crown class as the value minimising the average
-    difference between observed crown biomass and the biomass predicted
-    by Brown's equations. FuelCalc applies it to every crown component
-    (``PTL_SetBioMass``), so available fuel scales by the same factor.
-    Species resolve to a factor row through the species table's
+    The table (FuelCalc 1.7 User Guide, Appendix D) has two sources,
+    recorded in its ``SOURCE`` column. The six ``KG`` rows — WF, PP, PS,
+    IC, DF, LP — are Kathy Gray's fits for Reinhardt, Scott, Gray &
+    Keane (2006): per species and crown class, the multiplier that
+    minimises the average difference between observed crown biomass and
+    Brown's prediction. The ``BK`` rows — WL, WP, WC — are Keane's
+    FIRESUM / Fire-BGC factors (Keane, Arno & Brown 1989; Keane, Morgan
+    & Running 1996). FuelCalc applies the factor to every crown
+    component (``PTL_SetBioMass``), so available fuel scales by it.
+    Species resolve to a row through the species table's
     ``CROWN_REDUC_CODE``.
 
     Because the multipliers were fitted against *Brown's* predictions,
@@ -125,19 +135,13 @@ def crown_class_factor(
     return matrix[rows, columns]
 
 
-def _normalize_crown_class_adjustment(crown_class_adjustment: str | None) -> str:
-    if crown_class_adjustment is None:
-        return NO_CROWN_CLASS_ADJUSTMENT
-    return crown_class_adjustment
-
-
 def _validate_crown_class_options(
     crown_class_adjustment: str, crown_class_column: str | None
 ) -> None:
     if crown_class_adjustment not in VALID_CROWN_CLASS_ADJUSTMENTS:
         raise ValueError(
             f"Unknown crown_class_adjustment {crown_class_adjustment!r}; "
-            f"expected 'none', None, or 'reinhardt_2006'."
+            f"expected 'none' or 'fuelcalc_table'."
         )
     # The two arguments are one decision: an adjustment needs the data
     # it adjusts by, and the data is pointless without the adjustment.
@@ -149,18 +153,18 @@ def _validate_crown_class_options(
         raise ValueError(
             f"crown_class_column={crown_class_column!r} was given but "
             f"crown_class_adjustment is 'none', so the column would be "
-            f"ignored. Set crown_class_adjustment='reinhardt_2006' to "
+            f"ignored. Set crown_class_adjustment='fuelcalc_table' to "
             f"use it, or drop the column argument."
         )
     if (
-        crown_class_adjustment == REINHARDT_CROWN_CLASS_ADJUSTMENT
+        crown_class_adjustment == FUELCALC_CROWN_CLASS_ADJUSTMENT
         and crown_class_column is None
     ):
         raise ValueError(
-            "crown_class_adjustment='reinhardt_2006' needs "
+            "crown_class_adjustment='fuelcalc_table' needs "
             "crown_class_column to say where crown position comes from. "
             "Without it every tree would take the table's Other/none "
-            "column, which is 0.5 for 50 of the 54 species — a silent "
+            "column, which is 0.5 for 51 of the 55 species — a silent "
             "halving rather than an adjustment. If that is genuinely "
             "what you want, pass a column of 'N', which is what "
             "FuelCalc does with a blank crown class field."
@@ -170,7 +174,16 @@ def _validate_crown_class_options(
 def _validate_equations(equations: str) -> None:
     if equations not in VALID_EQUATIONS:
         raise ValueError(
-            f"Unknown equations {equations!r}; expected 'nsvb' or " f"'brown_1978'."
+            f"Unknown equations {equations!r}; expected one of "
+            f"{list(VALID_EQUATIONS)}."
+        )
+
+
+def _validate_branchwood_size_partition(branchwood_size_partition: str) -> None:
+    if branchwood_size_partition not in VALID_BRANCHWOOD_SIZE_PARTITIONS:
+        raise ValueError(
+            f"Unknown branchwood_size_partition {branchwood_size_partition!r}; "
+            f"expected 'brown_proportions' or 'none'."
         )
 
 
@@ -199,9 +212,10 @@ def _brown_1978_crown_components(
     crown, so branchwood is what P1 leaves behind and the fine share
     applies to it exactly as it does under NSVB.
     """
-    crown_kg = brown.crown_weight(
-        species["TOTAL"].loc[species_code].to_numpy(), dia_in
-    ) * conversion_factor("lb", "kg")
+    crown_kg = (
+        brown.crown_weight(species["TOTAL"].loc[species_code].to_numpy(), dia_in)
+        * LB_TO_KG
+    )
     p1 = brown.foliage_fraction(foliage_equation_id, dia_in)
     return crown_kg * p1, crown_kg * (1.0 - p1)
 
@@ -224,8 +238,7 @@ def small_tree_crown_components(
     instead, keyed by the species' crown-weight equation code and the
     tree's height. The table gives foliage and 1-hour weights directly,
     so the accumulative proportions that split a fitted crown weight do
-    not enter. Species the table does not cover take the Douglas-fir
-    row, which is the table's own default.
+    not enter.
 
     Returns
     -------
@@ -233,12 +246,23 @@ def small_tree_crown_components(
         Foliage and fine branchwood, kg per tree. Entries for trees
         over one inch are zero; callers select which trees to take
         from here.
+
+    Raises
+    ------
+    ValueError
+        For an equation code the table does not carry. Every Id
+        :func:`~fastfuels_core.allometry.brown.crown_weight` accepts is
+        in it, so this only fires for a code that has no crown-weight
+        equation either.
     """
     table = fuelcalc_small_tree_biomass()
     codes = np.asarray(total_equation_code, dtype=object)
-    # Codes the table does not carry take Douglas-fir, its default.
     covered = table.index.get_level_values("CODE").unique()
-    codes = np.where(np.isin(codes, covered), codes, SMALL_TREE_DEFAULT_CODE)
+    unknown = sorted(set(codes) - set(covered))
+    if unknown:
+        raise ValueError(
+            f"No small-tree biomass row for FuelCalc equation Id(s) {unknown}."
+        )
     # h <= 1 is class 1, h <= 2 class 2, ..., anything over 9 class 10.
     # Heights reach here through a metre-to-foot conversion, so a tree
     # measured at a whole number of feet lands a few ulp either side of
@@ -248,20 +272,77 @@ def small_tree_crown_components(
     keys = pd.MultiIndex.from_arrays([codes, ht_class])
     rows = table.reindex(keys)
     in_range = np.asarray(dia_in, dtype=np.float64) <= SMALL_TREE_MAX_DIA_IN
-    lb_to_kg = conversion_factor("lb", "kg")
-    foliage = np.where(in_range, rows["FOL_LB"].to_numpy(), 0.0) * lb_to_kg
-    twig = np.where(in_range, rows["ONE_HR_LB"].to_numpy(), 0.0) * lb_to_kg
+    foliage = np.where(in_range, rows["FOL_LB"].to_numpy(), 0.0) * LB_TO_KG
+    twig = np.where(in_range, rows["ONE_HR_LB"].to_numpy(), 0.0) * LB_TO_KG
     return foliage, twig
+
+
+# NSVB has no crown model for the woodland species group (Jenkins group
+# 10: junipers, pinyon, oak, mesquite) and would raise for it. Those trees
+# are priced by Jenkins instead, completing the Jenkins-group fallback NSVB
+# is built on -- the same substitution the Tree biomass model makes.
+WOODLAND_JENKINS_GROUP = 10
 
 
 def _nsvb_crown_components(
     trees: pd.DataFrame, species_code: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Foliage and branch dry weight from NSVB (Westfall et al. 2024)."""
+    """Foliage and branch dry weight from NSVB, Jenkins for the woodland group.
+
+    NSVB prices most species directly and falls back to the Jenkins
+    species-group equations for the rest, but carries no fallback row for
+    the woodland group (Jenkins group 10), so it cannot price those. Those
+    trees are priced by Jenkins here (see
+    :mod:`fastfuels_core.allometry.jenkins`); every other tree by NSVB.
+    """
+    groups = REF_SPECIES["JENKINS_SPGRPCD"].reindex(species_code).to_numpy()
+    use_jenkins = groups == WOODLAND_JENKINS_GROUP
+    foliage = np.empty(len(trees), dtype=np.float64)
+    branch = np.empty(len(trees), dtype=np.float64)
+    if use_jenkins.any():
+        dbh_cm = trees["dbh"].to_numpy(dtype=np.float64)[use_jenkins]
+        foliage[use_jenkins] = jenkins.foliage_biomass(
+            species_code[use_jenkins], dbh_cm
+        )
+        branch[use_jenkins] = jenkins.branch_biomass(species_code[use_jenkins], dbh_cm)
+    if (~use_jenkins).any():
+        other = trees[~use_jenkins]
+        foliage[~use_jenkins] = nsvb.foliage_biomass(
+            species_code[~use_jenkins], other["dbh"], other["height"]
+        )
+        branch[~use_jenkins] = nsvb.branch_biomass(
+            species_code[~use_jenkins], other["dbh"], other["height"]
+        )
+    return foliage, branch
+
+
+def _jenkins_crown_components(
+    trees: pd.DataFrame, species_code: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Foliage and branch dry weight from Jenkins et al. (2003).
+
+    Branch is the aboveground residual; see
+    :mod:`fastfuels_core.allometry.jenkins`. Diameter is in centimeters,
+    the units the Jenkins equations use.
+    """
+    dbh_cm = trees["dbh"].to_numpy(dtype=np.float64)
     return (
-        nsvb.foliage_biomass(species_code, trees["dbh"], trees["height"]),
-        nsvb.branch_biomass(species_code, trees["dbh"], trees["height"]),
+        jenkins.foliage_biomass(species_code, dbh_cm),
+        jenkins.branch_biomass(species_code, dbh_cm),
     )
+
+
+def _national_crown_components(
+    equations: str, trees: pd.DataFrame, species_code: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Foliage and total branch weight from a national estimator (NSVB/Jenkins).
+
+    Both report total branchwood only; the size partition reduces it to the
+    fine class separately.
+    """
+    if equations == "jenkins":
+        return _jenkins_crown_components(trees, species_code)
+    return _nsvb_crown_components(trees, species_code)
 
 
 def _apply_crown_class_adjustment(
@@ -271,7 +352,7 @@ def _apply_crown_class_adjustment(
     crown_class_adjustment: str,
     crown_class_column: str | None,
 ) -> np.ndarray:
-    if crown_class_adjustment != REINHARDT_CROWN_CLASS_ADJUSTMENT:
+    if crown_class_adjustment != FUELCALC_CROWN_CLASS_ADJUSTMENT:
         return fuel
     if crown_class_column not in trees.columns:
         raise ValueError(
@@ -288,51 +369,75 @@ def available_canopy_fuel(
     *,
     fuel_column: str | None = None,
     equations: str = "brown_1978",
-    crown_class_adjustment: str = REINHARDT_CROWN_CLASS_ADJUSTMENT,
+    crown_class_adjustment: str = FUELCALC_CROWN_CLASS_ADJUSTMENT,
     crown_class_column: str | None = None,
     foliage_fraction: float = 1.0,
     branchwood_fraction: float = 0.5,
+    branchwood_size_partition: str = BROWN_PROPORTIONS_PARTITION,
 ) -> np.ndarray:
     """Per-tree available canopy fuel (kg).
 
     With ``fuel_column`` set, that column is returned as-is (precomputed
     fuel, e.g. from LiDAR regression); everything else is ignored.
     Otherwise fuel is ``foliage_fraction * foliage + branchwood_fraction
-    * fine branchwood``, where fine branchwood is the total branch
-    weight times the Brown (1978) / Snell & Little (1983) fine share
-    ``(P2 - P1) / (1 - P1)`` (see
-    :mod:`fastfuels_core.allometry.brown`).
+    * branchwood``, with ``branchwood_size_partition`` saying which
+    branchwood the fraction applies to:
 
-    ``equations`` selects where the two weights come from:
+    ``"brown_proportions"`` (default)
+        The fine (0-1/4 in) class: total branch weight times the Brown
+        (1978) / Snell & Little (1983) fine share ``(P2 - P1) / (1 -
+        P1)`` (see :mod:`fastfuels_core.allometry.brown`). This is
+        FuelCalc's size line. The proportions are keyed by FuelCalc
+        equation Id, so it resolves every species through the FuelCalc
+        species table and raises for species outside it or without
+        proportion equations — under either ``equations`` arm.
+    ``"none"``
+        Total branchwood, unpartitioned, so ``branchwood_fraction``
+        expresses the fine share and the consumed share as one number.
+        Needs no crosswalk, which under ``"nsvb"`` makes every species
+        NSVB prices usable.
 
-    ``"nsvb"`` (default)
-        Foliage and branch dry weight from NSVB (Westfall et al. 2024),
-        the national estimator FastFuels uses elsewhere. Needs ``dbh``,
-        ``height`` and ``fia_species_code``.
-    ``"brown_1978"``
+    Both arms need ``dbh``, ``height`` and ``fia_species_code``.
+    ``equations`` selects where the foliage and branch weights come
+    from:
+
+    ``"brown_1978"`` (default)
         Total live crown weight from Brown 1978 Table 1, split into
-        foliage and branchwood by ``P1``. This is the crown weight model
-        FuelCalc uses, so it is the arm to select when reproducing
-        FuelCalc. Diameter-only, so ``height`` is not read, and it is
-        scoped to Brown's eleven Rocky Mountain conifers -- hardwoods
-        and everything else raise.
+        foliage and branchwood by ``P1``; trees of one inch dbh and
+        under take the tabulated small-tree weights instead (see
+        :func:`small_tree_crown_components`). This is FuelCalc's crown
+        weight model. It is scoped to Brown's eleven Rocky Mountain
+        conifers -- hardwoods and everything else raise.
+    ``"nsvb"``
+        Foliage and branch dry weight from NSVB (Westfall et al. 2024),
+        the national estimator FastFuels uses elsewhere. Woodland species
+        (Jenkins group 10), which NSVB has no crown model for, fall back to
+        Jenkins. Its species reach is the partition's: national under
+        ``"none"``, FuelCalc's table under ``"brown_proportions"``.
+    ``"jenkins"``
+        Foliage and branch dry weight from Jenkins et al. (2003), by
+        species group; branch is the aboveground residual (see
+        :mod:`fastfuels_core.allometry.jenkins`). Like ``"nsvb"`` it
+        reports only total branchwood, so its species reach is the
+        partition's — national under ``"none"``, FuelCalc's table under
+        ``"brown_proportions"``.
 
     ``crown_class_adjustment`` scales the result per tree:
 
-    ``"none"`` (default; ``None`` is accepted for it)
-        No adjustment.
-    ``"reinhardt_2006"``
+    ``"fuelcalc_table"`` (default)
         FuelCalc's crown-class multipliers, via
         :func:`crown_class_factor`. Requires ``crown_class_column``,
         naming the per-tree column that holds crown position —
         measured, imputed, or modelled.
+    ``"none"`` (``None`` is accepted for it)
+        No adjustment.
 
     The two arguments are one decision and are validated together:
     asking for the adjustment without the column raises, and so does
     naming the column without the adjustment. Neither half is useful
     alone, and both failures are silent if allowed through — the
     column would be discarded, or every tree would take the table's
-    Other/none factor, which is 0.5 for 50 of the 54 species and so
+    Other/none factor, which is 0.5 for 51 of the 55 species and so
     halves nearly every tree instead of varying it by species and
     canopy position. To get that uniform behaviour deliberately, pass
     a column of ``"N"``; that is what FuelCalc does with a blank crown
@@ -346,46 +451,62 @@ def available_canopy_fuel(
     Raises
     ------
     ValueError
-        For an unknown ``equations`` choice, or for species the chosen
-        equations do not cover — codes outside the FuelCalc species
-        table, or whose equations are not implemented (pinyon/juniper,
-        the eastern newer species, and under ``"brown_1978"`` the
-        hardwoods too). Mirrors FuelCalc's treelist error;
-        ``fuel_column`` bypasses allometry entirely.
+        For an unknown ``equations`` or ``branchwood_size_partition``
+        choice, or for species the chosen combination does not cover —
+        codes outside the FuelCalc species table or without proportion
+        equations (pinyon/juniper, the eastern newer species) wherever
+        the table is consulted, and under ``"brown_1978"`` the hardwoods
+        too. Mirrors FuelCalc's treelist error; ``fuel_column`` bypasses
+        allometry entirely.
     """
     if fuel_column is not None:
         return trees[fuel_column].to_numpy(dtype=np.float64)
 
-    crown_class_adjustment = _normalize_crown_class_adjustment(crown_class_adjustment)
+    if crown_class_adjustment is None:
+        crown_class_adjustment = NO_CROWN_CLASS_ADJUSTMENT
     _validate_crown_class_options(crown_class_adjustment, crown_class_column)
     _validate_equations(equations)
+    _validate_branchwood_size_partition(branchwood_size_partition)
 
     if len(trees) == 0:
         return np.zeros(0, dtype=np.float64)
 
     spcd = trees["fia_species_code"].to_numpy()
+    # Brown/SL-83 work in inches; the nsvb wrapper is metric.
+    dia_in = trees["dbh"].to_numpy() * CM_TO_IN
+
+    if (
+        equations in TOTAL_BRANCHWOOD_EQUATIONS
+        and branchwood_size_partition == NO_PARTITION
+    ):
+        # The combinations that need no FuelCalc crosswalk: a national
+        # estimator's total branchwood, taken whole.
+        foliage_kg, branch_kg = _national_crown_components(equations, trees, spcd)
+        fuel = foliage_fraction * foliage_kg + branchwood_fraction * branch_kg
+        return _apply_crown_class_adjustment(
+            fuel, trees, spcd, crown_class_adjustment, crown_class_column
+        )
+
     species = _fuelcalc_species_for_trees(spcd)
-
-    # Brown/SL-83 proportions work in inches; the nsvb wrapper is metric.
-    dia_in = trees["dbh"].to_numpy() * conversion_factor("cm", "inch")
-    fol_id = species["FOL"].loc[spcd].to_numpy()
-    twig_id = species["TWIG"].loc[spcd].to_numpy()
-    fine_share = brown.fine_branchwood_share(fol_id, twig_id, dia_in)
-
+    proportion_id = species["FOL"].loc[spcd].to_numpy()
     if equations == "brown_1978":
         foliage_kg, branch_kg = _brown_1978_crown_components(
-            species, spcd, fol_id, dia_in
+            species, spcd, proportion_id, dia_in
         )
     else:
-        foliage_kg, branch_kg = _nsvb_crown_components(trees, spcd)
-    fine_branch_kg = fine_share * branch_kg
+        foliage_kg, branch_kg = _national_crown_components(equations, trees, spcd)
+    if branchwood_size_partition == BROWN_PROPORTIONS_PARTITION:
+        fine_branch_kg = brown.fine_branchwood_share(proportion_id, dia_in) * branch_kg
+    else:
+        fine_branch_kg = branch_kg
 
     # Brown's crown weights are out of range below an inch; take the
-    # tabulated small-tree weights there instead.
+    # tabulated small-tree weights there instead. The table reports the
+    # fine class directly, so the partition does not enter for saplings.
     if equations == "brown_1978":
         sapling = dia_in <= SMALL_TREE_MAX_DIA_IN
         if sapling.any():
-            height_ft = trees["height"].to_numpy() * conversion_factor("m", "ft")
+            height_ft = trees["height"].to_numpy() * M_TO_FT
             small_fol, small_twig = small_tree_crown_components(
                 species["TOTAL"].loc[spcd].to_numpy(), dia_in, height_ft
             )

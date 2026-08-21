@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from fastfuels_core.canopy_fuel.profile import FT_TO_M
+from fastfuels_core.canopy_fuel.profile import FUELCALC_LAYER_DEPTH
 
 
 def canopy_fuel_load(
-    profile: np.ndarray, *, layer_depth: float = FT_TO_M
+    profile: np.ndarray, *, layer_depth: float = FUELCALC_LAYER_DEPTH
 ) -> np.ndarray:
     """Canopy fuel load: vertical integral of the bulk-density profile.
 

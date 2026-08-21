@@ -137,7 +137,7 @@ class TestPrintedCurves:
         ids = np.full(dia.shape, spec["id"], dtype=object)
         np.testing.assert_allclose(
             brown.foliage_fraction(ids, dia),
-            np.clip(evaluate(spec["P1"], dia), 0.0, brown.PROPORTION_MAX),
+            np.maximum(evaluate(spec["P1"], dia), 0.0),
             atol=1e-12,
             err_msg=f"Brown species {letter} -> Id {spec['id']} P1",
         )
@@ -148,7 +148,7 @@ class TestPrintedCurves:
         ids = np.full(dia.shape, spec["id"], dtype=object)
         np.testing.assert_allclose(
             brown.foliage_plus_fine_fraction(ids, dia),
-            np.clip(evaluate(spec["P2"], dia), 0.0, brown.PROPORTION_MAX),
+            np.maximum(evaluate(spec["P2"], dia), 0.0),
             atol=1e-12,
             err_msg=f"Brown species {letter} -> Id {spec['id']} P2",
         )

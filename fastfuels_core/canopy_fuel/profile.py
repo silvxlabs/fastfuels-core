@@ -13,11 +13,12 @@ import numpy as np
 import pandas as pd
 
 from fastfuels_core.canopy_fuel.crown_radius import max_crown_radius
-from fastfuels_core.canopy_fuel.geometry import disk_rect_overlap_area
+from fastfuels_core.canopy_fuel.geometry import disk_cell_overlaps
 from fastfuels_core.canopy_fuel.ref_data import fuelcalc_species, fuelcalc_vdist
+from fastfuels_core.units import FT_TO_M
 
 # Default profile layer depth: FuelCalc's 1-ft layers, in meters.
-FT_TO_M = 0.3048
+FUELCALC_LAYER_DEPTH = FT_TO_M
 
 VALID_VERTICAL_DISTRIBUTIONS = ("reinhardt_2006", "uniform")
 VALID_HORIZONTAL_DISTRIBUTIONS = ("crown_projected", "stem")
@@ -77,12 +78,17 @@ def _validate_distributions(
         )
 
 
-def _stem_cells(
+def stem_cells(
     trees: pd.DataFrame,
     transform: tuple[float, float, float, float, float, float],
     shape: tuple[int, int],
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Row and column of each tree's stem, checked against the lattice."""
+    """Row and column of each tree's stem, checked against the lattice.
+
+    Shared by the profile accumulation and the per-cell tree statistics
+    (mean crown base, height percentiles) so every stage bins a tree into
+    the same cell and applies the same out-of-bounds check.
+    """
     a, _, c, _, e, f = transform
     ny, nx = shape
     col = np.floor((trees["x"].to_numpy(dtype=np.float64) - c) / a).astype(np.int64)
@@ -111,8 +117,6 @@ def _crown_projected_contributions(
     fraction of crown area, so a crown fully inside the lattice has
     weights summing to 1.
     """
-    a, _, c, _, e, f = transform
-    ny, nx = shape
     x = trees["x"].to_numpy(dtype=np.float64)
     y = trees["y"].to_numpy(dtype=np.float64)
     radius = np.maximum(
@@ -123,29 +127,11 @@ def _crown_projected_contributions(
         ),
         1e-6,
     )
-    col_lo = np.floor((x - radius - c) / a).astype(np.int64)
-    col_hi = np.floor((x + radius - c) / a).astype(np.int64)
-    row_lo = np.floor((y + radius - f) / e).astype(np.int64)  # e < 0
-    row_hi = np.floor((y - radius - f) / e).astype(np.int64)
     inv_crown_area = 1.0 / (np.pi * radius * radius)
-
-    contributions = []
-    for row_offset in range(int((row_hi - row_lo).max()) + 1):
-        rows = row_lo + row_offset
-        y_hi = f + rows * e  # north edge; e < 0 makes y_hi > y_lo
-        y_lo = y_hi + e
-        for col_offset in range(int((col_hi - col_lo).max()) + 1):
-            cols = col_lo + col_offset
-            x_lo = c + cols * a
-            area = disk_rect_overlap_area(x, y, radius, x_lo, x_lo + a, y_lo, y_hi)
-            weight = area * inv_crown_area
-            in_bounds = (cols >= 0) & (cols < nx) & (rows >= 0) & (rows < ny)
-            weight = np.where(in_bounds, weight, 0.0)
-            if not weight.any():
-                continue
-            cell = np.where(in_bounds, rows * nx + cols, 0)
-            contributions.append((cell, weight))
-    return contributions
+    return [
+        (cell, area * inv_crown_area)
+        for cell, area in disk_cell_overlaps(x, y, radius, transform, shape)
+    ]
 
 
 def _layer_weights(
@@ -186,7 +172,7 @@ def vertical_profile(
     shape: tuple[int, int],
     *,
     n_layers: int | None = None,
-    layer_depth: float = FT_TO_M,
+    layer_depth: float = FUELCALC_LAYER_DEPTH,
     vertical_distribution: str = "reinhardt_2006",
     horizontal_distribution: str = "stem",
     crown_radius_column: str | None = None,
@@ -263,7 +249,7 @@ def vertical_profile(
     if len(trees) == 0:
         return profile_flat.reshape(n_layers, ny, nx)
 
-    row, col = _stem_cells(trees, transform, shape)
+    row, col = stem_cells(trees, transform, shape)
     crown_length = height * trees["crown_ratio"].to_numpy(dtype=np.float64)
     crown_base = height - crown_length
     # Zero-length crowns become a point mass at the crown base: a tiny
