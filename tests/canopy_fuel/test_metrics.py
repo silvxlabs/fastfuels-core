@@ -154,6 +154,54 @@ class TestMeanCrownBaseCbh:
             self.cbh(cbh_method="bogus")
 
 
+class TestHeightPercentileChm:
+    """``chm_method="height_percentile"`` swaps the threshold scan for a
+    per-cell percentile of tree heights, reading none of the ``chm_``
+    scan settings.
+    """
+
+    @staticmethod
+    def two_heights():
+        # 10 m and 30 m trees in cell (2, 1).
+        return pd.concat(
+            [
+                single_tree(x=1045.0, y=4915.0, height=10.0, acf=1.0),
+                single_tree(x=1045.0, y=4915.0, height=30.0, acf=1.0),
+            ],
+            ignore_index=True,
+        )
+
+    def chm(self, **kwargs):
+        ds = compute_canopy_metrics(
+            self.two_heights(),
+            band_template(["chm"]),
+            fuel_column="acf",
+            horizontal_distribution="stem",
+            vertical_distribution="uniform",
+            crown_class_adjustment="none",
+            chm_method="height_percentile",
+            **kwargs,
+        )
+        return ds.chm.values[2, 1]
+
+    def test_the_hundredth_percentile_is_the_tallest_tree(self):
+        assert self.chm(chm_percentile=100.0) == pytest.approx(30.0)
+
+    def test_the_default_percentile_is_the_ninety_ninth(self):
+        # 99th of [10, 30] linearly interpolates to 29.8 m.
+        assert self.chm() == pytest.approx(29.8)
+
+    def test_an_unknown_chm_method_raises(self):
+        with pytest.raises(ValueError, match="bogus"):
+            compute_canopy_metrics(
+                self.two_heights(),
+                band_template(["chm"]),
+                fuel_column="acf",
+                crown_class_adjustment="none",
+                chm_method="bogus",
+            )
+
+
 class TestBandSelection:
     def test_only_the_requested_bands_are_computed(self, hand_stand):
         """Cover alone must not enter the allometry path.

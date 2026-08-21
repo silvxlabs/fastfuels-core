@@ -31,10 +31,13 @@ from fastfuels_core.canopy_fuel.available_fuel import (
 from fastfuels_core.canopy_fuel.bulk_density import FUELCALC_EDGE, cbd_running_mean
 from fastfuels_core.canopy_fuel.cover import canopy_cover
 from fastfuels_core.canopy_fuel.canopy_height import (
+    HEIGHT_PERCENTILE_METHOD,
     MEAN_CROWN_BASE_METHOD,
+    height_percentile,
     mean_crown_base_height,
     profile_threshold_heights,
     validate_cbh_method,
+    validate_chm_method,
 )
 from fastfuels_core.canopy_fuel.fuel_load import canopy_fuel_load
 from fastfuels_core.canopy_fuel.profile import FUELCALC_LAYER_DEPTH, vertical_profile
@@ -103,6 +106,7 @@ def compute_canopy_metrics(
     chm_relative_fraction: float | None = 0.1,
     chm_smoothing_window: float | None = FUELCALC_WINDOW,
     chm_smoothing_edge: str = FUELCALC_EDGE,
+    chm_percentile: float = 99.0,
 ) -> xr.Dataset:
     """Fill a georeferenced Dataset with canopy fuel metrics.
 
@@ -143,7 +147,13 @@ def compute_canopy_metrics(
         (the default, the scan above) or ``"mean_crown_base"``, the
         fuel-weighted mean per-tree crown base
         (:func:`~fastfuels_core.canopy_fuel.canopy_height.mean_crown_base_height`),
-        which ignores the ``cbh_`` scan settings.
+        which ignores the ``cbh_`` scan settings. ``chm_method``
+        selects the canopy-height stage the same way:
+        ``"bulk_density_threshold"`` or ``"height_percentile"``, the
+        per-cell ``chm_percentile`` of tree heights
+        (:func:`~fastfuels_core.canopy_fuel.canopy_height.height_percentile`),
+        a canopy-surface height to compare against a lidar CHM, which
+        ignores the ``chm_`` scan settings.
     :func:`~fastfuels_core.canopy_fuel.cover.canopy_cover`
         ``cover_method``, ``cover_height_threshold``, and the crown
         radius pair.
@@ -184,6 +194,7 @@ def compute_canopy_metrics(
             f"subset of {sorted(KNOWN_BANDS)}."
         )
     validate_cbh_method(cbh_method)
+    validate_chm_method(chm_method)
 
     t = dataset.rio.transform()
     transform = (t.a, t.b, t.c, t.d, t.e, t.f)
@@ -252,12 +263,17 @@ def compute_canopy_metrics(
                     cbh_smoothing_edge,
                 )[0]
         if "chm" in bands:
-            dataset["chm"].data[...] = threshold_heights(
-                chm_threshold,
-                chm_relative_fraction,
-                chm_smoothing_window,
-                chm_smoothing_edge,
-            )[1]
+            if chm_method == HEIGHT_PERCENTILE_METHOD:
+                dataset["chm"].data[...] = height_percentile(
+                    fuel_trees, transform, shape, percentile=chm_percentile
+                )
+            else:
+                dataset["chm"].data[...] = threshold_heights(
+                    chm_threshold,
+                    chm_relative_fraction,
+                    chm_smoothing_window,
+                    chm_smoothing_edge,
+                )[1]
         if "cfl" in bands:
             dataset["cfl"].data[...] = canopy_fuel_load(
                 profile, layer_depth=layer_depth

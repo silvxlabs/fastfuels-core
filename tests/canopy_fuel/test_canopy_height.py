@@ -15,9 +15,11 @@ import pytest
 
 from fastfuels_core.canopy_fuel.bulk_density import VALID_EDGES
 from fastfuels_core.canopy_fuel.canopy_height import (
+    height_percentile,
     mean_crown_base_height,
     profile_threshold_heights,
     validate_cbh_method,
+    validate_chm_method,
 )
 from tests.canopy_fuel.builders import (
     ONE_CELL_SHAPE,
@@ -276,3 +278,61 @@ class TestValidateCbhMethod:
     def test_an_unknown_method_raises(self):
         with pytest.raises(ValueError, match="bogus"):
             validate_cbh_method("bogus")
+
+
+class TestHeightPercentile:
+    """A per-cell percentile of tree heights, an alternative canopy height.
+
+    Unlike the threshold canopy height, this reads the tree heights
+    directly, so it is the measure to compare against a lidar canopy
+    height model.
+    """
+
+    @staticmethod
+    def three_trees(percentile):
+        # Heights 10, 20, 30 m, all in the single cell.
+        trees = pd.DataFrame(
+            {
+                "x": [15.0, 15.0, 15.0],
+                "y": [-15.0, -15.0, -15.0],
+                "height": [10.0, 20.0, 30.0],
+            }
+        )
+        return height_percentile(
+            trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE, percentile=percentile
+        )
+
+    def test_the_hundredth_percentile_is_the_tallest(self):
+        np.testing.assert_allclose(self.three_trees(100.0), [[30.0]])
+
+    def test_the_zeroth_percentile_is_the_shortest(self):
+        np.testing.assert_allclose(self.three_trees(0.0), [[10.0]])
+
+    def test_the_fiftieth_percentile_is_the_median(self):
+        np.testing.assert_allclose(self.three_trees(50.0), [[20.0]])
+
+    def test_it_interpolates_between_heights(self):
+        # 99th of [10, 20, 30] linearly interpolates to 29.8 m.
+        np.testing.assert_allclose(self.three_trees(99.0), [[29.8]])
+
+    def test_the_default_percentile_is_the_ninety_ninth(self):
+        trees = pd.DataFrame(
+            {"x": [15.0, 15.0], "y": [-15.0, -15.0], "height": [10.0, 30.0]}
+        )
+        out = height_percentile(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        np.testing.assert_allclose(out, [[29.8]])
+
+    def test_an_empty_stand_is_all_nan(self):
+        trees = pd.DataFrame({"x": [], "y": [], "height": []})
+        out = height_percentile(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        assert np.isnan(out).all()
+
+
+class TestValidateChmMethod:
+    def test_the_two_methods_pass(self):
+        validate_chm_method("bulk_density_threshold")
+        validate_chm_method("height_percentile")
+
+    def test_an_unknown_method_raises(self):
+        with pytest.raises(ValueError, match="bogus"):
+            validate_chm_method("bogus")
