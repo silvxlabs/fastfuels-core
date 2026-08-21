@@ -114,6 +114,46 @@ class TestPerBandThresholds:
         np.testing.assert_allclose(ds.chm.values[2, 1], 12.0)
 
 
+class TestMeanCrownBaseCbh:
+    """``cbh_method="mean_crown_base"`` swaps the threshold scan for the
+    fuel-weighted per-tree crown base, reading none of the ``cbh_`` scan
+    settings.
+    """
+
+    @staticmethod
+    def two_crowns():
+        # Both stems in cell (2, 1): crown bases 4 m (8 m tree) and 10 m
+        # (20 m tree), with 1 and 3 kg of fuel supplied directly.
+        return pd.concat(
+            [
+                single_tree(x=1045.0, y=4915.0, height=8.0, crown_ratio=0.5, acf=1.0),
+                single_tree(x=1045.0, y=4915.0, height=20.0, crown_ratio=0.5, acf=3.0),
+            ],
+            ignore_index=True,
+        )
+
+    def cbh(self, **kwargs):
+        ds = compute_canopy_metrics(
+            self.two_crowns(),
+            band_template(["cbh"]),
+            fuel_column="acf",
+            horizontal_distribution="stem",
+            vertical_distribution="uniform",
+            crown_class_adjustment="none",
+            **kwargs,
+        )
+        return ds.cbh.values[2, 1]
+
+    def test_it_is_the_fuel_weighted_mean_crown_base(self):
+        # (1*4 + 3*10) / (1 + 3) = 8.5 m, a value no threshold scan of
+        # this profile can produce, so it also proves the dispatch switched.
+        assert self.cbh(cbh_method="mean_crown_base") == pytest.approx(8.5)
+
+    def test_an_unknown_cbh_method_raises(self):
+        with pytest.raises(ValueError, match="bogus"):
+            self.cbh(cbh_method="bogus")
+
+
 class TestBandSelection:
     def test_only_the_requested_bands_are_computed(self, hand_stand):
         """Cover alone must not enter the allometry path.

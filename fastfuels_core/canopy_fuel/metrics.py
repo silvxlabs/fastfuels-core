@@ -30,7 +30,12 @@ from fastfuels_core.canopy_fuel.available_fuel import (
 )
 from fastfuels_core.canopy_fuel.bulk_density import FUELCALC_EDGE, cbd_running_mean
 from fastfuels_core.canopy_fuel.cover import canopy_cover
-from fastfuels_core.canopy_fuel.canopy_height import profile_threshold_heights
+from fastfuels_core.canopy_fuel.canopy_height import (
+    MEAN_CROWN_BASE_METHOD,
+    mean_crown_base_height,
+    profile_threshold_heights,
+    validate_cbh_method,
+)
 from fastfuels_core.canopy_fuel.fuel_load import canopy_fuel_load
 from fastfuels_core.canopy_fuel.profile import FUELCALC_LAYER_DEPTH, vertical_profile
 from fastfuels_core.canopy_fuel.ref_data import fuelcalc_species
@@ -133,7 +138,12 @@ def compute_canopy_metrics(
         ``cbh_smoothing_window``, ``cbh_smoothing_edge``, and the same
         four under ``chm_``. One scan produces both heights when the
         two sets agree, which they do by default; give ``chm`` its own
-        settings and it is read off a second scan.
+        settings and it is read off a second scan. ``cbh_method``
+        selects the base-height stage: ``"bulk_density_threshold"``
+        (the default, the scan above) or ``"mean_crown_base"``, the
+        fuel-weighted mean per-tree crown base
+        (:func:`~fastfuels_core.canopy_fuel.canopy_height.mean_crown_base_height`),
+        which ignores the ``cbh_`` scan settings.
     :func:`~fastfuels_core.canopy_fuel.cover.canopy_cover`
         ``cover_method``, ``cover_height_threshold``, and the crown
         radius pair.
@@ -173,6 +183,7 @@ def compute_canopy_metrics(
             f"Unknown dataset variable(s) {sorted(unknown)}; expected a "
             f"subset of {sorted(KNOWN_BANDS)}."
         )
+    validate_cbh_method(cbh_method)
 
     t = dataset.rio.transform()
     transform = (t.a, t.b, t.c, t.d, t.e, t.f)
@@ -213,25 +224,12 @@ def compute_canopy_metrics(
                 window=cbd_window,
                 edge=cbd_window_edge,
             )
-        cbh_scan = (
-            cbh_threshold,
-            cbh_relative_fraction,
-            cbh_smoothing_window,
-            cbh_smoothing_edge,
-        )
-        chm_scan = (
-            chm_threshold,
-            chm_relative_fraction,
-            chm_smoothing_window,
-            chm_smoothing_edge,
-        )
         scans = {}
-        for band, scan in (("cbh", cbh_scan), ("chm", chm_scan)):
-            if band not in bands:
-                continue
-            if scan not in scans:
-                threshold, relative_fraction, window, edge = scan
-                scans[scan] = profile_threshold_heights(
+
+        def threshold_heights(threshold, relative_fraction, window, edge):
+            key = (threshold, relative_fraction, window, edge)
+            if key not in scans:
+                scans[key] = profile_threshold_heights(
                     profile,
                     layer_depth=layer_depth,
                     threshold=threshold,
@@ -239,7 +237,27 @@ def compute_canopy_metrics(
                     smoothing_window=window,
                     smoothing_edge=edge,
                 )
-            dataset[band].data[...] = scans[scan][band == "chm"]
+            return scans[key]
+
+        if "cbh" in bands:
+            if cbh_method == MEAN_CROWN_BASE_METHOD:
+                dataset["cbh"].data[...] = mean_crown_base_height(
+                    fuel_trees, fuel, transform, shape
+                )
+            else:
+                dataset["cbh"].data[...] = threshold_heights(
+                    cbh_threshold,
+                    cbh_relative_fraction,
+                    cbh_smoothing_window,
+                    cbh_smoothing_edge,
+                )[0]
+        if "chm" in bands:
+            dataset["chm"].data[...] = threshold_heights(
+                chm_threshold,
+                chm_relative_fraction,
+                chm_smoothing_window,
+                chm_smoothing_edge,
+            )[1]
         if "cfl" in bands:
             dataset["cfl"].data[...] = canopy_fuel_load(
                 profile, layer_depth=layer_depth

@@ -10,11 +10,20 @@ keeps ``chm - cbh`` the true depth of qualifying canopy.
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from fastfuels_core.canopy_fuel.bulk_density import VALID_EDGES
-from fastfuels_core.canopy_fuel.canopy_height import profile_threshold_heights
-from tests.canopy_fuel.builders import column_profile
+from fastfuels_core.canopy_fuel.canopy_height import (
+    mean_crown_base_height,
+    profile_threshold_heights,
+    validate_cbh_method,
+)
+from tests.canopy_fuel.builders import (
+    ONE_CELL_SHAPE,
+    ONE_CELL_TRANSFORM,
+    column_profile,
+)
 
 
 def sparse_profile(seed, occupancy):
@@ -203,3 +212,67 @@ class TestSmoothingEdge:
     def test_an_unknown_convention_raises(self):
         with pytest.raises(ValueError, match="bogus"):
             self.heights(self.CANOPY, smoothing_window=5.0, smoothing_edge="bogus")
+
+
+class TestMeanCrownBaseHeight:
+    """The fuel-weighted mean per-tree crown base, an alternative to CBH.
+
+    The crown base of a tree is ``height * (1 - crown_ratio)``; a cell's
+    value is the mean of its trees' crown bases weighted by available
+    canopy fuel, so the heavier crown pulls the mean toward its base.
+    """
+
+    @staticmethod
+    def two_trees_in_one_cell(fuel):
+        # Crown bases 4 m (8 m tree) and 10 m (20 m tree), both at the
+        # centre of the single cell so they share one denominator.
+        trees = pd.DataFrame(
+            {
+                "x": [15.0, 15.0],
+                "y": [-15.0, -15.0],
+                "height": [8.0, 20.0],
+                "crown_ratio": [0.5, 0.5],
+            }
+        )
+        return mean_crown_base_height(
+            trees, np.asarray(fuel), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+        )
+
+    def test_it_weights_the_crown_bases_by_fuel(self):
+        # (1*4 + 3*10) / (1 + 3) = 8.5 m.
+        out = self.two_trees_in_one_cell([1.0, 3.0])
+        np.testing.assert_allclose(out, [[8.5]])
+
+    def test_equal_fuel_is_the_plain_mean(self):
+        out = self.two_trees_in_one_cell([2.0, 2.0])
+        np.testing.assert_allclose(out, [[7.0]])
+
+    def test_a_single_tree_is_its_own_crown_base(self):
+        trees = pd.DataFrame(
+            {"x": [15.0], "y": [-15.0], "height": [12.0], "crown_ratio": [0.4]}
+        )
+        out = mean_crown_base_height(
+            trees, np.array([5.0]), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+        )
+        np.testing.assert_allclose(out, [[12.0 * 0.6]])
+
+    def test_a_cell_with_no_fuel_is_nan(self):
+        out = self.two_trees_in_one_cell([0.0, 0.0])
+        assert np.isnan(out).all()
+
+    def test_an_empty_stand_is_all_nan(self):
+        trees = pd.DataFrame({"x": [], "y": [], "height": [], "crown_ratio": []})
+        out = mean_crown_base_height(
+            trees, np.array([]), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+        )
+        assert np.isnan(out).all()
+
+
+class TestValidateCbhMethod:
+    def test_the_two_methods_pass(self):
+        validate_cbh_method("bulk_density_threshold")
+        validate_cbh_method("mean_crown_base")
+
+    def test_an_unknown_method_raises(self):
+        with pytest.raises(ValueError, match="bogus"):
+            validate_cbh_method("bogus")
