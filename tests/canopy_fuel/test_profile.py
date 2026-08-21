@@ -140,7 +140,8 @@ class TestVerticalProfileAgainstReferences:
         n_layers = int(np.ceil(trees["height"].max() / FT_TO_M))
         fast = stem_profile(trees, fuel, n_layers=n_layers, vertical_distribution=vdist)
         slow = naive_profile(trees, fuel, n_layers, FT_TO_M, vdist)
-        np.testing.assert_allclose(fast, slow, rtol=1e-9, atol=1e-12)
+        # The profile is stored float32, so the tolerance is float32-level.
+        np.testing.assert_allclose(fast, slow, rtol=1e-6, atol=1e-8)
 
 
 class TestVerticalPlacement:
@@ -294,14 +295,14 @@ class TestProfileEdgeCases:
         assert profile.sum() == 0.0
 
     def test_batching_does_not_change_the_result(self, monkeypatch):
-        """Scatter-adds commute, so the batch size must be invisible."""
+        """Scatter-adds commute, so the batch size is invisible to float32."""
         import fastfuels_core.canopy_fuel.profile as m
 
         trees = stand_on_lattice(150, seed=9)
         fuel = np.full(len(trees), 2.0)
         one_pass = stem_profile(trees, fuel)
         monkeypatch.setattr(m, "_PROFILE_BATCH_BYTES", 10_000)
-        np.testing.assert_allclose(stem_profile(trees, fuel), one_pass, rtol=1e-12)
+        np.testing.assert_allclose(stem_profile(trees, fuel), one_pass, rtol=1e-6)
 
     def test_an_unknown_vertical_distribution_raises(self):
         with pytest.raises(ValueError, match="vertical_distribution"):

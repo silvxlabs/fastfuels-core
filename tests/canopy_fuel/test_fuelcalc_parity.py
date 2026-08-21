@@ -354,7 +354,9 @@ class TestVerticalDistributionParity:
             horizontal_distribution="stem",
         )
         cell_volume = 10.0 * 10.0 * FT_TO_M
-        assert profile.sum() * cell_volume == pytest.approx(fuel.sum(), rel=1e-12)
+        # Mass conservation is exact in the weights; the float32 profile
+        # store carries the sum to single precision.
+        assert profile.sum() * cell_volume == pytest.approx(fuel.sum(), rel=1e-6)
 
     def test_cumulative_fraction_matches_crown_fraction(self):
         ph = np.linspace(0.0, 1.0, 51)
