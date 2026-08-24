@@ -15,12 +15,13 @@ import pytest
 
 from fastfuels_core.canopy_fuel.bulk_density import VALID_EDGES
 from fastfuels_core.canopy_fuel.canopy_height import (
+    crown_base_statistic,
     height_percentile,
     height_percentile_depth,
-    mean_crown_base_height,
     mean_crown_length,
     profile_threshold_heights,
     validate_cbh_method,
+    validate_crown_base_percentile,
     validate_chm_method,
 )
 from tests.canopy_fuel.builders import (
@@ -218,64 +219,96 @@ class TestSmoothingEdge:
             self.heights(self.CANOPY, smoothing_window=5.0, smoothing_edge="bogus")
 
 
-class TestMeanCrownBaseHeight:
-    """The fuel-weighted mean per-tree crown base, an alternative to CBH.
+class TestCrownBaseStatistic:
+    """CBH as a plain summary statistic of the per-tree crown bases in a cell.
 
     The crown base of a tree is ``height * (1 - crown_ratio)``; a cell's
-    value is the mean of its trees' crown bases weighted by available
-    canopy fuel, so the heavier crown pulls the mean toward its base.
+    value reduces its trees' crown bases by ``statistic``. The statistics
+    form a conservative-to-liberal spectrum (minimum <= lower percentile
+    <= median <= mean for a right-tailed stand), which is the point of
+    offering them: the mean is Van Wagner's stand definition, the lower
+    tail captures low ladder fuel a mean would hide.
     """
 
     @staticmethod
-    def two_trees_in_one_cell(fuel):
-        # Crown bases 4 m (8 m tree) and 10 m (20 m tree), both at the
-        # centre of the single cell so they share one denominator.
+    def four_trees_in_one_cell():
+        # Crown bases 2, 4, 6, 12 m, all at the cell centre so they share
+        # one group. The tallest carries the most fuel.
         trees = pd.DataFrame(
             {
-                "x": [15.0, 15.0],
-                "y": [-15.0, -15.0],
-                "height": [8.0, 20.0],
-                "crown_ratio": [0.5, 0.5],
+                "x": [15.0, 15.0, 15.0, 15.0],
+                "y": [-15.0, -15.0, -15.0, -15.0],
+                "height": [10.0, 10.0, 10.0, 20.0],
+                "crown_ratio": [0.8, 0.6, 0.4, 0.4],
             }
         )
-        return mean_crown_base_height(
-            trees, np.asarray(fuel), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+        fuel = np.array([1.0, 1.0, 1.0, 10.0])
+        return trees, fuel
+
+    def value(self, **kwargs):
+        trees, fuel = self.four_trees_in_one_cell()
+        return crown_base_statistic(
+            trees, fuel, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE, **kwargs
         )
 
-    def test_it_weights_the_crown_bases_by_fuel(self):
-        # (1*4 + 3*10) / (1 + 3) = 8.5 m.
-        out = self.two_trees_in_one_cell([1.0, 3.0])
-        np.testing.assert_allclose(out, [[8.5]])
+    def test_minimum_is_the_lowest_crown_base(self):
+        np.testing.assert_allclose(self.value(statistic="minimum"), [[2.0]])
 
-    def test_equal_fuel_is_the_plain_mean(self):
-        out = self.two_trees_in_one_cell([2.0, 2.0])
-        np.testing.assert_allclose(out, [[7.0]])
-
-    def test_a_single_tree_is_its_own_crown_base(self):
-        trees = pd.DataFrame(
-            {"x": [15.0], "y": [-15.0], "height": [12.0], "crown_ratio": [0.4]}
+    def test_the_median_is_the_middle_crown_base(self):
+        np.testing.assert_allclose(
+            self.value(statistic="percentile", percentile=50), [[5.0]]
         )
-        out = mean_crown_base_height(
-            trees, np.array([5.0]), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
-        )
-        np.testing.assert_allclose(out, [[12.0 * 0.6]])
 
-    def test_a_cell_with_no_fuel_is_nan(self):
-        out = self.two_trees_in_one_cell([0.0, 0.0])
-        assert np.isnan(out).all()
+    def test_a_lower_percentile_is_conservative(self):
+        np.testing.assert_allclose(
+            self.value(statistic="percentile", percentile=20), [[3.2]]
+        )
+
+    def test_the_mean_is_one_tree_one_vote_by_default(self):
+        # (2 + 4 + 6 + 12) / 4 = 6.0, ignoring fuel weight.
+        np.testing.assert_allclose(self.value(statistic="mean"), [[6.0]])
+
+    def test_the_weighted_mean_lets_heavy_crowns_pull_it(self):
+        # (2 + 4 + 6 + 10*12) / (1 + 1 + 1 + 10) = 132 / 13.
+        np.testing.assert_allclose(
+            self.value(statistic="mean", weight_by_available_fuel=True),
+            [[132.0 / 13.0]],
+        )
+
+    def test_the_statistics_form_a_conservative_spectrum(self):
+        minimum = float(self.value(statistic="minimum")[0, 0])
+        p20 = float(self.value(statistic="percentile", percentile=20)[0, 0])
+        median = float(self.value(statistic="percentile", percentile=50)[0, 0])
+        mean = float(self.value(statistic="mean")[0, 0])
+        assert minimum <= p20 <= median <= mean
 
     def test_an_empty_stand_is_all_nan(self):
         trees = pd.DataFrame({"x": [], "y": [], "height": [], "crown_ratio": []})
-        out = mean_crown_base_height(
+        out = crown_base_statistic(
             trees, np.array([]), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
         )
         assert np.isnan(out).all()
 
 
+class TestValidateCrownBasePercentile:
+    @pytest.mark.parametrize("method", ["minimum", "mean", "bulk_density_threshold"])
+    def test_methods_without_a_percentile_pass(self, method):
+        validate_crown_base_percentile(method, None)
+
+    def test_percentile_with_a_value_passes(self):
+        validate_crown_base_percentile("percentile", 20.0)
+
+    def test_percentile_without_a_value_raises(self):
+        with pytest.raises(ValueError, match="requires a percentile"):
+            validate_crown_base_percentile("percentile", None)
+
+
 class TestValidateCbhMethod:
-    def test_the_two_methods_pass(self):
-        validate_cbh_method("bulk_density_threshold")
-        validate_cbh_method("mean_crown_base")
+    @pytest.mark.parametrize(
+        "method", ["bulk_density_threshold", "mean", "percentile", "minimum"]
+    )
+    def test_the_methods_pass(self, method):
+        validate_cbh_method(method)
 
     def test_an_unknown_method_raises(self):
         with pytest.raises(ValueError, match="bogus"):
