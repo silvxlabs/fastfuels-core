@@ -114,10 +114,10 @@ class TestPerBandThresholds:
         np.testing.assert_allclose(ds.chm.values[2, 1], 12.0)
 
 
-class TestMeanCrownBaseCbh:
-    """``cbh_method="mean_crown_base"`` swaps the threshold scan for the
-    fuel-weighted per-tree crown base, reading none of the ``cbh_`` scan
-    settings.
+class TestCrownBaseStatisticCbh:
+    """The ``"mean"``, ``"percentile"``, and ``"minimum"`` cbh methods swap
+    the threshold scan for a plain statistic of the per-tree crown bases,
+    reading none of the ``cbh_`` scan settings.
     """
 
     @staticmethod
@@ -144,10 +144,28 @@ class TestMeanCrownBaseCbh:
         )
         return ds.cbh.values[2, 1]
 
-    def test_it_is_the_fuel_weighted_mean_crown_base(self):
-        # (1*4 + 3*10) / (1 + 3) = 8.5 m, a value no threshold scan of
-        # this profile can produce, so it also proves the dispatch switched.
-        assert self.cbh(cbh_method="mean_crown_base") == pytest.approx(8.5)
+    def test_mean_is_one_tree_one_vote(self):
+        # (4 + 10) / 2 = 7.0, a value no threshold scan of this profile can
+        # produce, so it also proves the dispatch switched.
+        assert self.cbh(cbh_method="mean") == pytest.approx(7.0)
+
+    def test_weighted_mean_uses_available_fuel(self):
+        # (1*4 + 3*10) / (1 + 3) = 8.5 m.
+        assert self.cbh(cbh_method="mean", cbh_weight_by_fuel=True) == pytest.approx(
+            8.5
+        )
+
+    def test_minimum_is_the_lowest_crown_base(self):
+        assert self.cbh(cbh_method="minimum") == pytest.approx(4.0)
+
+    def test_percentile_reads_the_percentile(self):
+        assert self.cbh(cbh_method="percentile", cbh_percentile=50) == pytest.approx(
+            7.0
+        )
+
+    def test_percentile_without_a_value_raises(self):
+        with pytest.raises(ValueError, match="requires a percentile"):
+            self.cbh(cbh_method="percentile")
 
     def test_an_unknown_cbh_method_raises(self):
         with pytest.raises(ValueError, match="bogus"):

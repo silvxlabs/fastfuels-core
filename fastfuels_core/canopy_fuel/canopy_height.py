@@ -22,12 +22,17 @@ from fastfuels_core.canopy_fuel.profile import FUELCALC_LAYER_DEPTH, stem_cells
 
 # Canopy base height and canopy height each have a profile-threshold method
 # (the pair read off one scan; see :func:`profile_threshold_heights`) and a
-# per-tree alternative — the fuel-weighted mean crown base for cbh, a tree
-# height percentile for chm.
+# per-tree alternative — a crown-base statistic (mean, percentile, or
+# minimum) for cbh, a tree-height percentile for chm.
 THRESHOLD_METHOD = "bulk_density_threshold"
-MEAN_CROWN_BASE_METHOD = "mean_crown_base"
+MEAN_METHOD = "mean"
+PERCENTILE_METHOD = "percentile"
+MINIMUM_METHOD = "minimum"
 HEIGHT_PERCENTILE_METHOD = "height_percentile"
-CBH_METHODS = (THRESHOLD_METHOD, MEAN_CROWN_BASE_METHOD)
+# The crown-base statistics: CBH as a plain summary of the per-tree crown
+# base heights in a cell, an alternative to the bulk-density threshold.
+CROWN_BASE_METHODS = (MEAN_METHOD, PERCENTILE_METHOD, MINIMUM_METHOD)
+CBH_METHODS = (THRESHOLD_METHOD, *CROWN_BASE_METHODS)
 CHM_METHODS = (THRESHOLD_METHOD, HEIGHT_PERCENTILE_METHOD)
 
 
@@ -38,6 +43,14 @@ def validate_cbh_method(method: str) -> None:
         )
 
 
+def validate_crown_base_percentile(method: str, percentile: float | None) -> None:
+    if method == PERCENTILE_METHOD and percentile is None:
+        raise ValueError(
+            "cbh method 'percentile' requires a percentile (e.g. 50 for the "
+            "median, 20 for a conservative lower tail)."
+        )
+
+
 def validate_chm_method(method: str) -> None:
     if method not in CHM_METHODS:
         raise ValueError(
@@ -45,37 +58,71 @@ def validate_chm_method(method: str) -> None:
         )
 
 
-def mean_crown_base_height(
+def crown_base_statistic(
     trees: pd.DataFrame,
     fuel: np.ndarray,
     transform: tuple[float, float, float, float, float, float],
     shape: tuple[int, int],
+    *,
+    statistic: str = "mean",
+    percentile: float | None = None,
+    weight_by_available_fuel: bool = False,
 ) -> np.ndarray:
-    """Available-fuel-weighted mean per-tree crown base height (m), per cell.
+    """Per-cell summary statistic of per-tree crown base height (m).
 
     Each tree is binned to its stem cell (see
     :func:`~fastfuels_core.canopy_fuel.profile.stem_cells`) and its crown
-    base height ``height * (1 - crown_ratio)`` is averaged over the cell,
-    weighted by available canopy fuel so heavier crowns pull the mean.
-    Cells with no fuel are NaN, matching the threshold method's no-canopy.
+    base height ``height * (1 - crown_ratio)`` is reduced over the cell by
+    ``statistic``:
 
-    This is a stand-scale summary; per-tree averaging is known to
-    misrepresent crown-fire initiation in multi-storied stands, so it is a
-    comparison method, not the default.
+    - ``"minimum"`` — the lowest crown base, the most conservative reading
+      (any tree can carry fire into the canopy);
+    - ``"percentile"`` — the ``percentile``-th crown base (50 is the median,
+      20 the lower-tail aggregation of Fulé et al. 2002 / Mast et al. 2026);
+    - ``"mean"`` — the average crown base. Van Wagner (1977) derived
+      crown-fire initiation from this stand mean.
+
+    The mean is one tree one vote unless ``weight_by_available_fuel`` is set,
+    which weights by available canopy fuel so heavier crowns pull it.
+    ``percentile`` and ``minimum`` are
+    always unweighted. Cells with no trees are NaN, matching the threshold
+    method's no-canopy.
+
+    Aggregating per-tree crown bases is a distinct convention from the
+    bulk-density threshold method and is known to diverge from it where tree
+    height varies within a cell; lower-tail statistics give progressively
+    more conservative canopy base heights in multi-storied stands.
     """
     ny, nx = shape
     out = np.full(ny * nx, np.nan)
-    if len(trees):
-        row, col = stem_cells(trees, transform, shape)
-        flat = row * nx + col
-        height = trees["height"].to_numpy(dtype=np.float64)
-        crown_ratio = trees["crown_ratio"].to_numpy(dtype=np.float64)
-        crown_base = height * (1.0 - crown_ratio)
-        weight = np.asarray(fuel, dtype=np.float64)
+    if not len(trees):
+        return out.reshape(ny, nx)
+
+    row, col = stem_cells(trees, transform, shape)
+    flat = row * nx + col
+    height = trees["height"].to_numpy(dtype=np.float64)
+    crown_ratio = trees["crown_ratio"].to_numpy(dtype=np.float64)
+    crown_base = height * (1.0 - crown_ratio)
+
+    if statistic == "mean":
+        if weight_by_available_fuel:
+            weight = np.asarray(fuel, dtype=np.float64)
+        else:
+            weight = np.ones_like(crown_base)
         num = np.bincount(flat, weights=weight * crown_base, minlength=ny * nx)
         den = np.bincount(flat, weights=weight, minlength=ny * nx)
         with np.errstate(invalid="ignore", divide="ignore"):
             out = np.where(den > 0, num / den, np.nan)
+        return out.reshape(ny, nx)
+
+    grouped = pd.DataFrame({"cell": flat, "crown_base": crown_base}).groupby("cell")[
+        "crown_base"
+    ]
+    if statistic == "minimum":
+        reduced = grouped.min()
+    else:  # percentile
+        reduced = grouped.quantile(percentile / 100.0)
+    out[reduced.index.to_numpy()] = reduced.to_numpy()
     return out.reshape(ny, nx)
 
 

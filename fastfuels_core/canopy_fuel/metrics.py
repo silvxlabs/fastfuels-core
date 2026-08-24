@@ -42,15 +42,16 @@ from fastfuels_core.canopy_fuel.bulk_density import (
 )
 from fastfuels_core.canopy_fuel.cover import canopy_cover
 from fastfuels_core.canopy_fuel.canopy_height import (
+    CROWN_BASE_METHODS,
     HEIGHT_PERCENTILE_METHOD,
-    MEAN_CROWN_BASE_METHOD,
+    crown_base_statistic,
     height_percentile,
     height_percentile_depth,
-    mean_crown_base_height,
     mean_crown_length,
     profile_threshold_heights,
     validate_cbh_method,
     validate_chm_method,
+    validate_crown_base_percentile,
 )
 from fastfuels_core.canopy_fuel.fuel_load import canopy_fuel_load
 from fastfuels_core.canopy_fuel.profile import FUELCALC_LAYER_DEPTH, vertical_profile
@@ -115,6 +116,8 @@ def compute_canopy_metrics(
     cbh_relative_fraction: float | None = 0.1,
     cbh_smoothing_window: float | None = FUELCALC_WINDOW,
     cbh_smoothing_edge: str = FUELCALC_EDGE,
+    cbh_percentile: float | None = None,
+    cbh_weight_by_fuel: bool = False,
     chm_method: str = "bulk_density_threshold",
     chm_threshold: float = 0.012,
     chm_relative_fraction: float | None = 0.1,
@@ -165,10 +168,12 @@ def compute_canopy_metrics(
         two sets agree, which they do by default; give ``chm`` its own
         settings and it is read off a second scan. ``cbh_method``
         selects the base-height stage: ``"bulk_density_threshold"``
-        (the default, the scan above) or ``"mean_crown_base"``, the
-        fuel-weighted mean per-tree crown base
-        (:func:`~fastfuels_core.canopy_fuel.canopy_height.mean_crown_base_height`),
-        which ignores the ``cbh_`` scan settings. ``chm_method``
+        (the default, the scan above) or a crown-base statistic —
+        ``"mean"`` (optionally ``cbh_weight_by_fuel``), ``"percentile"``
+        (``cbh_percentile``), or ``"minimum"`` — a summary of the per-tree
+        crown bases
+        (:func:`~fastfuels_core.canopy_fuel.canopy_height.crown_base_statistic`)
+        that ignores the ``cbh_`` scan settings. ``chm_method``
         selects the canopy-height stage the same way:
         ``"bulk_density_threshold"`` or ``"height_percentile"``, the
         per-cell ``chm_percentile`` of tree heights
@@ -217,6 +222,7 @@ def compute_canopy_metrics(
     validate_cbd_method(cbd_method)
     validate_cbd_depth(cbd_depth)
     validate_cbh_method(cbh_method)
+    validate_crown_base_percentile(cbh_method, cbh_percentile)
     validate_chm_method(chm_method)
 
     t = dataset.rio.transform()
@@ -302,9 +308,15 @@ def compute_canopy_metrics(
                 )
 
         if "cbh" in bands:
-            if cbh_method == MEAN_CROWN_BASE_METHOD:
-                dataset["cbh"].data[...] = mean_crown_base_height(
-                    fuel_trees, fuel, transform, shape
+            if cbh_method in CROWN_BASE_METHODS:
+                dataset["cbh"].data[...] = crown_base_statistic(
+                    fuel_trees,
+                    fuel,
+                    transform,
+                    shape,
+                    statistic=cbh_method,
+                    percentile=cbh_percentile,
+                    weight_by_available_fuel=cbh_weight_by_fuel,
                 )
             else:
                 dataset["cbh"].data[...] = threshold_heights(
