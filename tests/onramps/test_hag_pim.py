@@ -208,3 +208,46 @@ def test_create_gdf(pim_5070):
     assert np.all(gdf1.X.unique() == pim_5070["x"].values)
     assert np.all(gdf1.Y.unique() == pim_5070["y"].values)
     assert np.all(gdf1.PLOT_ID.unique() == [0, 1, 2, 3, 4])
+
+
+def test_compute_cover_non_integer_ratio():
+    """The window is the nearest whole number of source cells; a partial trailing window is dropped."""
+    data = np.zeros((5, 5))
+    data[0, :] = 5  # top row above threshold
+    hag = create_toy_raster(
+        bounds=(0, 5, 0, 5), res=(1, -1), data=data, nodata_value=-1
+    )
+    cover = compute_cover_from_hag(hag, 1, 2.5)
+    assert cover.shape == (2, 2)
+    assert cover.rio.resolution() == (2, -2)
+    assert cover.rio.bounds() == (0, 1, 4, 5)
+    assert np.allclose(cover.values, [[0.5, 0.5], [0, 0]])
+
+
+def test_compute_cover_truncates_partial_edge_cells():
+    """A source extent that is not a whole number of output cells is truncated, like resample_raster."""
+    hag = create_toy_raster(bounds=(0, 7, 0, 5), res=(1, -1), data=np.full((5, 7), 9.0))
+    cover = compute_cover_from_hag(hag, 1, 2)
+    resampled = resample_raster(hag, 2, Resampling.sum)
+    assert cover.shape == resampled.shape == (2, 3)
+    assert cover.rio.bounds() == resampled.rio.bounds()
+    assert np.all(cover.values == 1)
+
+
+def test_compute_cover_nan_nodata_and_dask_input(hag_4326):
+    """NaN nodata is excluded from the numerator only, and a chunked raster streams to the same answer."""
+    pytest.importorskip("dask.array")
+    data = hag_4326.values.astype(float)
+    data[0, 0] = np.nan
+    hag = create_toy_raster(
+        bounds=(-6, 0, 0, 4),
+        crs="EPSG:4326",
+        res=(1, -1),
+        data=data,
+        nodata_value=np.nan,
+    )
+    eager = compute_cover_from_hag(hag, 10, 2)
+    lazy = compute_cover_from_hag(hag.chunk({"y": 3, "x": 4}), 10, 2)
+    assert np.allclose(eager.values, [[0, 0.25, 0.5], [0.5, 0.75, 1]])
+    assert np.allclose(lazy.values, eager.values)
+    assert np.isnan(lazy.rio.nodata)

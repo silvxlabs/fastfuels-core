@@ -143,9 +143,11 @@ def check_resolution(
 
 def compute_cover_from_hag(raster: xr.DataArray, min_hag: float, desired_res: float):
     """
-    Creates a new raster from the height above ground raster that has
-    the desired resolution where the values represent the
-    percentage of previous cells with a value above min_hag
+    Creates a new raster from the height above ground raster where the values
+    represent the fraction of source cells above min_hag within each output
+    cell. The output resolution is the integer multiple of the source
+    resolution nearest to desired_res; a trailing partial window is dropped.
+    The reduction is lazy, so a chunked raster is never materialised in full.
 
     Parameters
     ----------
@@ -161,20 +163,13 @@ def compute_cover_from_hag(raster: xr.DataArray, min_hag: float, desired_res: fl
     raster: xr.DataArray
         Height above ground cover raster
     """
-    # Create cover raster from HAG
-    hag_cover = xr.where((raster > min_hag) & (raster != raster.rio.nodata), 1.0, 0.0)
-    hag_cover.rio.write_nodata(raster.rio.nodata, inplace=True)
+    factor = round(desired_res / abs(raster.rio.resolution()[0]))
+    occupied = (raster > min_hag) & (raster != raster.rio.nodata)
+    hag_cover = occupied.coarsen(x=factor, y=factor, boundary="trim").mean()
     hag_cover.rio.write_crs(raster.rio.crs, inplace=True)
-
-    # Resample with summing
-    hag_resampled = resample_raster(hag_cover, desired_res, Resampling.sum)
-
-    # Scale the values
-    res = np.array(hag_cover.rio.resolution())
-    res_scale = desired_res / abs(res)
-    hag_resampled /= res_scale[0] * res_scale[1]
-
-    return hag_resampled
+    hag_cover.rio.write_transform(inplace=True)  # recompute from coarsened coords
+    hag_cover.rio.write_nodata(raster.rio.nodata, inplace=True)
+    return hag_cover
 
 
 def resample_raster(
