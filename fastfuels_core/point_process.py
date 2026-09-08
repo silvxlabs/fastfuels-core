@@ -48,7 +48,8 @@ def inhomogeneous_poisson_process(
     intensity_resolution : int
         Grid cell size in metres for the density grid.
     intensity_interpolation_method : str
-        Interpolation method for density grid ("linear" or "cubic").
+        Interpolation method for density grid ("linear", "cubic", or "nearest").
+        Outside the plot-anchor convex hull, use the nearest anchor's density.
     seed : int or None
         Random seed for reproducibility.
     chunk_size : float or None
@@ -199,7 +200,7 @@ def _points_span_2d(x, y) -> bool:
 
 
 def _interpolate_data_to_grid(plots, data, grid_x, grid_y, method) -> ndarray:
-    """Interpolate unstructured plot data to a structured grid."""
+    """Interpolate plot data, using nearest anchors outside the convex hull."""
     if len(data) == 0:
         return np.zeros(grid_x.shape)
 
@@ -217,6 +218,16 @@ def _interpolate_data_to_grid(plots, data, grid_x, grid_y, method) -> ndarray:
         (grid_x, grid_y),
         method=method,
     )
+    # Linear/cubic interpolation leaves NaNs outside the anchor hull. Edge
+    # cells still represent the nearest plot, including zero-density plots.
+    missing = np.isnan(interpolated_grid)
+    if method != "nearest" and missing.any():
+        interpolated_grid[missing] = griddata(
+            points,
+            data,
+            (grid_x[missing], grid_y[missing]),
+            method="nearest",
+        )
     interpolated_grid = np.nan_to_num(interpolated_grid, nan=0)
     interpolated_grid[interpolated_grid < 0] = 0
 

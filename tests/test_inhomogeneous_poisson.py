@@ -99,6 +99,33 @@ class TestCalculatePerPlotTreeDensity:
 
 
 class TestInterpolateDataToGrid:
+    @pytest.mark.parametrize("method", ["linear", "cubic"])
+    def test_extrapolates_edges_without_replacing_interior_interpolation(self, method):
+        plots = gpd.GeoDataFrame(
+            geometry=[Point(0, 0), Point(3, 0), Point(0, 3), Point(3, 3)]
+        )
+        data = pd.Series([0.0, 3.0, 0.0, 3.0])
+        grid_x, grid_y = np.meshgrid([-1.0, 1.0, 4.0], [-1.0, 1.0, 4.0])
+
+        grid = _interpolate_data_to_grid(plots, data, grid_x, grid_y, method)
+
+        # Outside the hull use the nearest corner, including its zero value;
+        # inside retain the interpolated value of the plane z = x.
+        np.testing.assert_allclose(grid, [[0, 0, 3], [0, 1, 3], [0, 0, 3]], atol=1e-6)
+
+    @pytest.mark.parametrize("method", ["linear", "cubic", "nearest"])
+    def test_negative_density_is_clamped_inside_and_outside_hull(self, method):
+        plots = gpd.GeoDataFrame(
+            geometry=[Point(0, 0), Point(3, 0), Point(0, 3), Point(3, 3)]
+        )
+        grid_x, grid_y = np.meshgrid([-1.0, 1.0, 4.0], [-1.0, 1.0, 4.0])
+
+        grid = _interpolate_data_to_grid(
+            plots, pd.Series([-1.0] * 4), grid_x, grid_y, method
+        )
+
+        np.testing.assert_array_equal(grid, 0)
+
     def test_nearest_play_data(self):
         x_coords = np.array([0, 1, 2, 3])
         y_coords = np.array([0, 1, 2, 3])
@@ -218,6 +245,45 @@ class TestPointsSpan2d:
 
 class TestInterpolateTreeDensityToGrid:
     save_fig = SAVE_FIG
+
+    @pytest.mark.parametrize("plot_resolution", [30.0, 7.5])
+    @pytest.mark.parametrize("method", ["linear", "cubic", "nearest"])
+    def test_uniform_density_reaches_all_edges(self, plot_resolution, method):
+        # Fusion anchors cover full 7.5 m cells only. The 100 m ROI leaves
+        # partial southern/eastern intensity cells outside their convex hull.
+        bounds = (500000, 4500000, 500100, 4500100)
+        n = int(100 / plot_resolution)
+        xs = bounds[0] + (np.arange(n) + 0.5) * plot_resolution
+        ys = bounds[3] - (np.arange(n) + 0.5) * plot_resolution
+        px, py = np.meshgrid(xs, ys)
+        plots = gpd.GeoDataFrame(
+            {"PLOT_ID": np.ones(px.size, dtype=int)},
+            geometry=gpd.points_from_xy(px.ravel(), py.ravel()),
+            crs="EPSG:32611",
+        )
+        trees = pd.DataFrame({"PLOT_ID": [1], "TPA": [0.02]})
+        grid_x, grid_y = _create_structured_coords_grid(bounds, 15)
+
+        density = _interpolate_tree_density_to_grid(
+            trees, plots, grid_x, grid_y, 15, method
+        )
+
+        assert density.shape == (7, 7)
+        np.testing.assert_allclose(density, 0.02 * 15**2)
+
+    def test_empty_boundary_plots_remain_zero_density(self):
+        px, py = np.meshgrid([15, 45, 75], [75, 45, 15])
+        plots = gpd.GeoDataFrame(
+            {"PLOT_ID": np.tile([0, 1, 1], 3)},
+            geometry=gpd.points_from_xy(px.ravel(), py.ravel()),
+        )
+        trees = pd.DataFrame({"PLOT_ID": [1], "TPA": [0.02]})
+        grid_x, grid_y = _create_structured_coords_grid((0, 0, 90, 90), 15)
+
+        density = _interpolate_tree_density_to_grid(trees, plots, grid_x, grid_y, 15)
+
+        np.testing.assert_array_equal(density[:, 0], 0)
+        np.testing.assert_allclose(density[:, -1], 0.02 * 15**2)
 
     def test_interpolate_tree_density(self, real_data):
         roi, trees, plots = real_data
