@@ -98,15 +98,15 @@ def crown_base_statistic(
     if not len(trees):
         return out.reshape(ny, nx)
 
-    row, col = stem_cells(trees, transform, shape)
+    row, col, keep = stem_cells(trees, transform, shape)
     flat = row * nx + col
-    height = trees["height"].to_numpy(dtype=np.float64)
-    crown_ratio = trees["crown_ratio"].to_numpy(dtype=np.float64)
+    height = trees["height"].to_numpy(dtype=np.float64)[keep]
+    crown_ratio = trees["crown_ratio"].to_numpy(dtype=np.float64)[keep]
     crown_base = height * (1.0 - crown_ratio)
 
     if statistic == "mean":
         if weight_by_available_fuel:
-            weight = np.asarray(fuel, dtype=np.float64)
+            weight = np.asarray(fuel, dtype=np.float64)[keep]
         else:
             weight = np.ones_like(crown_base)
         num = np.bincount(flat, weights=weight * crown_base, minlength=ny * nx)
@@ -145,9 +145,9 @@ def height_percentile(
     ny, nx = shape
     out = np.full(ny * nx, np.nan)
     if len(trees):
-        row, col = stem_cells(trees, transform, shape)
+        row, col, keep = stem_cells(trees, transform, shape)
         flat = row * nx + col
-        height = trees["height"].to_numpy(dtype=np.float64)
+        height = trees["height"].to_numpy(dtype=np.float64)[keep]
         grouped = pd.DataFrame({"cell": flat, "height": height}).groupby("cell")
         quantile = grouped["height"].quantile(percentile / 100.0)
         out[quantile.index.to_numpy()] = quantile.to_numpy()
@@ -169,10 +169,10 @@ def mean_crown_length(
     ny, nx = shape
     out = np.full(ny * nx, np.nan)
     if len(trees):
-        row, col = stem_cells(trees, transform, shape)
+        row, col, keep = stem_cells(trees, transform, shape)
         flat = row * nx + col
-        height = trees["height"].to_numpy(dtype=np.float64)
-        crown_ratio = trees["crown_ratio"].to_numpy(dtype=np.float64)
+        height = trees["height"].to_numpy(dtype=np.float64)[keep]
+        crown_ratio = trees["crown_ratio"].to_numpy(dtype=np.float64)[keep]
         crown_length = height * crown_ratio
         num = np.bincount(flat, weights=crown_length, minlength=ny * nx)
         count = np.bincount(flat, minlength=ny * nx)
@@ -198,10 +198,10 @@ def height_percentile_depth(
     ny, nx = shape
     out = np.full(ny * nx, np.nan)
     if len(trees):
-        row, col = stem_cells(trees, transform, shape)
+        row, col, keep = stem_cells(trees, transform, shape)
         flat = row * nx + col
-        height = trees["height"].to_numpy(dtype=np.float64)
-        crown_ratio = trees["crown_ratio"].to_numpy(dtype=np.float64)
+        height = trees["height"].to_numpy(dtype=np.float64)[keep]
+        crown_ratio = trees["crown_ratio"].to_numpy(dtype=np.float64)[keep]
         crown_base = height * (1.0 - crown_ratio)
         grouped = pd.DataFrame(
             {"cell": flat, "height": height, "base": crown_base}

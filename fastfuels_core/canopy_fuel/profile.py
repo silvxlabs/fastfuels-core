@@ -82,25 +82,27 @@ def stem_cells(
     trees: pd.DataFrame,
     transform: tuple[float, float, float, float, float, float],
     shape: tuple[int, int],
-) -> tuple[np.ndarray, np.ndarray]:
-    """Row and column of each tree's stem, checked against the lattice.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Row and column of each in-lattice stem, plus a keep mask.
 
     Shared by the profile accumulation and the per-cell tree statistics
     (mean crown base, height percentiles) so every stage bins a tree into
-    the same cell and applies the same out-of-bounds check.
+    the same cell. A stem binning outside the lattice has no cell and is
+    dropped, mirroring how the crown path clips overhang past the
+    boundary; the grid is built from the stems that fall inside.
+
+    Returns ``(row, col, keep)`` where ``row`` and ``col`` hold only the
+    kept (in-lattice) stems and ``keep`` is the boolean mask over the
+    input trees selecting them. Callers must subset their own per-tree
+    arrays by ``keep`` before indexing them with ``row``/``col`` — the
+    returned cells align with the kept trees, not the input length.
     """
     a, _, c, _, e, f = transform
     ny, nx = shape
     col = np.floor((trees["x"].to_numpy(dtype=np.float64) - c) / a).astype(np.int64)
     row = np.floor((trees["y"].to_numpy(dtype=np.float64) - f) / e).astype(np.int64)
-    out = (col < 0) | (col >= nx) | (row < 0) | (row >= ny)
-    if out.any():
-        raise ValueError(
-            f"{int(out.sum())} tree stem(s) fall outside the lattice. "
-            f"Inventories are domain-bounded and the lattice covers the "
-            f"domain, so this indicates a mismatched lattice or CRS."
-        )
-    return row, col
+    keep = (col >= 0) & (col < nx) & (row >= 0) & (row < ny)
+    return row[keep], col[keep], keep
 
 
 def _crown_projected_contributions(
@@ -219,10 +221,7 @@ def vertical_profile(
     Raises
     ------
     ValueError
-        If the transform is rotated, or any stem falls outside the
-        lattice — inventories are domain-bounded and the lattice covers
-        the domain, so an out-of-bounds stem means a caller error
-        (mismatched lattice or wrong CRS) and must not scatter silently.
+        If the transform is rotated.
 
     Notes
     -----
@@ -231,16 +230,27 @@ def vertical_profile(
     differences of :func:`cumulative_fuel_fraction` at layer boundaries
     clipped to the crown interval (FuelCalc's CLA formula), with the
     cumulative fraction pinned to 1 at the crown top as VD_Calc does,
-    so each tree's weights sum to 1 and total mass is conserved. Under
-    ``crown_projected``, the slice of a crown disk overhanging the
-    lattice boundary has no cell and its share of the tree's fuel is
-    dropped — mass is conserved for every crown fully inside.
+    so each tree's weights sum to 1 and total mass is conserved. A tree
+    whose stem bins outside the lattice has no cell and is dropped whole,
+    mirroring how the slice of a crown disk overhanging the lattice
+    boundary is dropped under ``crown_projected`` — mass is conserved for
+    every tree whose stem is inside (and, under ``crown_projected``, whose
+    crown is fully inside).
     """
     _validate_distributions(vertical_distribution, horizontal_distribution)
     a, b_rot, c, d_rot, e, f = transform
     if b_rot != 0.0 or d_rot != 0.0:
         raise ValueError("Rotated transforms are not supported.")
     ny, nx = shape
+
+    # Drop out-of-lattice stems and build the grid from the rest. The
+    # keep mask must be applied to every per-tree array — fuel, the crown
+    # geometry, the species codes, the crown-projected contributions — so
+    # the kept cells stay aligned with the values scattered into them.
+    if len(trees):
+        row, col, keep = stem_cells(trees, transform, shape)
+        trees = trees[keep]
+        fuel = np.asarray(fuel, dtype=np.float64)[keep]
 
     height = trees["height"].to_numpy(dtype=np.float64)
     if n_layers is None:
@@ -252,13 +262,11 @@ def vertical_profile(
     if len(trees) == 0:
         return profile_flat.reshape(n_layers, ny, nx)
 
-    row, col = stem_cells(trees, transform, shape)
     crown_length = height * trees["crown_ratio"].to_numpy(dtype=np.float64)
     crown_base = height - crown_length
     # Zero-length crowns become a point mass at the crown base: a tiny
     # denominator turns the clipped ph into a step function there.
     safe_length = np.maximum(crown_length, 1e-9)
-    fuel = np.asarray(fuel, dtype=np.float64)
     spcd = (
         trees["fia_species_code"].to_numpy()
         if vertical_distribution == "reinhardt_2006"
