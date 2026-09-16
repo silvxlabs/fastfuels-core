@@ -430,3 +430,101 @@ class TestHeightPercentileDepth:
         trees = pd.DataFrame({"x": [], "y": [], "height": [], "crown_ratio": []})
         out = height_percentile_depth(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
         assert np.isnan(out).all()
+
+
+class TestOutOfLatticeStemsAreDropped:
+    """A stem outside the lattice has no cell, so every per-cell statistic
+    drops it: the result equals the same call with that tree removed.
+
+    The single cell spans x 0-30, y -30-0; a tree at x = 100 bins outside
+    it. Its height and crown ratio are set so that including it would
+    change each statistic, proving the drop actually happens.
+    """
+
+    @staticmethod
+    def in_cell():
+        # Three trees in the cell, heights 10/20/30, crown ratio 0.5.
+        return pd.DataFrame(
+            {
+                "x": [15.0, 15.0, 15.0],
+                "y": [-15.0, -15.0, -15.0],
+                "height": [10.0, 20.0, 30.0],
+                "crown_ratio": [0.5, 0.5, 0.5],
+            }
+        )
+
+    def with_outlier(self):
+        # A fourth tree well outside the single cell, with extreme values.
+        trees = self.in_cell()
+        outlier = pd.DataFrame(
+            {"x": [100.0], "y": [-15.0], "height": [200.0], "crown_ratio": [0.05]}
+        )
+        return pd.concat([trees, outlier], ignore_index=True)
+
+    def test_crown_base_statistic_drops_the_outlier(self):
+        fuel_in = np.ones(3)
+        fuel_all = np.array([1.0, 1.0, 1.0, 5.0])
+        for stat, kwargs in [
+            ("mean", {}),
+            ("mean", {"weight_by_available_fuel": True}),
+            ("minimum", {}),
+            ("percentile", {"percentile": 20.0}),
+        ]:
+            dropped = crown_base_statistic(
+                self.with_outlier(),
+                fuel_all,
+                ONE_CELL_TRANSFORM,
+                ONE_CELL_SHAPE,
+                statistic=stat,
+                **kwargs,
+            )
+            pre_removed = crown_base_statistic(
+                self.in_cell(),
+                fuel_in,
+                ONE_CELL_TRANSFORM,
+                ONE_CELL_SHAPE,
+                statistic=stat,
+                **kwargs,
+            )
+            np.testing.assert_array_equal(dropped, pre_removed)
+
+    def test_height_percentile_drops_the_outlier(self):
+        dropped = height_percentile(
+            self.with_outlier(), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+        )
+        pre_removed = height_percentile(
+            self.in_cell(), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+        )
+        np.testing.assert_array_equal(dropped, pre_removed)
+
+    def test_mean_crown_length_drops_the_outlier(self):
+        dropped = mean_crown_length(
+            self.with_outlier(), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+        )
+        pre_removed = mean_crown_length(
+            self.in_cell(), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+        )
+        np.testing.assert_array_equal(dropped, pre_removed)
+
+    def test_height_percentile_depth_drops_the_outlier(self):
+        dropped = height_percentile_depth(
+            self.with_outlier(), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+        )
+        pre_removed = height_percentile_depth(
+            self.in_cell(), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+        )
+        np.testing.assert_array_equal(dropped, pre_removed)
+
+    def test_all_stems_outside_the_lattice_is_all_nan(self):
+        trees = pd.DataFrame(
+            {
+                "x": [100.0, 100.0],
+                "y": [-15.0, -15.0],
+                "height": [10.0, 20.0],
+                "crown_ratio": [0.5, 0.5],
+            }
+        )
+        out = crown_base_statistic(
+            trees, np.ones(2), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE, statistic="mean"
+        )
+        assert np.isnan(out).all()

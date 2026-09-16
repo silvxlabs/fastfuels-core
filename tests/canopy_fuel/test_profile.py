@@ -197,12 +197,30 @@ class TestStemAttribution:
         assert profile[:, 1, 1].sum() > 0
         assert profile[:, :, 0].sum() == 0.0
 
-    def test_a_stem_outside_the_lattice_raises(self):
-        """A domain-bounded inventory cannot have one; the lattice is wrong."""
-        trees = stand_on_lattice(3)
+    def test_a_stem_outside_the_lattice_is_dropped(self):
+        """An out-of-lattice stem has no cell; the grid is built from the rest."""
+        trees = stand_on_lattice(5, seed=3)
+        fuel = np.arange(1.0, 6.0)
+        # Push two stems past opposite edges (x below the lattice, y above it).
         trees.loc[1, "x"] = 999.0
-        with pytest.raises(ValueError, match="outside the lattice"):
-            stem_profile(trees, np.ones(3))
+        trees.loc[3, "y"] = 5000.1
+        kept = trees.drop(index=[1, 3]).reset_index(drop=True)
+        kept_fuel = np.delete(fuel, [1, 3])
+
+        dropped = stem_profile(trees, fuel)
+        pre_removed = stem_profile(kept, kept_fuel)
+
+        # Dropping the out-of-lattice stems is exactly equivalent to those
+        # trees never having been in the stand.
+        np.testing.assert_array_equal(dropped, pre_removed)
+        # The kept trees still carry all of their own fuel.
+        np.testing.assert_allclose(total_mass(dropped), kept_fuel.sum(), rtol=1e-3)
+
+    def test_all_stems_outside_the_lattice_gives_an_empty_profile(self):
+        trees = stand_on_lattice(3, seed=7)
+        trees["x"] = 999.0
+        profile = stem_profile(trees, np.ones(3))
+        assert profile.sum() == 0.0
 
 
 class TestCrownProjectedAttribution:
@@ -250,6 +268,23 @@ class TestCrownProjectedAttribution:
         lost = r * r * np.arccos(d / r) - d * np.sqrt(r * r - d * d)
         expected = 10.0 * (1.0 - lost / (np.pi * r * r))
         np.testing.assert_allclose(total_mass(profile), expected, rtol=1e-3)
+
+    def test_a_stem_outside_the_lattice_is_dropped(self):
+        """The stem drop applies to the crown path too: an out-of-lattice
+        tree is dropped whole, equivalent to it never having been present."""
+        trees = interior_stand(6, seed=21)
+        fuel = np.abs(np.random.default_rng(22).normal(8.0, 2.0, len(trees)))
+        trees.loc[2, "x"] = 999.0
+        kept = trees.drop(index=[2]).reset_index(drop=True)
+        kept_fuel = np.delete(fuel, 2)
+
+        dropped = vertical_profile(
+            trees, fuel, TRANSFORM, SHAPE, horizontal_distribution="crown_projected"
+        )
+        pre_removed = vertical_profile(
+            kept, kept_fuel, TRANSFORM, SHAPE, horizontal_distribution="crown_projected"
+        )
+        np.testing.assert_array_equal(dropped, pre_removed)
 
 
 class TestCrownStraddlingACellEdge:
