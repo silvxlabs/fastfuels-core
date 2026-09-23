@@ -54,7 +54,7 @@ class BetaCrownProfile(CrownProfileModel):
         z_max = (self.a - 1) / (self.a + self.b - 2)
         normalized_max_radius = self._get_radius_at_normalized_height(z_max)
         result = normalized_max_radius * self.crown_length
-        return result.item() if result.size == 1 else result
+        return result.item() if result.size == 1 else result.reshape(-1)
 
     def get_max_radius_height(self) -> float | np.ndarray:
         """
