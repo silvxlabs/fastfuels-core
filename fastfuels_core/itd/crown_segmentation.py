@@ -47,7 +47,10 @@ def dalponte2016(
     When ``chm_da`` is dask-backed, each chunk is segmented with a halo of
     ``2 * max_crown_radius`` using every treetop inside the extended block,
     and the result has the same chunks. The result is deterministic for a
-    given chunk layout; it is not proven identical to an unchunked run.
+    given chunk layout. It usually equals the unchunked result, but not
+    always: each crown's running mean couples it to its neighbours, and a
+    chain of competing crowns can reach past the halo. Rare cells near chunk
+    boundaries may then take a different label.
 
     Algorithm:
     - Dalponte & Coomes (2016): Tree-centric mapping of forest carbon density
