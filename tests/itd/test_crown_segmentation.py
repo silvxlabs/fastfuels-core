@@ -9,9 +9,11 @@ import rioxarray  # noqa: F401
 import xarray as xr
 from rasterio.transform import from_origin
 
+from fastfuels_core.itd.crown_segmentation import _segment as _segment_frontier
 from fastfuels_core.itd.crown_segmentation import dalponte2016
 from fastfuels_core.itd.local_maxima_filter import fixed_window_filter
 from tests.itd.reference_crown_segmentation import dalponte2016_reference
+from tests.itd.reference_segment_full_scan import segment_full_scan
 
 DEFAULTS = dict(
     min_height=2.0,
@@ -364,3 +366,54 @@ class TestValidation:
         treetops.loc[0, "x"] = np.nan
         with pytest.raises(ValueError, match="finite"):
             dalponte2016(self.chm, treetops, **DEFAULTS)
+
+
+def _random_case(seed: int):
+    """A random CHM, seeds and parameters for the full-scan comparison."""
+    rng = np.random.default_rng(seed)
+    nrows, ncols = (int(v) for v in rng.integers(1, 60, 2))
+    yy, xx = np.mgrid[:nrows, :ncols]
+    n_bumps = int(rng.integers(1, 40))
+    rows, cols = rng.uniform(0, nrows, n_bumps), rng.uniform(0, ncols, n_bumps)
+    heights = rng.uniform(3.0, 35.0, n_bumps)
+    widths = rng.uniform(0.8, 6.0, n_bumps)
+    bumps = heights[:, None, None] * np.exp(
+        -((yy - rows[:, None, None]) ** 2 + (xx - cols[:, None, None]) ** 2)
+        / (2 * widths[:, None, None] ** 2)
+    )
+    chm = bumps.max(axis=0) + rng.normal(0.0, rng.uniform(0.0, 3.0), (nrows, ncols))
+    if rng.random() < 0.3:
+        chm = np.round(chm)  # many exact ties
+    if rng.random() < 0.3:
+        chm[rng.random((nrows, ncols)) < rng.uniform(0.0, 0.2)] = np.nan
+    if rng.random() < 0.3:
+        chm = chm.astype(np.float32)
+
+    n_seeds = min(nrows * ncols, int(rng.integers(0, nrows * ncols // 3 + 2)))
+    flat = rng.choice(nrows * ncols, n_seeds, replace=False)
+    seed_rows, seed_cols = np.divmod(flat, ncols)
+    seed_labels = rng.choice(np.arange(1, 3 * n_seeds + 2), n_seeds, replace=False)
+
+    size = rng.uniform(0.25, 3.0)
+    shear = rng.uniform(-0.5, 0.5) * size if rng.random() < 0.3 else 0.0
+    min_height = float(rng.uniform(0.0, 8.0))
+    params = dict(
+        min_height=min_height,
+        max_height=(
+            np.inf if rng.random() < 0.5 else min_height + float(rng.uniform(0, 30))
+        ),
+        min_relative_height=float(rng.uniform(0.0, 0.99)),
+        min_relative_crown_height=float(rng.uniform(0.0, 0.99)),
+        max_crown_radius=float(rng.uniform(0.1, 15.0)),
+        transform=rio.Affine(size, shear, 0.0, shear, -size * rng.uniform(0.5, 2), 0.0),
+    )
+    return chm, seed_rows, seed_cols, seed_labels.astype(np.int32), params
+
+
+@pytest.mark.parametrize("seed", range(300))
+def test_frontier_growth_matches_full_scan(seed):
+    chm, seed_rows, seed_cols, seed_labels, params = _random_case(seed)
+    np.testing.assert_array_equal(
+        _segment_frontier(chm, seed_rows, seed_cols, seed_labels, **params),
+        segment_full_scan(chm, seed_rows, seed_cols, seed_labels, **params),
+    )

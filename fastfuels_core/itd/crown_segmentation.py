@@ -12,9 +12,6 @@ import xarray as xr
 # A cell may be at most this factor above its crown's treetop cell.
 MAX_RELATIVE_TO_TREETOP = 1.05
 
-# (row, col) offsets of the four neighbours a crown grows through.
-_NEIGHBOURS = ((-1, 0), (1, 0), (0, -1), (0, 1))
-
 
 def dalponte2016(
     chm_da: xr.DataArray,
@@ -194,6 +191,13 @@ def _segment(
 
     ``seed_rows`` / ``seed_cols`` index into ``chm``; ``seed_labels`` are the
     labels written for each seed and decide ties.
+
+    Each step tests (cell, crown) pairs rather than scanning the grid. A pair
+    is new when the cell touches a cell the crown gained last step. A pair
+    that failed only the mean test is kept and retested whenever its crown's
+    mean changes; every other test is fixed, so other failed pairs are
+    dropped. This finds the same pairs as scanning every unlabelled cell next
+    to every crown.
     """
     nrows, ncols = chm.shape
     labels = np.zeros((nrows, ncols), dtype=np.int32)
@@ -227,61 +231,95 @@ def _segment(
     a, b, _, d, e, _ = transform[:6]
     radius_sq = max_crown_radius * max_crown_radius
     flat_chm = chm.ravel()
+    flat_labels = labels.ravel()
+    # Per-crown bounds that never change.
+    low = min_relative_height * top
+    high = MAX_RELATIVE_TO_TREETOP * top
+
+    # Growth works on padded flat indices: a one-cell border that is never
+    # free lets every cell take all four neighbours without edge checks.
+    width = ncols + 2
+    free_2d = np.zeros((nrows + 2, width), dtype=bool)
+    free_2d[1:-1, 1:-1] = in_range & (labels == 0)
+    free = free_2d.ravel()
+
+    # Tie-break order: taller treetop cell first, then lower label. It never
+    # changes, so rank crowns once; a lower rank wins.
+    growing = np.flatnonzero(grows)
+    by_priority = growing[np.lexsort((growing, -top[growing]))]
+    rank = np.zeros(n, dtype=np.int64)
+    rank[by_priority] = np.arange(by_priority.size)
+
+    # A (cell, crown) pair is one int64: padded cell index above the crown's
+    # rank. Sorting pairs sorts by cell, then best crown first.
+    shift = max(1, (by_priority.size - 1).bit_length())
+    if free.size >= 2 ** (63 - shift):
+        raise ValueError("CHM block has too many cells to segment")
+    rank_mask = (1 << shift) - 1
+
+    # Pairs for cells added last step (sorted by cell). Only growing crowns
+    # ever add cells, so every crown seen below grows.
+    first_ring = grows[seed_labels]
+    seed_cells = (seed_rows.astype(np.int64) + 1) * width + seed_cols + 1
+    seed_cells = seed_cells[first_ring]
+    frontier = np.sort((seed_cells << shift) | rank[seed_labels[first_ring]])
+    # Pairs that passed every test but the mean test.
+    pending = np.empty(0, dtype=np.int64)
+    changed = np.zeros(n, dtype=bool)
+    changed[by_priority[frontier & rank_mask]] = True
 
     while True:
         mean = total / np.where(count > 0, count, 1.0)
-        free = (labels == 0) & in_range
+        low_mean = min_relative_crown_height * mean
 
-        best_label = np.zeros(nrows * ncols, dtype=np.int32)
-        best_top = np.full(nrows * ncols, -np.inf)
+        # New pairs: free neighbours of last step's cells, with that cell's
+        # crown. Kept pairs are retested when their crown's mean changed, if
+        # their cell is still free.
+        retest = changed[by_priority[pending & rank_mask]]
+        pairs = pending[retest]
+        pending = pending[~retest]
+        parts = [pairs[free[pairs >> shift]]]
+        for offset in (-width, width, -1, 1):
+            pairs = frontier + (offset << shift)
+            parts.append(pairs[free[pairs >> shift]])
+        pairs = np.concatenate(parts)
 
-        for dr, dc in _NEIGHBOURS:
-            neighbour = _shift(labels, dr, dc)
-            cand = np.flatnonzero(free & (neighbour > 0))
-            if cand.size == 0:
-                continue
-            k = neighbour.ravel()[cand]
-            h = flat_chm[cand]
-            r, c = np.divmod(cand, ncols)
-            drow = (r - seed_row_of[k]).astype(np.float64)
-            dcol = (c - seed_col_of[k]).astype(np.float64)
-            dx = dcol * a + drow * b
-            dy = dcol * d + drow * e
-            ok = (
-                grows[k]
-                & (h >= min_relative_height * top[k])
-                & (h >= min_relative_crown_height * mean[k])
-                & (h <= MAX_RELATIVE_TO_TREETOP * top[k])
-                & (dx * dx + dy * dy <= radius_sq)
-            )
-            cand, k = cand[ok], k[ok]
-            better = (top[k] > best_top[cand]) | (
-                (top[k] == best_top[cand]) & (k < best_label[cand])
-            )
-            cand, k = cand[better], k[better]
-            best_label[cand] = k
-            best_top[cand] = top[k]
+        cell = pairs >> shift
+        k = by_priority[pairs & rank_mask]
+        r, c = np.divmod(cell, width)
+        r -= 1
+        c -= 1
+        h = flat_chm[r * ncols + c]
+        drow = (r - seed_row_of[k]).astype(np.float64)
+        dcol = (c - seed_col_of[k]).astype(np.float64)
+        dx = dcol * a + drow * b
+        dy = dcol * d + drow * e
+        fixed_ok = (h >= low[k]) & (h <= high[k]) & (dx * dx + dy * dy <= radius_sq)
+        mean_ok = h >= low_mean[k]
 
-        added = np.flatnonzero(best_label)
-        if added.size == 0:
+        # Each cell goes to its best-ranked passing crown. Sorting by cell
+        # also orders the additions as a row-major scan would.
+        passed = np.sort(pairs[fixed_ok & mean_ok], kind="stable")
+        if passed.size == 0:
             return labels
+        cell = passed >> shift
+        first = np.r_[True, cell[1:] != cell[:-1]]
+        frontier = passed[first]
+        added = cell[first]
+        added_k = by_priority[frontier & rank_mask]
+        r, c = np.divmod(added, width)
+        added_flat = (r - 1) * ncols + (c - 1)
 
-        k = best_label[added]
-        labels.ravel()[added] = k
-        total += np.bincount(k, weights=flat_chm[added], minlength=n)
-        count += np.bincount(k, minlength=n)
+        flat_labels[added_flat] = added_k
+        free[added] = False
+        total += np.bincount(added_k, weights=flat_chm[added_flat], minlength=n)
+        count += np.bincount(added_k, minlength=n)
 
+        # Pairs that failed only the mean test.
+        pending = np.concatenate([pending, pairs[fixed_ok & ~mean_ok]])
 
-def _shift(labels: np.ndarray, dr: int, dc: int) -> np.ndarray:
-    """Return ``out`` with ``out[r, c] = labels[r + dr, c + dc]`` (0 off-grid)."""
-    out = np.zeros_like(labels)
-    nrows, ncols = labels.shape
-    dst_r = slice(max(0, -dr), nrows - max(0, dr))
-    src_r = slice(max(0, dr), nrows - max(0, -dr))
-    dst_c = slice(max(0, -dc), ncols - max(0, dc))
-    src_c = slice(max(0, dc), ncols - max(0, -dc))
-    out[dst_r, dst_c] = labels[src_r, src_c]
-    return out
+        changed[:] = False
+        changed[added_k] = True
 
 
 def _halo_cells(max_crown_radius: float, transform: rio.Affine) -> int:
