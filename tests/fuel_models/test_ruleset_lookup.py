@@ -12,10 +12,11 @@ What is pinned:
   fall in its inclusive ranges, and BPS matches its BPSRF or BPSRF is
   "any" (which accepts nodata too).
 - Among qualifying rules: exact BPSRF beats "any", then On beats Off,
-  then Wildcard "any" beats a specific value -- each dominating the next.
-- The requested column comes back, unmatched pixels are -9999 (numeric)
-  or None (text), ``matched`` marks which pixels matched, and n_unmatched
-  counts pixels, not distinct input combinations.
+  then Wildcard "any" beats a specific value -- each dominating the next --
+  and remaining ties go to the rule earliest in the table.
+- The requested column comes back with its type, unmatched pixels are
+  -9999 (numeric) or None (text), and ``matched`` marks which pixels
+  matched.
 - Bad inputs fail loudly rather than being cast to garbage integers.
 """
 
@@ -25,12 +26,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from fastfuels_core.fuel_models.ruleset_lookup import (
-    MatchResult,
-    RulesetIndex,
-    build_ruleset_index,
-    match_rulesets,
-)
+from fastfuels_core.fuel_models.ruleset_lookup import match_rulesets
 
 _RULE_DEFAULTS = {
     "Zone": 1,
@@ -61,41 +57,18 @@ def _match(
     height=110,
     bpsrf=11,
     column="FBFM13",
-) -> MatchResult:
+):
     """Match pixels against ``rules``; scalar inputs broadcast to the others."""
     inputs = np.broadcast_arrays(
         *(np.atleast_1d(np.asarray(v)) for v in (zone, evt, dist, cover, height, bpsrf))
     )
-    return match_rulesets(
-        *inputs, index=build_ruleset_index(rules), output_column=column
-    )
+    return match_rulesets(*inputs, rules=rules, output_column=column)
 
 
 def _fbfm13(rules: pd.DataFrame, **pixel) -> list:
     """FBFM13 for each pixel, as a plain list."""
-    return _match(rules, **pixel).output.tolist()
-
-
-class TestBuildRulesetIndex:
-    def test_groups_by_exact_key(self):
-        rules = _rules(
-            {"Zone": 1, "FBFM13": 1},
-            {"Zone": 1, "FBFM13": 2},
-            {"Zone": 2, "FBFM13": 3},
-        )
-        index = build_ruleset_index(rules)
-        assert isinstance(index, RulesetIndex)
-        assert set(index.groups) == {(1, 7000, 0), (2, 7000, 0)}
-        assert len(index.groups[(1, 7000, 0)].row_index) == 2
-        assert all(type(v) is int for key in index.groups for v in key)
-
-    def test_non_default_table_index_is_ignored(self):
-        # Rows are gathered by position, so a filtered or re-indexed table
-        # must still return the right row.
-        rules = _rules(
-            {"BPSRF": "11", "FBFM13": 8}, {"BPSRF": "12", "FBFM13": 9}
-        ).set_index(pd.Index([40, 7]))
-        assert _fbfm13(rules, bpsrf=[11, 12]) == [8, 9]
+    output, _ = _match(rules, **pixel)
+    return output.tolist()
 
 
 class TestQualification:
@@ -152,6 +125,15 @@ class TestTieBreak:
         )
         assert _fbfm13(rules, cover=150) == [2]
 
+    def test_equal_rank_goes_to_the_earliest_rule(self):
+        rules = _rules({"FBFM13": 1}, {"FBFM13": 2})
+        assert _fbfm13(rules) == [1]
+
+    def test_earliest_means_table_order_not_index_labels(self):
+        # A filtered or re-indexed table: position decides, not the labels.
+        rules = _rules({"FBFM13": 1}, {"FBFM13": 2}).set_index(pd.Index([40, 7]))
+        assert _fbfm13(rules) == [1]
+
 
 class TestOutputs:
     @pytest.mark.parametrize(
@@ -159,27 +141,33 @@ class TestOutputs:
     )
     def test_returns_the_requested_column(self, column, expected):
         rules = _rules({"FBFM13": 5, "FBFM40": 122, "FCCS": 49})
-        assert _match(rules, column=column).output.tolist() == [expected]
+        output, _ = _match(rules, column=column)
+        assert output.tolist() == [expected]
 
-    def test_matched_marks_matched_pixels(self):
-        rules = _rules({"Zone": 1, "FBFM13": 5})
-        result = _match(rules, zone=np.array([[1, 2], [2, 1]]))
-        np.testing.assert_array_equal(result.matched, [[True, False], [False, True]])
-
-    def test_keeps_input_shape(self):
-        rules = _rules({"Zone": 1, "FBFM13": 5})
-        result = _match(rules, zone=np.array([[1, 2, 1], [2, 1, 1]]))
-        np.testing.assert_array_equal(result.output, [[5, -9999, 5], [-9999, 5, 5]])
+    def test_keeps_input_shape_and_column_type(self):
+        rules = _rules({"Zone": 1, "FBFM13": 5}).astype({"FBFM13": np.int16})
+        output, matched = _match(rules, zone=np.array([[1, 2, 1], [2, 1, 1]]))
+        np.testing.assert_array_equal(output, [[5, -9999, 5], [-9999, 5, 5]])
+        assert output.dtype == np.int16
+        np.testing.assert_array_equal(
+            matched, [[True, False, True], [False, True, True]]
+        )
 
     def test_unmatched_text_column_is_none(self):
         rules = _rules({"FBFM13": 5, "Label": "grass"})
-        result = _match(rules, zone=[1, 2], column="Label")
-        assert result.output.tolist() == ["grass", None]
+        output, _ = _match(rules, zone=[1, 2], column="Label")
+        assert output.tolist() == ["grass", None]
 
-    def test_n_unmatched_counts_pixels_not_combinations(self):
-        # Three unmatched pixels share one input combination.
-        rules = _rules({"FBFM13": 5})
-        assert _match(rules, zone=[1, 2, 2, 2]).n_unmatched == 3
+    def test_matched_row_with_a_blank_value_stays_blank(self):
+        # Only unmatched pixels get -9999; a blank value isn't overwritten.
+        rules = _rules({"FBFM13": np.nan})
+        output, matched = _match(rules)
+        assert np.isnan(output[0])
+        assert matched.tolist() == [True]
+
+    def test_no_pixels(self):
+        output, matched = _match(_rules({"FBFM13": 5}), zone=np.array([], dtype=int))
+        assert output.shape == matched.shape == (0,)
 
     def test_unknown_output_column_raises(self):
         with pytest.raises(ValueError, match="FBFM99"):
@@ -198,14 +186,12 @@ class TestInputValidation:
         }
         inputs.update(overrides)
         return match_rulesets(
-            **inputs,
-            index=build_ruleset_index(_rules({"FBFM13": 5})),
-            output_column="FBFM13",
+            **inputs, rules=_rules({"FBFM13": 5}), output_column="FBFM13"
         )
 
     def test_whole_valued_floats_match_like_ints(self):
-        result = self._call(evt=np.array([7000.0, 7000.0]))
-        assert result.output.tolist() == [5, 5]
+        output, _ = self._call(evt=np.array([7000.0, 7000.0]))
+        assert output.tolist() == [5, 5]
 
     def test_nan_raises(self):
         with pytest.raises(ValueError, match="cover.*NaN"):
