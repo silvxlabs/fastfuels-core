@@ -3,160 +3,141 @@
 FDist codes are ``100*D_TYPE + 10*D_SEVERITY + D_TIME``, and FDist nodata
 is -9999.
 
-Converting LDist: three kinds of row produce a code of 0, and the tests
-keep them apart -- no disturbance (no warning), a real disturbance FDist
-can't encode (warning), and a real disturbance with a missing severity
-(no warning). A code missing from the attribute table entirely maps to
--9999 and is counted as unmapped.
+Converting LDist: ``LDIST_TO_FDIST`` covers every known DIST_TYPE with every
+known SEVERITY, including combinations no LANDFIRE table has had yet. Types
+that aren't a disturbance become 0 without a warning. Anything else without
+an FDist code -- Herbicide and the other unrepresentable types, an unknown
+type, a missing severity, or a code not in the attribute table -- becomes 0
+and is reported in the warnings.
 
 Building the FDist the rules use: only one-year-old codes (ending in 1,
 above 0) are kept or aged; everything else, including -9999 nodata, becomes
-0. In ``ldist_and_last_year_fdist"`` mode this year's disturbance wins
+0. In ``"ldist_and_last_year_fdist"`` mode this year's disturbance wins
 wherever there is one.
 
-LANDFIRE LDist codes used below: 2882 is Wildfire/Moderate (FDist 121), 2801
-is Development, 2971 is Herbicide, 0 is background and -9999 is
-Fill-NoData.
+The attribute table is built by hand. Codes from the LANDFIRE 2025 table
+keep their real values (2882 is Wildfire/Moderate, 2801 is Development,
+2971 is Herbicide); 9001-9003 are made up for cases it doesn't have.
 """
 
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from fastfuels_core.fuel_models.fdist_builder import (
     DISTURBANCE_MODES,
-    LDIST_TYPE_UNREPRESENTABLE,
-    FDistRaster,
-    FDistResult,
-    UnknownLdistSeverityError,
-    UnknownLdistTypeError,
+    LDIST_TO_FDIST,
     _age_fdist,  # noqa
-    _ldist_attribute_table,  # noqa
-    _ldist_codes_to_fdist_codes,  # noqa
-    _ldist_row_to_fdist,  # noqa
+    _ldist_raster_to_fdist_raster,  # noqa
     _this_years_fdist,  # noqa
-    ldist_raster_to_fdist_raster,
     build_fdist_raster,
 )
 
-WILDFIRE_MODERATE = 2882
+FILL_NODATA = -9999
+BACKGROUND = 0
+WATER = 2001
 DEVELOPMENT = 2801
+FIRE_UNBURNED_LOW = 2011  # FDist 111
+WILDFIRE_MODERATE = 2882  # FDist 121
 HERBICIDE = 2971
+WEATHER_MODERATE = 9001  # not in the 2025 table; FDist 421
+FIRE_NO_SEVERITY = 9002
+VOLCANO = 9003  # an unknown DIST_TYPE
 NOT_IN_TABLE = 1
 
+TABLE = pd.DataFrame(
+    [
+        (FILL_NODATA, "Fill-NoData", "Fill-NoData"),
+        (BACKGROUND, None, None),
+        (WATER, "Water", None),
+        (DEVELOPMENT, "Development", "Low"),
+        (FIRE_UNBURNED_LOW, "Fire", "Unburned/Low"),
+        (WILDFIRE_MODERATE, "Wildfire", "Moderate"),
+        (HERBICIDE, "Herbicide", "Low"),
+        (WEATHER_MODERATE, "Weather", "Moderate"),
+        (FIRE_NO_SEVERITY, "Fire", None),
+        (VOLCANO, "Volcano", "Low"),
+    ],
+    columns=["VALUE", "DIST_TYPE", "SEVERITY"],
+)
 
-class TestLdistRowToFdist:
+
+class TestLdistToFdist:
     @pytest.mark.parametrize(
-        "dist_type, severity, expected",
+        "pair, expected",
         [
-            ("Wildfire", "Moderate", 121),
-            ("Prescribed Fire", "Low", 111),
-            ("Fire", "High", 131),
-            ("Mechanical Add", "Moderate", 221),
-            ("Clearcut", "High", 331),
-            ("Weather", "Low", 411),
-            ("Insects/Disease", "Moderate", 521),
-            ("Mechanical Unknown", "Low", 611),
-            ("Mastication", "High", 731),
+            (("Wildfire", "Moderate"), 121),
+            (("Prescribed Fire", "Low"), 111),
+            (("Fire", "Unburned/Low"), 111),
+            (("Fire", "Increased Green"), 111),
+            (("Fire", "High"), 131),
+            (("Mechanical Add", "Moderate"), 221),
+            (("Clearcut", "Moderate"), 321),  # not in the 2025 table
+            (("Weather", "Moderate"), 421),  # not in the 2025 table
+            (("Insects/Disease", "High"), 531),
+            (("Mechanical Unknown", "Low"), 611),
+            (("Mastication", "High"), 731),
         ],
     )
-    def test_encodes_type_severity_and_time(self, dist_type, severity, expected):
-        assert _ldist_row_to_fdist(dist_type, severity) == FDistResult(expected)
-
-    @pytest.mark.parametrize("severity", ["Unburned/Low", "Increased Green"])
-    def test_fire_only_severities_map_to_low(self, severity):
-        assert _ldist_row_to_fdist("Fire", severity).fdist_code == 111
+    def test_codes(self, pair, expected):
+        assert LDIST_TO_FDIST[pair] == expected
 
     @pytest.mark.parametrize(
-        "dist_type, severity",
-        [
-            (None, None),
-            ("Water", None),
-            ("Development", "Low"),
-            ("Fill-NoData", "Fill-NoData"),
-        ],
+        "dist_type", ["Herbicide", "Insecticide", "Chemical", "Biological"]
     )
-    def test_no_disturbance_is_zero_without_warning(self, dist_type, severity):
-        assert _ldist_row_to_fdist(dist_type, severity) == FDistResult(0)
+    def test_unrepresentable_types_are_absent(self, dist_type):
+        assert not any(t == dist_type for t, _ in LDIST_TO_FDIST)
 
-    @pytest.mark.parametrize("dist_type", sorted(LDIST_TYPE_UNREPRESENTABLE))
-    def test_unrepresentable_is_zero_with_warning(self, dist_type):
-        result = _ldist_row_to_fdist(dist_type, "Low")
-        assert result.fdist_code == 0
-        assert dist_type in result.warning
-
-    @pytest.mark.parametrize("severity", [None, "Fill-NoData"])
-    def test_missing_severity_is_zero_without_warning(self, severity):
-        # Deliberate: no LDist row has this, so it isn't flagged.
-        assert _ldist_row_to_fdist("Fire", severity) == FDistResult(0)
-
-    def test_unknown_type_raises(self):
-        with pytest.raises(UnknownLdistTypeError, match="Volcano"):
-            _ldist_row_to_fdist("Volcano", "Low")
-
-    def test_unknown_severity_raises(self):
-        with pytest.raises(UnknownLdistSeverityError, match="Extreme"):
-            _ldist_row_to_fdist("Fire", "Extreme")
-
-    def test_unknown_errors_are_value_errors(self):
-        assert issubclass(UnknownLdistTypeError, ValueError)
-        assert issubclass(UnknownLdistSeverityError, ValueError)
-
-
-class TestLdistCodesToFdistCodes:
-    def test_every_row_of_the_packaged_table_converts(self):
-        # Raises if any DIST_TYPE or SEVERITY isn't catalogued.
-        codes, fdist, warnings = _ldist_codes_to_fdist_codes()
-        assert len(codes) == len(fdist) == 133
-        assert np.all(np.diff(codes) > 0)
-        assert len(warnings) == 8
-
-    def test_rows_with_missing_labels_are_no_disturbance(self):
-        # Code 0 (background) has no DIST_TYPE or SEVERITY in the table.
-        codes, fdist, _ = _ldist_codes_to_fdist_codes()
-        assert fdist[np.flatnonzero(codes == 0)[0]] == 0
-
-    def test_warnings_keyed_by_python_int_code(self):
-        _, _, warnings = _ldist_codes_to_fdist_codes()
-        assert HERBICIDE in warnings
-        assert all(type(code) is int for code in warnings)
-
-    def test_results_are_cached(self):
-        assert _ldist_attribute_table() is _ldist_attribute_table()
-        assert _ldist_codes_to_fdist_codes() is _ldist_codes_to_fdist_codes()
+    def test_every_code_is_one_year_old(self):
+        assert all(code % 10 == 1 for code in LDIST_TO_FDIST.values())
 
 
 class TestLdistRasterToFdistRaster:
-    def test_converts_known_codes_and_keeps_shape(self):
-        raster = np.array([[WILDFIRE_MODERATE, DEVELOPMENT], [0, WILDFIRE_MODERATE]])
-        result = ldist_raster_to_fdist_raster(raster)
-        assert isinstance(result, FDistRaster)
-        np.testing.assert_array_equal(result.fdist, [[121, 0], [0, 121]])
-        assert result.fdist.dtype == np.int32
-        assert result.n_unmapped == 0
-        assert result.warnings == {}
+    def test_converts_and_keeps_shape(self):
+        ldist = np.array([[WILDFIRE_MODERATE, DEVELOPMENT], [0, FIRE_UNBURNED_LOW]])
+        fdist, warnings = _ldist_raster_to_fdist_raster(ldist, TABLE)
+        np.testing.assert_array_equal(fdist, [[121, 0], [0, 111]])
+        assert fdist.dtype == np.int32
+        assert warnings == []
 
-    def test_fill_and_background_are_no_disturbance_not_unmapped(self):
-        result = ldist_raster_to_fdist_raster(np.array([-9999, 0]))
-        np.testing.assert_array_equal(result.fdist, [0, 0])
-        assert result.n_unmapped == 0
-
-    @pytest.mark.parametrize("missing", [-10000, NOT_IN_TABLE, 99999])
-    def test_code_missing_from_table_is_nodata_and_counted(self, missing):
-        # Below the smallest code, between codes, and above the largest.
-        result = ldist_raster_to_fdist_raster(
-            np.array([WILDFIRE_MODERATE, missing, missing])
+    def test_combination_new_to_landfire_converts(self):
+        fdist, warnings = _ldist_raster_to_fdist_raster(
+            np.array([WEATHER_MODERATE]), TABLE
         )
-        np.testing.assert_array_equal(result.fdist, [121, -9999, -9999])
-        assert result.n_unmapped == 2
+        assert fdist.tolist() == [421]
+        assert warnings == []
 
-    def test_warns_only_for_codes_present(self):
-        raster = np.array([[HERBICIDE, WILDFIRE_MODERATE], [0, HERBICIDE]])
-        result = ldist_raster_to_fdist_raster(raster)
-        assert list(result.warnings) == [HERBICIDE]
-        assert "Herbicide" in result.warnings[HERBICIDE]
-        np.testing.assert_array_equal(result.fdist, [[0, 121], [0, 0]])
+    @pytest.mark.parametrize("code", [FILL_NODATA, BACKGROUND, WATER, DEVELOPMENT])
+    def test_no_disturbance_is_zero_without_warning(self, code):
+        fdist, warnings = _ldist_raster_to_fdist_raster(np.array([code]), TABLE)
+        assert fdist.tolist() == [0]
+        assert warnings == []
+
+    @pytest.mark.parametrize(
+        "code", [HERBICIDE, FIRE_NO_SEVERITY, VOLCANO, NOT_IN_TABLE]
+    )
+    def test_no_fdist_code_is_zero_with_warning(self, code):
+        fdist, warnings = _ldist_raster_to_fdist_raster(
+            np.array([WILDFIRE_MODERATE, code, code]), TABLE
+        )
+        assert fdist.tolist() == [121, 0, 0]
+        assert warnings == [code]
+
+    def test_warnings_are_sorted_codes_present_in_the_raster(self):
+        ldist = np.array([[VOLCANO, HERBICIDE], [HERBICIDE, 0]])
+        _, warnings = _ldist_raster_to_fdist_raster(ldist, TABLE)
+        assert warnings == sorted([HERBICIDE, VOLCANO])
+        assert all(type(code) is int for code in warnings)
+
+    def test_blank_cells_read_from_a_file_count_as_missing(self):
+        # A table read from CSV has NaN, not None, in blank cells.
+        table = TABLE.astype({"DIST_TYPE": object, "SEVERITY": object}).fillna(np.nan)
+        ldist = np.array([BACKGROUND, WATER, FIRE_NO_SEVERITY])
+        fdist, warnings = _ldist_raster_to_fdist_raster(ldist, table)
+        assert fdist.tolist() == [0, 0, 0]
+        assert warnings == [FIRE_NO_SEVERITY]
 
 
 class TestAgeFdist:
@@ -191,35 +172,37 @@ class TestThisYearsFdist:
 class TestBuildFdistRaster:
     def test_ldist_mode_is_the_converted_ldist(self):
         ldist = np.array([[WILDFIRE_MODERATE, HERBICIDE], [0, NOT_IN_TABLE]])
-        result = build_fdist_raster("ldist", ldist=ldist)
-        expected = ldist_raster_to_fdist_raster(ldist)
-        np.testing.assert_array_equal(result.fdist, expected.fdist)
-        assert result.n_unmapped == expected.n_unmapped == 1
-        assert result.warnings == expected.warnings
+        fdist, warnings = build_fdist_raster(
+            "ldist", ldist=ldist, ldist_attribute_table=TABLE
+        )
+        np.testing.assert_array_equal(fdist, [[121, 0], [0, 0]])
+        assert warnings == [NOT_IN_TABLE, HERBICIDE]
 
     def test_ldist_and_last_year_fdist_mode(self):
         last_year = np.array([121, 131, 132, -9999, 0, 111, 0])
         ldist = np.array(
             [0, WILDFIRE_MODERATE, 0, WILDFIRE_MODERATE, 0, NOT_IN_TABLE, HERBICIDE]
         )
-        result = build_fdist_raster(
-            "ldist_and_last_year_fdist", ldist=ldist, fdist=last_year
+        fdist, warnings = build_fdist_raster(
+            "ldist_and_last_year_fdist",
+            ldist=ldist,
+            ldist_attribute_table=TABLE,
+            fdist=last_year,
         )
         # 121 aged; this year wins over 131; older 132 dropped; this year
-        # over nodata; nothing; unknown LDist falls back to aged 111;
-        # herbicide is no disturbance.
-        np.testing.assert_array_equal(result.fdist, [122, 121, 0, 121, 0, 112, 0])
-        assert result.n_unmapped == 1
-        assert list(result.warnings) == [HERBICIDE]
+        # over nodata; nothing; a code not in the table falls back to last
+        # year's aged 111; herbicide is no disturbance.
+        np.testing.assert_array_equal(fdist, [122, 121, 0, 121, 0, 112, 0])
+        assert warnings == [NOT_IN_TABLE, HERBICIDE]
 
     def test_fdist_mode_keeps_this_years_disturbances(self):
-        this_year = np.array([121, 122, 0, -9999, 331])
-        result = build_fdist_raster("fdist", fdist=this_year)
-        np.testing.assert_array_equal(result.fdist, [121, 0, 0, 0, 331])
-        assert result.n_unmapped == 0
-        assert result.warnings == {}
+        fdist, warnings = build_fdist_raster(
+            "fdist", fdist=np.array([121, 122, 0, -9999, 331])
+        )
+        np.testing.assert_array_equal(fdist, [121, 0, 0, 0, 331])
+        assert warnings == []
 
-    def test_modes_are_the_three_documented(self):
+    def test_modes(self):
         assert DISTURBANCE_MODES == ("ldist", "ldist_and_last_year_fdist", "fdist")
 
     def test_unknown_mode_raises(self):
@@ -230,11 +213,20 @@ class TestBuildFdistRaster:
         "mode, given, missing",
         [
             ("ldist", {}, "ldist"),
-            ("ldist_and_last_year_fdist", {"fdist": np.array([0])}, "ldist"),
-            ("ldist_and_last_year_fdist", {"ldist": np.array([0])}, "fdist"),
+            ("ldist", {"ldist": np.array([0])}, "ldist_attribute_table"),
+            (
+                "ldist_and_last_year_fdist",
+                {"fdist": np.array([0])},
+                "ldist",
+            ),
+            (
+                "ldist_and_last_year_fdist",
+                {"ldist": np.array([0]), "ldist_attribute_table": TABLE},
+                "fdist",
+            ),
             ("fdist", {}, "fdist"),
         ],
     )
     def test_missing_input_raises(self, mode, given, missing):
-        with pytest.raises(ValueError, match=f"needs {missing}"):
+        with pytest.raises(ValueError, match=f"needs .*{missing}"):
             build_fdist_raster(mode, **given)
