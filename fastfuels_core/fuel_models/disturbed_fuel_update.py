@@ -1,77 +1,34 @@
-"""Post-disturbance fuel models, updated the way LANDFIRE's LFTFC does.
+"""Update a fuel model grid for disturbances, the way LANDFIRE's LFTFC does.
 
-Chains the other ``fuel_models`` stages into one call:
+Pixels with a disturbance (an FDist code above 0) are matched to one
+Master_Rulesets row each (:mod:`ruleset_lookup`), and take that row's fuel
+model. Every other pixel -- undisturbed, or disturbed with no matching rule
+-- keeps last year's.
 
-1. The FDist raster for one of the disturbance modes (:mod:`fdist_builder`)
-2. Pixels with an FDist code above 0 are the disturbed ones
-3. Map zone for each cell (:mod:`lf_zone_lookup`)
-4. Match each disturbed pixel to one Master_Rulesets row
-   (:mod:`ruleset_lookup`)
-5. Everywhere without a new value -- undisturbed pixels, and disturbed
-   pixels with no matching rule -- keeps last year's fuel model.
-
-Every stage is usable on its own; this module only orders them.
+The caller supplies the FDist raster (see :mod:`fdist_builder`) and the map
+zone of each pixel.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import numpy as np
 import pandas as pd
-from affine import Affine
 
-from fastfuels_core.fuel_models.fdist_builder import build_fdist_raster
-from fastfuels_core.fuel_models.lf_zone_lookup import lookup_lf_zones
-from fastfuels_core.fuel_models.ruleset_lookup import RulesetIndex, match_rulesets
-
-
-@dataclass(frozen=True)
-class FuelModelUpdate:
-    """The outcome of :func:`update_fuel_models`.
-
-    Attributes
-    ----------
-    output : numpy.ndarray
-        The updated fuel model grid, same shape and dtype as last year's.
-    n_disturbed : int
-        Number of pixels with a disturbance FDist can encode, i.e. the
-        pixels the rules were applied to.
-    n_unmatched : int
-        Disturbed pixels with no matching Master_Rulesets row. They kept
-        last year's fuel model.
-    n_unmapped : int
-        Pixels whose LDist code isn't in the LDist attribute table. They
-        are treated as undisturbed and kept last year's fuel model. 0 when
-        no LDist was used.
-    warnings : dict of int to str
-        LDist code -> reason, for each code present that is a real
-        disturbance FDist can't encode (e.g. Herbicide). Those pixels are
-        treated as undisturbed. Empty when no LDist was used.
-    """
-
-    output: np.ndarray
-    n_disturbed: int
-    n_unmatched: int
-    n_unmapped: int
-    warnings: dict[int, str]
+from fastfuels_core.fuel_models.ruleset_lookup import match_rulesets
 
 
 def update_fuel_models(
     previous: np.ndarray,
     *,
     fuel_model: str,
-    disturbance: str,
-    ldist: np.ndarray | None = None,
-    fdist: np.ndarray | None = None,
+    dist: np.ndarray,
+    zone: np.ndarray,
     fvt: np.ndarray,
     fvc: np.ndarray,
     fvh: np.ndarray,
     bps: np.ndarray,
-    transform: Affine,
-    crs,
-    index: RulesetIndex,
-) -> FuelModelUpdate:
+    rules: pd.DataFrame,
+) -> tuple[np.ndarray, np.ndarray]:
     """Update last year's fuel model grid for this year's disturbances.
 
     Parameters
@@ -80,92 +37,64 @@ def update_fuel_models(
         Last year's grid for the fuel model being updated.
     fuel_model : str
         Its Master_Rulesets column name, e.g. ``"FBFM40"``.
-    disturbance : str
-        Which FDist the rules use, one of
-        :data:`~fastfuels_core.fuel_models.fdist_builder.DISTURBANCE_MODES`.
-        See :func:`~fastfuels_core.fuel_models.fdist_builder.build_fdist_raster`.
-    ldist : numpy.ndarray, optional
-        This year's LANDFIRE LDist. Needed for ``"ldist"`` and
-        ``"ldist_and_last_year_fdist"``.
-    fdist : numpy.ndarray, optional
-        LANDFIRE FDist: last year's for ``"ldist_and_last_year_fdist"``,
-        this year's for ``"fdist"``.
+    dist : numpy.ndarray
+        FDist code per pixel, e.g. from
+        :func:`~fastfuels_core.fuel_models.fdist_builder.build_fdist_raster`.
+        Pixels above 0 are the disturbed ones.
+    zone : numpy.ndarray
+        LANDFIRE map zone per pixel.
     fvt, fvc, fvh, bps : numpy.ndarray
         LANDFIRE FVT, FVC, FVH and BPS raster values.
-    transform : affine.Affine
-        The grid's transform, e.g. ``previous.rio.transform()``.
-    crs
-        The grid's CRS, e.g. ``previous.rio.crs``.
-    index : RulesetIndex
-        From :func:`~fastfuels_core.fuel_models.ruleset_lookup.build_ruleset_index`.
-        Build once, reuse across calls.
+    rules : pandas.DataFrame
+        The Master_Rulesets table.
 
     Returns
     -------
-    FuelModelUpdate
-        The updated grid, plus counts of disturbed, unmatched and unmapped
-        pixels and warnings for disturbances that couldn't be encoded.
+    output : numpy.ndarray
+        The updated grid, same shape and dtype as ``previous``.
+    updated : numpy.ndarray
+        Boolean raster: True where a pixel took a new value from a rule.
 
     Raises
     ------
     ValueError
-        ``fuel_model`` isn't a Master_Rulesets column, a grid's shape
-        differs from ``previous``'s, ``disturbance`` isn't a known mode, or
-        the input that mode needs wasn't given.
+        ``fuel_model`` isn't a Master_Rulesets column, or a grid's shape
+        differs from ``previous``'s.
 
     Notes
     -----
     Every grid must be on the same grid as ``previous``. A pixel keeps last
-    year's value wherever there is no new one: it wasn't disturbed, its
-    disturbance has no FDist encoding, it matched no rule, or its matched
-    row has no value for ``fuel_model``.
+    year's value wherever there is no new one: it wasn't disturbed, it
+    matched no rule, or its matched row has no value for ``fuel_model``.
+    The number of disturbed pixels that kept last year's value is
+    ``((dist > 0) & ~updated).sum()``.
     """
-    if fuel_model not in index.table.columns:
+    if fuel_model not in rules.columns:
         raise ValueError(f"Unknown fuel model column: {fuel_model!r}")
 
     shape = np.shape(previous)
-    grids = {
-        "ldist": ldist,
-        "fdist": fdist,
-        "fvt": fvt,
-        "fvc": fvc,
-        "fvh": fvh,
-        "bps": bps,
-    }
+    grids = {"dist": dist, "zone": zone, "fvt": fvt, "fvc": fvc, "fvh": fvh, "bps": bps}
     for name, grid in grids.items():
-        if grid is not None and np.shape(grid) != shape:
+        if np.shape(grid) != shape:
             raise ValueError(
                 f"{name} has shape {np.shape(grid)}, expected {shape} to match previous."
             )
 
-    dist = build_fdist_raster(disturbance, ldist=ldist, fdist=fdist)
-    disturbed = dist.fdist > 0
-    n_disturbed = int(np.count_nonzero(disturbed))
-    output = np.array(previous, copy=True)
-    n_unmatched = 0
-
-    # With nothing disturbed there is nothing to match, and the zone lookup
-    # can be skipped entirely.
-    if n_disturbed:
-        zone = lookup_lf_zones(transform, shape, crs)
-        result = match_rulesets(
-            zone=zone[disturbed],
-            evt=np.asarray(fvt)[disturbed],
-            dist=dist.fdist[disturbed],
-            cover=np.asarray(fvc)[disturbed],
-            height=np.asarray(fvh)[disturbed],
-            bpsrf=np.asarray(bps)[disturbed],
-            index=index,
-            output_column=fuel_model,
-        )
-        n_unmatched = result.n_unmatched
-        has_value = result.matched & ~pd.isna(result.output)
-        output[disturbed] = np.where(has_value, result.output, output[disturbed])
-
-    return FuelModelUpdate(
-        output=output,
-        n_disturbed=n_disturbed,
-        n_unmatched=n_unmatched,
-        n_unmapped=dist.n_unmapped,
-        warnings=dist.warnings,
+    disturbed = np.asarray(dist) > 0
+    new_values, matched = match_rulesets(
+        zone=np.asarray(zone)[disturbed],
+        evt=np.asarray(fvt)[disturbed],
+        dist=np.asarray(dist)[disturbed],
+        cover=np.asarray(fvc)[disturbed],
+        height=np.asarray(fvh)[disturbed],
+        bpsrf=np.asarray(bps)[disturbed],
+        rules=rules,
+        output_column=fuel_model,
     )
+    has_value = matched & ~pd.isna(new_values)
+
+    output = np.array(previous, copy=True)
+    output[disturbed] = np.where(has_value, new_values, output[disturbed])
+    updated = np.zeros(shape, dtype=bool)
+    updated[disturbed] = has_value
+    return output, updated

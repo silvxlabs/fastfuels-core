@@ -7,32 +7,26 @@ its new fuel model (e.g. FBFM13, FBFM40, FCCS). Every other cell keeps last
 year's.
 
 =============================== ============================================
-:mod:`disturbed_fuel_update`    last year's fuel model -> this year's
 :mod:`fdist_builder`            the FDist raster the rules use, per mode
-:mod:`lf_zone_lookup`           LANDFIRE map zone per cell
+:mod:`disturbed_fuel_update`    last year's fuel model -> this year's
 :mod:`ruleset_lookup`           match each cell to one Master_Rulesets row
 =============================== ============================================
 
-:func:`update_fuel_models` chains the other three and is the one entry
-point a caller needs, with :func:`build_ruleset_index` to prepare the rules
-once. Its ``disturbance`` argument is one of ``DISTURBANCE_MODES``. The
-individual stages are imported from their own modules.
+A caller builds the FDist raster with :func:`build_fdist_raster` (its
+``disturbance`` argument is one of ``DISTURBANCE_MODES``), then passes it,
+the map zones and the Master_Rulesets table to :func:`update_fuel_models`.
+The LDist attribute table, map zones and Master_Rulesets table are all
+supplied by the caller.
 """
 
-from fastfuels_core.fuel_models.fdist_builder import DISTURBANCE_MODES
-from fastfuels_core.fuel_models.disturbed_fuel_update import (
-    FuelModelUpdate,
-    update_fuel_models,
-)
-from fastfuels_core.fuel_models.ruleset_lookup import (
-    RulesetIndex,
-    build_ruleset_index,
+from fastfuels_core.fuel_models.disturbed_fuel_update import update_fuel_models
+from fastfuels_core.fuel_models.fdist_builder import (
+    DISTURBANCE_MODES,
+    build_fdist_raster,
 )
 
 __all__ = [
-    "update_fuel_models",
-    "FuelModelUpdate",
+    "build_fdist_raster",
     "DISTURBANCE_MODES",
-    "build_ruleset_index",
-    "RulesetIndex",
+    "update_fuel_models",
 ]
