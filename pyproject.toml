@@ -29,7 +29,6 @@ dependencies = [
     "numpy",
     "pandas",
     "pandera",
-    "pyarrow",
     "rasterio",
     "rioxarray",
     "scipy",
