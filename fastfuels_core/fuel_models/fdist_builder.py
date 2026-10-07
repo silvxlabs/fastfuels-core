@@ -7,15 +7,13 @@ Master_Rulesets' ``DIST`` column uses LANDFIRE's FDist codes:
     FDist code = 100 * D_TYPE + 10 * D_SEVERITY + D_TIME
 
 where D_TIME is the time since disturbance. :func:`build_fdist_raster`
-builds the FDist raster the rules are applied to, in one of three
+builds the FDist raster the rules are applied to, in one of two
 ``DISTURBANCE_MODES``:
 
-- ``"ldist"``: this year's LANDFIRE Limited Annual Disturbance (LDist),
-  converted to FDist with an LDist attribute table and ``LDIST_TO_FDIST``.
-- ``"ldist_and_last_year_fdist"``: this year's converted LDist, with last
-  year's one-year-old FDist disturbances aged to two years wherever this
-  year has none. For products updated two years at a time (FCCS).
-- ``"fdist"``: this year's disturbances from this year's LANDFIRE FDist.
+- ``"ldist_and_last_year_fdist"``: Last year's FDist with its one-year-old
+    disturbances aged to two years and with this year's LDist, converted to
+    FDist, replacing it wherever this year has a disturbance.
+- ``"fdist"``: this year's LANDFIRE FDist.
 
 Notes
 -----
@@ -43,7 +41,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-DISTURBANCE_MODES = ("ldist", "ldist_and_last_year_fdist", "fdist")
+DISTURBANCE_MODES = ("ldist_and_last_year_fdist", "fdist")
 
 # FDist D_TYPE for each LDist DIST_TYPE. Herbicide, Insecticide, Chemical and
 # Biological are deliberately absent (see the module notes).
@@ -157,36 +155,24 @@ def _ldist_raster_to_fdist_raster(
     )
 
 
-def _is_one_year_old(fdist: np.ndarray) -> np.ndarray:
-    """True where an FDist code is a disturbance with time since disturbance 1.
-
-    The ``> 0`` check matters: FDist nodata is -9999, and ``-9999 % 10 == 1``.
-    """
-    return (fdist > 0) & (fdist % 10 == 1)
-
-
 def _age_fdist(fdist: np.ndarray) -> np.ndarray:
-    """Last year's FDist a year later: ``...1`` codes become ``...2``, the rest 0.
+    """Last year's FDist a year later: ``...1`` codes become ``...2``.
 
-    Only last year's one-year-old disturbances carry forward; older ones,
-    undisturbed pixels and nodata become 0.
+    Other disturbance codes are kept as they are. Undisturbed pixels (0) and
+    nodata (-9999) become 0.
     """
     fdist = np.asarray(fdist)
-    return np.where(_is_one_year_old(fdist), fdist + 1, 0)
-
-
-def _this_years_fdist(fdist: np.ndarray) -> np.ndarray:
-    """This year's disturbances from an FDist: ``...1`` codes kept, the rest 0."""
-    fdist = np.asarray(fdist)
-    return np.where(_is_one_year_old(fdist), fdist, 0)
+    fdist = np.where(fdist > 0, fdist, 0)
+    one_year_old = fdist % 10 == 1
+    return np.where(one_year_old, fdist + 1, fdist)
 
 
 def build_fdist_raster(
     disturbance: str,
     *,
+    fdist: np.ndarray,
     ldist: np.ndarray | None = None,
     ldist_attribute_table: pd.DataFrame | None = None,
-    fdist: np.ndarray | None = None,
 ) -> tuple[np.ndarray, list[int]]:
     """The FDist raster the Master_Rulesets rules are applied to.
 
@@ -195,26 +181,20 @@ def build_fdist_raster(
     disturbance : str
         One of ``DISTURBANCE_MODES``:
 
-        ``"ldist"``
-            This year's LDist, converted to FDist.
         ``"ldist_and_last_year_fdist"``
-            This year's LDist, converted to FDist, wherever it's a
-            disturbance; everywhere else, last year's one-year-old
-            disturbances aged to two years. Used when a product (FCCS) is
-            updated two years at a time.
+            This year's LDist, converted to FDist, wherever it has a
+            disturbance; everywhere else, last year's FDist, with its
+            one-year-old disturbances aged to two years.
         ``"fdist"``
-            This year's disturbances (time since disturbance 1) from this
-            year's LANDFIRE FDist.
+            This year's LANDFIRE FDist.
+    fdist : numpy.ndarray
+        LANDFIRE FDist: last year's for ``"ldist_and_last_year_fdist"``,
+        this year's for ``"fdist"``.
     ldist : numpy.ndarray, optional
-        This year's LDist. Needed for ``"ldist"`` and
-        ``"ldist_and_last_year_fdist"``.
+        This year's LDist. Needed for ``"ldist_and_last_year_fdist"``.
     ldist_attribute_table : pandas.DataFrame, optional
         The LANDFIRE LDist attribute table, with ``VALUE``, ``DIST_TYPE`` and
         ``SEVERITY`` columns. Needed whenever ``ldist`` is.
-    fdist : numpy.ndarray, optional
-        LANDFIRE FDist. Needed for ``"ldist_and_last_year_fdist"``, where
-        it's last year's FDist, and for ``"fdist"``, where it's this
-        year's.
 
     Returns
     -------
@@ -241,15 +221,11 @@ def build_fdist_raster(
         raise ValueError(
             f"disturbance={disturbance!r} needs ldist and ldist_attribute_table."
         )
-    if disturbance != "ldist" and fdist is None:
-        raise ValueError(f"disturbance={disturbance!r} needs fdist.")
 
     if disturbance == "fdist":
-        return _this_years_fdist(fdist), []
+        return np.where(fdist > 0, fdist, 0), []
 
     converted, warnings = _ldist_raster_to_fdist_raster(ldist, ldist_attribute_table)
-    if disturbance == "ldist":
-        return converted, warnings
 
     # This year's disturbance wins; elsewhere, last year's carried forward.
     return np.where(converted > 0, converted, _age_fdist(fdist)), warnings

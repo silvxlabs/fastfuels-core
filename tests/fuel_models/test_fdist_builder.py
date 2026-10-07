@@ -10,10 +10,11 @@ an FDist code -- Herbicide and the other unrepresentable types, an unknown
 type, a missing severity, or a code not in the attribute table -- becomes 0
 and is reported in the warnings.
 
-Building the FDist the rules use: only one-year-old codes (ending in 1,
-above 0) are kept or aged; everything else, including -9999 nodata, becomes
-0. In ``"ldist_and_last_year_fdist"`` mode this year's disturbance wins
-wherever there is one.
+Building the FDist the rules use: in ``"ldist_and_last_year_fdist"`` mode,
+last year's one-year-old codes (ending in 1) are aged to two years, its
+other disturbances are kept, and this year's converted LDist wins wherever
+it has a disturbance. In ``"fdist"`` mode every disturbance is kept. In both,
+0 and -9999 nodata become 0.
 
 The attribute table is built by hand. Codes from the LANDFIRE 2025 table
 keep their real values (2882 is Wildfire/Moderate, 2801 is Development,
@@ -31,7 +32,6 @@ from fastfuels_core.fuel_models.fdist_builder import (
     LDIST_TO_FDIST,
     _age_fdist,  # noqa
     _ldist_raster_to_fdist_raster,  # noqa
-    _this_years_fdist,  # noqa
     build_fdist_raster,
 )
 
@@ -146,38 +146,21 @@ class TestAgeFdist:
         [
             (121, 122),  # one year old -> two
             (331, 332),
-            (122, 0),  # already older: dropped
-            (132, 0),
+            (122, 122),  # already older: kept
+            (132, 132),
             (0, 0),
             (-9999, 0),  # nodata, even though -9999 % 10 == 1
         ],
     )
-    def test_ages_only_one_year_old_codes(self, code, expected):
+    def test_ages_one_year_old_codes_and_keeps_the_rest(self, code, expected):
         assert _age_fdist(np.array([code])).tolist() == [expected]
 
     def test_keeps_shape(self):
         aged = _age_fdist(np.array([[121, 0], [-9999, 122]]))
-        np.testing.assert_array_equal(aged, [[122, 0], [0, 0]])
-
-
-class TestThisYearsFdist:
-    @pytest.mark.parametrize(
-        "code, expected",
-        [(121, 121), (331, 331), (122, 0), (0, 0), (-9999, 0)],
-    )
-    def test_keeps_only_one_year_old_codes(self, code, expected):
-        assert _this_years_fdist(np.array([code])).tolist() == [expected]
+        np.testing.assert_array_equal(aged, [[122, 0], [0, 122]])
 
 
 class TestBuildFdistRaster:
-    def test_ldist_mode_is_the_converted_ldist(self):
-        ldist = np.array([[WILDFIRE_MODERATE, HERBICIDE], [0, NOT_IN_TABLE]])
-        fdist, warnings = build_fdist_raster(
-            "ldist", ldist=ldist, ldist_attribute_table=TABLE
-        )
-        np.testing.assert_array_equal(fdist, [[121, 0], [0, 0]])
-        assert warnings == [NOT_IN_TABLE, HERBICIDE]
-
     def test_ldist_and_last_year_fdist_mode(self):
         last_year = np.array([121, 131, 132, -9999, 0, 111, 0])
         ldist = np.array(
@@ -185,48 +168,39 @@ class TestBuildFdistRaster:
         )
         fdist, warnings = build_fdist_raster(
             "ldist_and_last_year_fdist",
+            fdist=last_year,
             ldist=ldist,
             ldist_attribute_table=TABLE,
-            fdist=last_year,
         )
-        # 121 aged; this year wins over 131; older 132 dropped; this year
-        # over nodata; nothing; a code not in the table falls back to last
-        # year's aged 111; herbicide is no disturbance.
-        np.testing.assert_array_equal(fdist, [122, 121, 0, 121, 0, 112, 0])
+        # 121 aged; this year wins over 131; older 132 kept; this year over
+        # nodata; nothing; a code not in the table falls back to last year's
+        # aged 111; herbicide is no disturbance.
+        np.testing.assert_array_equal(fdist, [122, 121, 132, 121, 0, 112, 0])
         assert warnings == [NOT_IN_TABLE, HERBICIDE]
 
-    def test_fdist_mode_keeps_this_years_disturbances(self):
+    def test_fdist_mode_keeps_every_disturbance(self):
         fdist, warnings = build_fdist_raster(
             "fdist", fdist=np.array([121, 122, 0, -9999, 331])
         )
-        np.testing.assert_array_equal(fdist, [121, 0, 0, 0, 331])
+        np.testing.assert_array_equal(fdist, [121, 122, 0, 0, 331])
         assert warnings == []
 
     def test_modes(self):
-        assert DISTURBANCE_MODES == ("ldist", "ldist_and_last_year_fdist", "fdist")
+        assert DISTURBANCE_MODES == ("ldist_and_last_year_fdist", "fdist")
 
     def test_unknown_mode_raises(self):
         with pytest.raises(ValueError, match="'fdsit'"):
             build_fdist_raster("fdsit", fdist=np.array([0]))
 
     @pytest.mark.parametrize(
-        "mode, given, missing",
-        [
-            ("ldist", {}, "ldist"),
-            ("ldist", {"ldist": np.array([0])}, "ldist_attribute_table"),
-            (
-                "ldist_and_last_year_fdist",
-                {"fdist": np.array([0])},
-                "ldist",
-            ),
-            (
-                "ldist_and_last_year_fdist",
-                {"ldist": np.array([0]), "ldist_attribute_table": TABLE},
-                "fdist",
-            ),
-            ("fdist", {}, "fdist"),
-        ],
+        "given", [{}, {"ldist": np.array([0])}, {"ldist_attribute_table": TABLE}]
     )
-    def test_missing_input_raises(self, mode, given, missing):
-        with pytest.raises(ValueError, match=f"needs .*{missing}"):
-            build_fdist_raster(mode, **given)
+    def test_ldist_mode_without_its_ldist_inputs_raises(self, given):
+        with pytest.raises(ValueError, match="needs ldist and ldist_attribute_table"):
+            build_fdist_raster(
+                "ldist_and_last_year_fdist", fdist=np.array([0]), **given
+            )
+
+    def test_fdist_is_required(self):
+        with pytest.raises(TypeError, match="fdist"):
+            build_fdist_raster("fdist")
