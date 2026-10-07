@@ -108,3 +108,8 @@ class TestValidation:
     def test_shape_mismatch_raises(self, name):
         with pytest.raises(ValueError, match=f"{name} has shape"):
             _update([[0, 0]], **{name: np.zeros((1, 3), dtype=int)})
+
+    def test_non_numeric_fuel_model_raises(self):
+        rules = _rules({"DIST": 0, "FBFM40": "GS1"})
+        with pytest.raises(ValueError, match="isn't numeric"):
+            _update([[0]], rules=rules)

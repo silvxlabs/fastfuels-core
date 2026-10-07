@@ -36,7 +36,8 @@ def update_fuel_models(
     previous : numpy.ndarray
         Last year's grid for the fuel model being updated.
     fuel_model : str
-        Its Master_Rulesets column name, e.g. ``"FBFM40"``.
+        Its Master_Rulesets column of integer fuel model codes, e.g.
+        ``"FBFM40_code"``.
     dist : numpy.ndarray
         FDist code per pixel (0 for no disturbance), e.g. from
         :func:`~fastfuels_core.fuel_models.fdist_builder.build_fdist_raster`.
@@ -58,8 +59,8 @@ def update_fuel_models(
     Raises
     ------
     ValueError
-        ``fuel_model`` isn't a Master_Rulesets column, or a grid's shape
-        differs from ``previous``'s.
+        ``fuel_model`` isn't a numeric Master_Rulesets column, or a grid's
+        shape differs from ``previous``'s.
 
     Notes
     -----
@@ -68,6 +69,12 @@ def update_fuel_models(
     """
     if fuel_model not in rules.columns:
         raise ValueError(f"Unknown fuel model column: {fuel_model!r}")
+
+    if not pd.api.types.is_numeric_dtype(rules[fuel_model]):
+        raise ValueError(
+            f"Fuel model column {fuel_model!r} isn't numeric "
+            f"(dtype {rules[fuel_model].dtype}); use a column of integer codes."
+        )
 
     shape = np.shape(previous)
     grids = {"dist": dist, "zone": zone, "fvt": fvt, "fvc": fvc, "fvh": fvh, "bps": bps}
