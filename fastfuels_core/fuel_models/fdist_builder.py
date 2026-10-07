@@ -34,6 +34,16 @@ below, so a combination new to a later LANDFIRE table is still covered:
 - SEVERITY's "Unburned/Low" and "Increased Green" (fire only) are mapped
   to Low as an approximation.
 - D_TIME is always 1 for converted LDist, i.e. a disturbance this year.
+
+Aging last year's FDist has two known limits:
+
+- LANDFIRE may revise a past disturbance's severity between releases
+  (e.g. 121 one year, 132 the next). Aging last year's code can't
+  anticipate that.
+- Only one-year-old codes are aged (D_TIME 1 becomes 2). D_TIME 2 covers
+  2-5 years and 3 covers 6-10 years, so moving from 2 to 3 needs the year
+  of the disturbance, which the class alone doesn't give. Codes ending in
+  2 stay 2.
 """
 
 from __future__ import annotations
