@@ -18,8 +18,11 @@ from dask.callbacks import Callback
 from numpy.random import Generator
 import rasterio as rio
 from rasterio.transform import from_origin
+from scipy.ndimage import label as scipy_label
+from scipy.ndimage import maximum_filter
 
 import fastfuels_core.itd.local_maxima_filter as local_maxima_filter
+from fastfuels_core.itd.crown_segmentation import dalponte2016
 from fastfuels_core.itd.local_maxima_filter import (
     _extract_block_candidates,
     _union_find_merge,
@@ -1263,55 +1266,29 @@ def test_graph_contains_more_tasks_for_multi_chunk_inputs(
     assert graph_four > graph_one
 
 
-def test_plateau_coords_are_centroid_not_first_pixel():
-    """Pins a behavioral change from main: a flat plateau's coordinate is now
-    the centroid of all pixels in the plateau, not the first pixel (in
-    C-order) returned by scipy.ndimage.maximum_position.
-
-    Rationale: per-chunk labelling makes `maximum_position` order-dependent
-    (the "first pixel" depends on which chunk the plateau started in), so it
-    would produce different coordinates for different chunk layouts. The
-    centroid is order-invariant and satisfies the chunk-invariance tests.
-
-    This test would fail if someone reverted to maximum_position semantics
-    without also updating the chunk-invariance contract.
-    """
-    from scipy.ndimage import label as scipy_label, maximum_position
-
-    pixel_size = 1.0
+def test_plateau_treetop_is_pixel_nearest_centroid():
+    """A 4x4 plateau's centroid is the corner shared by its four middle
+    pixels; all four are equally near, so the tie goes to the smallest row,
+    then column."""
     chm_array = np.zeros((64, 64), dtype=np.float64)
-    # 4x4 flat plateau at rows 20..23, cols 30..33.
     chm_array[20:24, 30:34] = 20.0
 
     chm_da = xr.DataArray(chm_array, dims=["y", "x"])
     chm_da.rio.write_crs("EPSG:32611", inplace=True)
-    transform = from_origin(0, 0, pixel_size, pixel_size)
+    transform = from_origin(0, 0, 1.0, 1.0)
     chm_da.rio.write_transform(transform, inplace=True)
-
-    # main's behavior: maximum_position picks the first C-order pixel of the
-    # plateau — (row=20, col=30) — i.e. the top-left.
-    labeled, _ = scipy_label(chm_array == 20.0)
-    main_row, main_col = maximum_position(chm_array, labels=labeled, index=[1])[0]
-    main_x, main_y = rio.transform.xy(transform, [main_row], [main_col])
 
     result = fixed_window_filter(
         chm_da=chm_da,
         min_height=2.0,
-        spatial_resolution=pixel_size,
+        spatial_resolution=1.0,
         window_size_meters=3.0,
     ).compute()
 
+    expected_x, expected_y = rio.transform.xy(transform, [21], [31])
     assert len(result) == 1
-
-    # New behavior: centroid of the plateau (row=21.5, col=31.5).
-    expected_x, expected_y = rio.transform.xy(transform, [21.5], [31.5])
     assert result.iloc[0]["x"] == pytest.approx(expected_x[0])
     assert result.iloc[0]["y"] == pytest.approx(expected_y[0])
-
-    # The centroid coordinate differs from main's first-pixel coordinate,
-    # proving the divergence is real and not just a documentation claim.
-    assert result.iloc[0]["x"] != pytest.approx(main_x[0])
-    assert result.iloc[0]["y"] != pytest.approx(main_y[0])
 
 
 # ---------------------------------------------------------------------------
@@ -1429,7 +1406,7 @@ class TestBoundaryFlagClassification:
 
         chm_block = np.ones((10, 10), dtype=np.float64) * 20.0
 
-        _, bottom, right, top, left = _extract_block_candidates(
+        _, bottom, right, top, left, _ = _extract_block_candidates(
             chm_block,
             mask,
             row_offset=0,
@@ -1444,83 +1421,96 @@ class TestBoundaryFlagClassification:
         assert len(right) == 10
 
 
+def _boundary_inputs(
+    components: dict[int, list[tuple[int, int]]], height: float = 20.0
+) -> tuple[pd.DataFrame, list[pd.DataFrame]]:
+    """Boundary candidates and pixel tables for per-label (row, col) pixels."""
+    records = []
+    pixels = []
+    for lbl, cells in components.items():
+        rows = np.array([r for r, _ in cells])
+        cols = np.array([c for _, c in cells])
+        records.append(
+            {
+                "label": lbl,
+                "height": height,
+                "centroid_row_sum": float(rows.sum()),
+                "centroid_col_sum": float(cols.sum()),
+                "centroid_count": len(cells),
+                "row": -1,
+                "col": -1,
+                "is_boundary": True,
+            }
+        )
+        pixels.append(pd.DataFrame({"label": lbl, "row": rows, "col": cols}))
+    return pd.DataFrame(records), pixels
+
+
 class TestUnionFindMerge:
     """Unit tests for _union_find_merge."""
 
+    transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
+
+    def _expected_xy(self, row: int, col: int) -> tuple[float, float]:
+        xs, ys = rio.transform.xy(self.transform, [row], [col])
+        return xs[0], ys[0]
+
     def test_single_candidate_no_merges(self):
         """A single boundary candidate with no merge pairs passes through."""
-        candidates = pd.DataFrame(
-            {
-                "label": [1],
-                "height": [25.0],
-                "centroid_row_sum": [10.0],
-                "centroid_col_sum": [20.0],
-                "centroid_count": [1],
-                "is_boundary": [True],
-            }
-        )
-        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
-        result = _union_find_merge(candidates, [], transform)
+        candidates, pixels = _boundary_inputs({1: [(10, 20)]}, height=25.0)
+        result = _union_find_merge(candidates, [], pixels, self.transform)
 
         assert len(result) == 1
         assert list(result.columns) == ["x", "y", "height"]
         assert result.iloc[0]["height"] == 25.0
-
-    def test_merge_pair_combines_centroids(self):
-        """Two candidates linked by a merge pair: centroids are combined."""
-        candidates = pd.DataFrame(
-            {
-                "label": [1, 2],
-                "height": [20.0, 20.0],
-                "centroid_row_sum": [10.0, 14.0],
-                "centroid_col_sum": [40.0, 60.0],
-                "centroid_count": [4, 4],
-                "is_boundary": [True, True],
-            }
+        assert (result.iloc[0]["x"], result.iloc[0]["y"]) == pytest.approx(
+            self._expected_xy(10, 20)
         )
-        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
-        result = _union_find_merge(candidates, [(1, 2)], transform)
+
+    def test_merge_pair_places_treetop_on_merged_component(self):
+        """Two halves of a 2x2 plateau merge into one treetop at the top-left
+        of the four pixels equidistant from the centroid."""
+        candidates, pixels = _boundary_inputs(
+            {1: [(2, 10), (2, 11)], 2: [(3, 10), (3, 11)]}
+        )
+        result = _union_find_merge(candidates, [(1, 2)], pixels, self.transform)
 
         assert len(result) == 1
-        expected_x, expected_y = rio.transform.xy(transform, [3.0], [12.5])
-        assert result.iloc[0]["x"] == pytest.approx(expected_x[0])
-        assert result.iloc[0]["y"] == pytest.approx(expected_y[0])
+        assert (result.iloc[0]["x"], result.iloc[0]["y"]) == pytest.approx(
+            self._expected_xy(2, 10)
+        )
 
     def test_transitive_merge_three_labels(self):
         """Three labels linked transitively: A-B and B-C merges all three."""
-        candidates = pd.DataFrame(
-            {
-                "label": [1, 2, 3],
-                "height": [20.0, 20.0, 20.0],
-                "centroid_row_sum": [6.0, 10.0, 14.0],
-                "centroid_col_sum": [20.0, 30.0, 40.0],
-                "centroid_count": [2, 2, 2],
-                "is_boundary": [True, True, True],
-            }
-        )
-        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
-        result = _union_find_merge(candidates, [(1, 2), (2, 3)], transform)
+        candidates, pixels = _boundary_inputs({1: [(0, 5)], 2: [(1, 5)], 3: [(2, 5)]})
+        result = _union_find_merge(candidates, [(1, 2), (2, 3)], pixels, self.transform)
 
         assert len(result) == 1
-        # centroid: row=(6+10+14)/6=5.0, col=(20+30+40)/6=15.0
-        expected_x, expected_y = rio.transform.xy(transform, [5.0], [15.0])
-        assert result.iloc[0]["x"] == pytest.approx(expected_x[0])
-        assert result.iloc[0]["y"] == pytest.approx(expected_y[0])
+        assert (result.iloc[0]["x"], result.iloc[0]["y"]) == pytest.approx(
+            self._expected_xy(1, 5)
+        )
+
+    def test_merged_centroid_outside_component(self):
+        """A U-shaped component's centroid (6/7, 1) lies in the gap at (1, 1);
+        the treetop goes to the nearest member pixel, (0, 1)."""
+        candidates, pixels = _boundary_inputs(
+            {
+                1: [(0, 0), (0, 1), (0, 2)],
+                2: [(1, 0), (2, 0)],
+                3: [(1, 2), (2, 2)],
+            }
+        )
+        result = _union_find_merge(candidates, [(1, 2), (1, 3)], pixels, self.transform)
+
+        assert len(result) == 1
+        assert (result.iloc[0]["x"], result.iloc[0]["y"]) == pytest.approx(
+            self._expected_xy(0, 1)
+        )
 
     def test_independent_labels_stay_separate(self):
         """Two unlinked boundary labels are not merged."""
-        candidates = pd.DataFrame(
-            {
-                "label": [1, 2],
-                "height": [20.0, 15.0],
-                "centroid_row_sum": [5.0, 30.0],
-                "centroid_col_sum": [10.0, 50.0],
-                "centroid_count": [2, 5],
-                "is_boundary": [True, True],
-            }
-        )
-        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
-        result = _union_find_merge(candidates, [], transform)
+        candidates, pixels = _boundary_inputs({1: [(5, 10)], 2: [(30, 50)]})
+        result = _union_find_merge(candidates, [], pixels, self.transform)
 
         assert len(result) == 2
 
@@ -1533,11 +1523,12 @@ class TestUnionFindMerge:
                 "centroid_row_sum",
                 "centroid_col_sum",
                 "centroid_count",
+                "row",
+                "col",
                 "is_boundary",
             ]
         )
-        transform = from_origin(1000.0, 2000.0, 1.0, 1.0)
-        result = _union_find_merge(candidates, [], transform)
+        result = _union_find_merge(candidates, [], [], self.transform)
 
         assert len(result) == 0
         assert list(result.columns) == ["x", "y", "height"]
@@ -2029,3 +2020,196 @@ def test_maximum_filter_blocks_execute_in_parallel():
         for index, (start_a, end_a, _) in enumerate(records)
         for start_b, end_b, _ in records[index + 1 :]
     )
+
+
+# ---------------------------------------------------------------------------
+# Treetops are pixels of their own local maximum (#116)
+# ---------------------------------------------------------------------------
+
+
+def _geo_chm(values: np.ndarray, pixel_size: float = 1.0) -> xr.DataArray:
+    chm_da = xr.DataArray(np.asarray(values, dtype=np.float64), dims=["y", "x"])
+    chm_da.rio.write_crs("EPSG:32611", inplace=True)
+    chm_da.rio.write_transform(
+        from_origin(500000.0, 4000000.0, pixel_size, pixel_size), inplace=True
+    )
+    return chm_da
+
+
+def _cone_chm(pixel_size: float, height: float = 20.0) -> xr.DataArray:
+    """A cone sloping 1 m per metre, apex on the centre pixel of an odd grid."""
+    half = int(np.ceil(25.0 / pixel_size))
+    offsets = (np.arange(2 * half + 1) - half) * pixel_size
+    dist = np.hypot(offsets[:, None], offsets[None, :])
+    chm_da = _geo_chm(np.clip(height - dist, 0.0, None), pixel_size)
+    chm_da.attrs["apex"] = (half, half)
+    return chm_da
+
+
+def _ring_chm() -> xr.DataArray:
+    """A 10 m ring plateau, 2 pixels wide, around a 5 m one-pixel tree."""
+    yy, xx = np.mgrid[:31, :31]
+    dist = np.hypot(yy - 15, xx - 15)
+    chm = np.where((dist >= 3.5) & (dist < 5.5), 10.0, 0.0)
+    chm[15, 15] = 5.0
+    return _geo_chm(chm)
+
+
+def _stand_chm(seed: int, size: int = 96, n_trees: int = 40) -> xr.DataArray:
+    """Overlapping cones of 3-30 m rounded to whole metres, as on a CHM stored
+    as integers: crowns have flat, often non-convex, tops and skirts."""
+    rng = np.random.default_rng(seed)
+    yy, xx = np.mgrid[:size, :size]
+    chm = np.zeros((size, size))
+    for _ in range(n_trees):
+        r, c = rng.uniform(0, size, 2)
+        h = rng.uniform(3.0, 30.0)
+        slope = rng.uniform(0.8, 3.0)
+        np.maximum(chm, h - slope * np.hypot(yy - r, xx - c), out=chm)
+    return _geo_chm(np.round(np.clip(chm, 0.0, None)))
+
+
+def _detect(
+    filter_name: str, chm_da: xr.DataArray, pixel_size: float = 1.0
+) -> pd.DataFrame:
+    if filter_name == "fixed":
+        ddf = fixed_window_filter(
+            chm_da=chm_da,
+            min_height=2.0,
+            spatial_resolution=pixel_size,
+            window_size_meters=3 * pixel_size,
+        )
+    else:
+        ddf = variable_window_filter(
+            chm_da=chm_da, min_height=2.0, spatial_resolution=pixel_size
+        )
+    return ddf.compute()
+
+
+def _treetop_rows_cols(
+    chm_da: xr.DataArray, treetops: pd.DataFrame
+) -> tuple[np.ndarray, np.ndarray]:
+    rows, cols = rio.transform.rowcol(
+        chm_da.rio.transform(), treetops["x"].to_numpy(), treetops["y"].to_numpy()
+    )
+    return np.asarray(rows), np.asarray(cols)
+
+
+def _local_maxima_components(
+    chm: np.ndarray, filter_name: str, min_height: float = 2.0
+) -> tuple[np.ndarray, int]:
+    """Label the 4-connected local-maxima plateaus at 1 m, filter defaults."""
+    if filter_name == "fixed":
+        windows = np.full(chm.shape, 3)
+    else:
+        windows = (chm * 0.1 + 1.0).astype(int)
+        windows = np.maximum(np.where(windows % 2 == 0, windows + 1, windows), 3)
+    window_max = np.zeros_like(chm)
+    for w in np.unique(windows):
+        y, x = np.ogrid[-(w // 2) : w // 2 + 1, -(w // 2) : w // 2 + 1]
+        filtered = maximum_filter(chm, footprint=x * x + y * y <= (w // 2) ** 2)
+        window_max[windows == w] = filtered[windows == w]
+    return scipy_label((chm == window_max) & (chm > min_height))
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+@pytest.mark.parametrize("pixel_size", [0.5, 1.0, 2.0])
+@pytest.mark.parametrize("chunk", [None, 7, 16])
+def test_cone_has_one_treetop_at_apex(
+    filter_name: str, pixel_size: float, chunk: int | None
+):
+    chm_da = _cone_chm(pixel_size)
+    if chunk is not None:
+        chm_da = chm_da.chunk({"y": chunk, "x": chunk})
+
+    result = _detect(filter_name, chm_da, pixel_size)
+
+    apex_x, apex_y = rio.transform.xy(chm_da.rio.transform(), *chm_da.attrs["apex"])
+    assert len(result) == 1
+    assert result.iloc[0]["x"] == pytest.approx(apex_x)
+    assert result.iloc[0]["y"] == pytest.approx(apex_y)
+    assert result.iloc[0]["height"] == pytest.approx(20.0)
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+@pytest.mark.parametrize("chunk", [None, 4, 6])
+def test_ring_plateau_treetop_stays_on_ring(filter_name: str, chunk: int | None):
+    """A 10 m ring plateau around a 5 m tree has its centroid on the tree.
+    The ring's treetop goes on the ring pixel nearest that centroid: the eight
+    ring pixels at distance sqrt(13) tie, and the smallest row, then column,
+    wins: (12, 13)."""
+    chm_da = _ring_chm()
+    if chunk is not None:
+        chm_da = chm_da.chunk({"y": chunk, "x": chunk})
+
+    result = _detect(filter_name, chm_da)
+    rows, cols = _treetop_rows_cols(chm_da, result)
+
+    assert sorted(zip(rows.tolist(), cols.tolist(), result["height"])) == [
+        (12, 13, 10.0),
+        (15, 15, 5.0),
+    ]
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_one_treetop_inside_each_local_maximum(filter_name: str, seed: int):
+    """On a quantised stand every local-maximum plateau gets exactly one
+    treetop, on one of its own pixels, at that pixel's height."""
+    chm_da = _stand_chm(seed).chunk({"y": 20, "x": 20})
+    labels, n_components = _local_maxima_components(chm_da.values, filter_name)
+
+    result = _detect(filter_name, chm_da)
+    rows, cols = _treetop_rows_cols(chm_da, result)
+
+    assert len(result) == n_components
+    assert sorted(labels[rows, cols].tolist()) == list(range(1, n_components + 1))
+    np.testing.assert_array_equal(result["height"], chm_da.values[rows, cols])
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+@pytest.mark.parametrize("seed", [0, 1])
+def test_quantised_stand_is_chunk_invariant(filter_name: str, seed: int):
+    """Chunks smaller than a crown give the same treetops as no chunking."""
+    chm_da = _stand_chm(seed)
+    unchunked = _detect(filter_name, chm_da)
+    for size in (5, 8, 13, 40):
+        chunked = _detect(filter_name, chm_da.chunk({"y": size, "x": size}))
+        _assert_same_output(unchunked, chunked)
+    _assert_same_output(unchunked, _run_reference_1m(filter_name, chm_da))
+
+
+def _run_reference_1m(filter_name: str, chm_da: xr.DataArray) -> pd.DataFrame:
+    if filter_name == "fixed":
+        return fixed_window_filter_reference(chm_da, 2.0, 1.0, 3.0)
+    return variable_window_filter_reference(chm_da, 2.0, 1.0)
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+@pytest.mark.parametrize("chm_name", ["cone", "ring", "stand0", "stand1", "stand2"])
+def test_detected_treetops_never_share_a_cell(filter_name: str, chm_name: str):
+    """dalponte2016 rejects treetops sharing a CHM cell; detection output
+    must always segment."""
+    if chm_name == "cone":
+        chm_da = _cone_chm(1.0)
+    elif chm_name == "ring":
+        chm_da = _ring_chm()
+    else:
+        chm_da = _stand_chm(int(chm_name[-1]), n_trees=60)
+    chm_da = chm_da.chunk({"y": 24, "x": 24})
+    result = _detect(filter_name, chm_da)
+    rows, cols = _treetop_rows_cols(chm_da, result)
+
+    assert len(set(zip(rows.tolist(), cols.tolist()))) == len(result)
+    crowns = dalponte2016(chm_da, result, 2.0, None, 0.45, 0.55, 10.0).values
+    assert len(np.unique(crowns[crowns > 0])) == len(result)
+
+
+def test_variable_window_raises_supplied_windows_below_three():
+    """unique_windows of 1 is treated as 3, the smallest window used."""
+    chm_da = _cone_chm(2.0)
+    auto = _detect("variable", chm_da, 2.0)
+    supplied = variable_window_filter(
+        chm_da=chm_da, min_height=2.0, spatial_resolution=2.0, unique_windows=[1]
+    ).compute()
+    _assert_same_output(auto, supplied)
