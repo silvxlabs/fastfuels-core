@@ -81,8 +81,8 @@ def variable_window_filter_reference(
     chm_da: xr.DataArray,
     min_height: float,
     spatial_resolution: float,
-    crown_ratio: float = 0.10,
-    crown_offset: float = 1.0,
+    crown_ratio: float = 0.05,
+    crown_offset: float = 3.0,
 ) -> pd.DataFrame:
     chm = chm_da.values
     transform = chm_da.rio.transform()

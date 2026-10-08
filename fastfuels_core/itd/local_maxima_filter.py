@@ -570,8 +570,8 @@ def variable_window_filter(
     chm_da: xr.DataArray,
     min_height: float,
     spatial_resolution: float,
-    crown_ratio: float = 0.10,
-    crown_offset: float = 1.0,
+    crown_ratio: float = 0.05,
+    crown_offset: float = 3.0,
     unique_windows: Sequence[int] | None = None,
 ) -> dd.DataFrame:
     """Finds treetops from a CHM using a Variable Window Filter (VWF).
@@ -579,6 +579,9 @@ def variable_window_filter(
     Calculates the search window size dynamically using a linear allometric
     relationship: Crown_Width_m = (Height_m * crown_ratio) + crown_offset.
     The window is rounded up to an odd number of pixels, and is at least 3.
+    The defaults scored best, at 0.5 m and 1 m, of the linear forms and
+    Popescu & Wynne's quadratics tried on the NeonTreeEvaluation benchmark
+    (Weinstein et al. 2021, https://doi.org/10.1371/journal.pcbi.1009180).
 
     Each treetop is placed at the centre of a pixel of its local maximum: the
     pixel nearest the maximum's centroid, with ties going to the smallest row,
@@ -595,8 +598,8 @@ def variable_window_filter(
         min_height (float): Minimum height threshold in CHM units (meters).
         spatial_resolution (float): Pixel size of the CHM in meters (e.g., 0.5, 1.0).
         crown_ratio (float): The multiplier for tree height to estimate crown width.
-            Defaults to 0.10 (10%).
-        crown_offset (float): The base crown width in meters. Defaults to 1.0m.
+            Defaults to 0.05 (5%).
+        crown_offset (float): The base crown width in meters. Defaults to 3.0m.
         unique_windows: Optional caller-supplied list of odd, positive window
             sizes (in pixels) to iterate.  When provided, skips the internal
             ``da.unique`` scan over the CHM — this is the only synchronous
