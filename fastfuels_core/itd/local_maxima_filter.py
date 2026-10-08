@@ -69,11 +69,14 @@ def _prepare_chm(chm_da: xr.DataArray) -> tuple[da.Array, rio.Affine]:
 
 
 def _build_circular_footprint(window_size_pixels: int) -> np.ndarray:
-    y, x = np.ogrid[
-        -window_size_pixels // 2 : window_size_pixels // 2 + 1,
-        -window_size_pixels // 2 : window_size_pixels // 2 + 1,
-    ]
-    return x * x + y * y <= (window_size_pixels // 2) ** 2
+    """Return a ``w`` x ``w`` disc of diameter ``w`` pixels (``w`` odd).
+
+    Keeps every offset within ``w / 2`` of the centre, so ``w = 3`` is the
+    full 3 x 3 neighbourhood.
+    """
+    half = window_size_pixels // 2
+    y, x = np.ogrid[-half : half + 1, -half : half + 1]
+    return x * x + y * y <= (window_size_pixels / 2) ** 2
 
 
 def _chunked_maximum_filter(chm: da.Array, footprint: np.ndarray) -> da.Array:
@@ -137,8 +140,8 @@ def _extract_block_candidates(
     one candidate per connected component.  Labels are offset by
     ``label_offset`` to be globally unique across chunks.
 
-    Every search window is at least 3 pixels, so it contains a pixel's four
-    neighbours, and two 4-connected mask pixels must have the same CHM value.
+    Every search window is at least 3 pixels, so it contains a pixel's eight
+    neighbours, and two adjacent mask pixels must have the same CHM value.
     A component is still not necessarily convex: on a quantised CHM a plateau
     can be ring-shaped, and its centroid can fall outside it.  The treetop is
     therefore placed on the component pixel nearest the centroid (see

@@ -18,6 +18,12 @@ import xarray as xr
 from scipy.ndimage import label, maximum_filter
 
 
+def circular_footprint_reference(w: int) -> np.ndarray:
+    """Disc of diameter ``w`` pixels: offsets within ``w / 2``, ``w`` x ``w``."""
+    offsets = np.arange(w) - w // 2
+    return offsets[:, None] ** 2 + offsets[None, :] ** 2 <= (w / 2) ** 2
+
+
 def _extract_treetops_reference(
     chm: np.ndarray,
     chm_max_filtered: np.ndarray,
@@ -65,11 +71,7 @@ def fixed_window_filter_reference(
     if window_size_pixels < 3:
         window_size_pixels = 3
 
-    y, x = np.ogrid[
-        -window_size_pixels // 2 : window_size_pixels // 2 + 1,
-        -window_size_pixels // 2 : window_size_pixels // 2 + 1,
-    ]
-    footprint = x * x + y * y <= (window_size_pixels // 2) ** 2
+    footprint = circular_footprint_reference(window_size_pixels)
     chm_max_filtered = maximum_filter(chm, footprint=footprint)
 
     return _extract_treetops_reference(chm, chm_max_filtered, transform, min_height)
@@ -96,8 +98,7 @@ def variable_window_filter_reference(
     unique_windows = np.unique(required_windows)
 
     for w in unique_windows:
-        y, x = np.ogrid[-w // 2 : w // 2 + 1, -w // 2 : w // 2 + 1]
-        footprint = x * x + y * y <= (w // 2) ** 2
+        footprint = circular_footprint_reference(int(w))
         chm_max_filtered = maximum_filter(chm, footprint=footprint)
         mask = required_windows == w
         vw_max[mask] = chm_max_filtered[mask]
