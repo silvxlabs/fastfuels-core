@@ -1,10 +1,10 @@
 """Post-disturbance fuel models from LANDFIRE's Master_Rulesets.
 
 Replicates the rule-based crosswalk in LANDFIRE's Total Fuel Change Tool
-(LFTFC): each cell's map zone, vegetation type, disturbance, cover, height and
-biophysical setting select one Master_Rulesets row, which gives its new
-fuel model code (e.g. FBFM13, FBFM40, FCCS). A cell with no matching rule keeps
-last year's code.
+(LFTFC): each disturbed cell's map zone, vegetation, disturbance, cover,
+height and biophysical setting select one Master_Rulesets row, which gives
+its new fuel model (e.g. FBFM13, FBFM40, FCCS). Every other cell keeps last
+year's.
 
 =============================== ============================================
 :mod:`fdist_builder`            the FDist raster the rules use, per mode

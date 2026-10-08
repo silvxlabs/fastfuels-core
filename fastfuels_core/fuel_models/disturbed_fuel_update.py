@@ -1,9 +1,9 @@
-"""Update a fuel model grid from LANDFIRE's Master_Rulesets, the way LFTFC does.
+"""Update a fuel model grid for disturbances, the way LANDFIRE's LFTFC does.
 
-Every pixel is matched to one Master_Rulesets row (:mod:`ruleset_lookup`)
-by its map zone, vegetation type, FDist code, cover, height and biophysical
-setting, and takes that row's fuel model. A pixel with no matching rule
-keeps last year's fuel model code.
+Pixels with a disturbance (an FDist code above 0) are matched to one
+Master_Rulesets row each (:mod:`ruleset_lookup`), and take that row's fuel
+model. Every other pixel -- undisturbed, or disturbed with no matching rule
+-- keeps last year's.
 
 The caller supplies the FDist raster (see :mod:`fdist_builder`) and the map
 zone of each pixel.
@@ -29,7 +29,7 @@ def update_fuel_models(
     bps: np.ndarray,
     rules: pd.DataFrame,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Update last year's fuel model grid with Master_Rulesets.
+    """Update last year's fuel model grid for this year's disturbances.
 
     Parameters
     ----------
@@ -39,8 +39,9 @@ def update_fuel_models(
         Its Master_Rulesets column of integer fuel model codes, e.g.
         ``"FBFM40_code"``.
     dist : numpy.ndarray
-        FDist code per pixel (0 for no disturbance), e.g. from
+        FDist code per pixel, e.g. from
         :func:`~fastfuels_core.fuel_models.fdist_builder.build_fdist_raster`.
+        Pixels above 0 are the disturbed ones.
     zone : numpy.ndarray
         LANDFIRE map zone per pixel.
     fvt, fvc, fvh, bps : numpy.ndarray
@@ -52,9 +53,8 @@ def update_fuel_models(
     -------
     output : numpy.ndarray
         The updated grid, same shape and dtype as ``previous``.
-    matched : numpy.ndarray
-        Boolean raster: True where a pixel's value came from a rule, False
-        where it kept last year's.
+    updated : numpy.ndarray
+        Boolean raster: True where a pixel took a new value from a rule.
 
     Raises
     ------
@@ -65,7 +65,10 @@ def update_fuel_models(
     Notes
     -----
     Every grid must be on the same grid as ``previous``. A pixel keeps last
-    year's value only where it matched no rule.
+    year's value wherever there is no new one: it wasn't disturbed, it
+    matched no rule, or its matched row has no value for ``fuel_model``.
+    The number of disturbed pixels that kept last year's value is
+    ``((dist > 0) & ~updated).sum()``.
     """
     if fuel_model not in rules.columns:
         raise ValueError(f"Unknown fuel model column: {fuel_model!r}")
@@ -84,17 +87,21 @@ def update_fuel_models(
                 f"{name} has shape {np.shape(grid)}, expected {shape} to match previous."
             )
 
+    disturbed = np.asarray(dist) > 0
     new_values, matched = match_rulesets(
-        zone=zone,
-        evt=fvt,
-        dist=dist,
-        cover=fvc,
-        height=fvh,
-        bpsrf=bps,
+        zone=np.asarray(zone)[disturbed],
+        evt=np.asarray(fvt)[disturbed],
+        dist=np.asarray(dist)[disturbed],
+        cover=np.asarray(fvc)[disturbed],
+        height=np.asarray(fvh)[disturbed],
+        bpsrf=np.asarray(bps)[disturbed],
         rules=rules,
         output_column=fuel_model,
     )
+    has_value = matched & ~pd.isna(new_values)
 
     output = np.array(previous, copy=True)
-    output[matched] = new_values[matched]
-    return output, matched
+    output[disturbed] = np.where(has_value, new_values, output[disturbed])
+    updated = np.zeros(shape, dtype=bool)
+    updated[disturbed] = has_value
+    return output, updated

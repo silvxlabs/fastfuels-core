@@ -5,11 +5,11 @@ hand, so each expected fuel model is known. How FDist is built is tested in
 :mod:`tests.fuel_models.test_fdist_builder`; how rules are matched in
 :mod:`tests.fuel_models.test_ruleset_lookup`.
 
-What is pinned: every pixel, disturbed or not, takes its matched rule's
-value, and only a pixel with no matching rule keeps last year's.
-``matched`` marks exactly the pixels whose value came from a rule, last
-year's grid and its type are left as they were, and bad input fails
-before any work is done.
+What is pinned: only pixels with an FDist code above 0 are updated, and
+every pixel without a new value -- undisturbed, nodata, unmatched, or
+matched to a row with no value -- keeps last year's. ``updated`` marks
+exactly the pixels that took a new value, and bad input fails before any
+work is done.
 """
 
 from __future__ import annotations
@@ -38,15 +38,10 @@ def _rules(*rows: dict) -> pd.DataFrame:
     return pd.DataFrame([{**_RULE_DEFAULTS, **row} for row in rows])
 
 
-# A rule for undisturbed pixels (DIST 0) and one for each of two fires.
-ALL_DIST = _rules(
-    {"DIST": 0, "FBFM40": 101},
-    {"DIST": 121, "FBFM40": 165},
-    {"DIST": 111, "FBFM40": 142},
-)
+BOTH_FIRES = _rules({"DIST": 121, "FBFM40": 165}, {"DIST": 111, "FBFM40": 142})
 
 
-def _update(codes, previous=None, rules=ALL_DIST, **overrides):
+def _update(codes, previous=None, rules=BOTH_FIRES, **overrides):
     """update_fuel_models with zone 1 and FVT/FVC/FVH/BPS the default rules accept."""
     codes = np.asarray(codes)
     shape = codes.shape
@@ -67,24 +62,14 @@ def _update(codes, previous=None, rules=ALL_DIST, **overrides):
 
 
 class TestUpdate:
-    def test_every_pixel_takes_its_rule(self):
-        # Undisturbed pixels (DIST 0) are matched like disturbed ones.
-        output, matched = _update([[0, 121], [111, 0]])
-        np.testing.assert_array_equal(output, [[101, 165], [142, 101]])
-        assert matched.all()
-
-    def test_pixel_without_a_rule_keeps_last_year(self):
-        rules = _rules({"DIST": 121, "FBFM40": 165})  # no rule for 0 or 111
-        previous = np.array([[102, 102, 183]], dtype=np.int16)
-        output, matched = _update([[0, 121, 111]], previous, rules=rules)
-        np.testing.assert_array_equal(output, [[102, 165, 183]])
-        np.testing.assert_array_equal(matched, [[False, True, False]])
-
-    def test_zone_selects_the_rules(self):
-        # Only zone 1 has rules, so the zone-2 pixel keeps last year's value.
-        output, matched = _update([[121, 121]], zone=np.array([[1, 2]]))
-        np.testing.assert_array_equal(output, [[165, 100]])
-        np.testing.assert_array_equal(matched, [[True, False]])
+    def test_updates_disturbed_pixels_and_keeps_the_rest(self):
+        dist = [[0, 121, 0], [111, 0, -9999]]
+        previous = np.array([[102, 102, 102], [183, 183, 183]], dtype=np.int16)
+        output, updated = _update(dist, previous)
+        np.testing.assert_array_equal(output, [[102, 165, 102], [142, 183, 183]])
+        np.testing.assert_array_equal(
+            updated, [[False, True, False], [True, False, False]]
+        )
 
     def test_keeps_last_years_dtype_and_leaves_it_unchanged(self):
         previous = np.array([[100, 100]], dtype=np.int16)
@@ -92,17 +77,44 @@ class TestUpdate:
         assert output.dtype == np.int16
         np.testing.assert_array_equal(previous, [[100, 100]])
 
-    def test_fallback_count(self):
-        # Pixels that kept last year's value, as griddle would count them.
+    def test_disturbed_pixel_without_a_rule_keeps_last_year(self):
+        rules = _rules({"DIST": 121, "FBFM40": 165})  # no rule for FDist 111
+        output, updated = _update([[121, 111]], rules=rules)
+        np.testing.assert_array_equal(output, [[165, 100]])
+        np.testing.assert_array_equal(updated, [[True, False]])
+
+    def test_matched_row_without_a_value_keeps_last_year(self):
+        rules = _rules({"DIST": 121, "FBFM40": 165.0}, {"DIST": 111, "FBFM40": np.nan})
+        output, updated = _update([[121, 111]], rules=rules)
+        np.testing.assert_array_equal(output, [[165, 100]])
+        np.testing.assert_array_equal(updated, [[True, False]])
+
+    def test_zone_selects_the_rules(self):
+        # Only zone 1 has rules, so the zone-2 pixel keeps last year's value.
+        output, updated = _update([[121, 121]], zone=np.array([[1, 2]]))
+        np.testing.assert_array_equal(output, [[165, 100]])
+        np.testing.assert_array_equal(updated, [[True, False]])
+
+    def test_nothing_disturbed_returns_last_year(self):
+        previous = np.array([[102, 183, 188]], dtype=np.int16)
+        output, updated = _update([[0, 0, -9999]], previous)
+        np.testing.assert_array_equal(output, previous)
+        assert not updated.any()
+
+    def test_disturbed_but_not_updated_count(self):
+        # The count the docstring describes: disturbed pixels that kept last
+        # year's value.
         rules = _rules({"DIST": 121, "FBFM40": 165})
-        _, matched = _update([[121, 111, 111, 0]], rules=rules)
-        assert (~matched).sum() == 3
+        dist = np.array([[121, 111, 111, 0]])
+        _, updated = _update(dist, rules=rules)
+        assert ((dist > 0) & ~updated).sum() == 2
 
 
 class TestValidation:
-    def test_unknown_fuel_model_raises(self):
+    @pytest.mark.parametrize("dist", [[[121]], [[0]]])
+    def test_unknown_fuel_model_raises_even_when_nothing_is_disturbed(self, dist):
         with pytest.raises(ValueError, match="FBFM99"):
-            _update([[0]], fuel_model="FBFM99")
+            _update(dist, fuel_model="FBFM99")
 
     @pytest.mark.parametrize("name", ["dist", "zone", "fvt", "fvc", "fvh", "bps"])
     def test_shape_mismatch_raises(self, name):
