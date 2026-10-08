@@ -89,6 +89,21 @@ class TestUpdate:
         np.testing.assert_array_equal(output, [[165, 100]])
         np.testing.assert_array_equal(updated, [[True, False]])
 
+    def test_rule_with_no_fuel_model_keeps_last_year(self):
+        # 9999 in Master_Rulesets means "no fuel model code".
+        rules = _rules({"DIST": 121, "FBFM40": 165}, {"DIST": 111, "FBFM40": 9999})
+        output, updated = _update([[121, 111]], rules=rules)
+        np.testing.assert_array_equal(output, [[165, 100]])
+        np.testing.assert_array_equal(updated, [[True, False]])
+
+    def test_rule_with_a_missing_integer_code_keeps_last_year(self):
+        # Like FBFM40_code built with .astype("Int64"): missing codes are <NA>.
+        rules = _rules({"DIST": 121}, {"DIST": 111})
+        rules["FBFM40"] = pd.array([165, pd.NA], dtype="Int64")
+        output, updated = _update([[121, 111]], rules=rules)
+        np.testing.assert_array_equal(output, [[165, 100]])
+        np.testing.assert_array_equal(updated, [[True, False]])
+
     def test_zone_selects_the_rules(self):
         # Only zone 1 has rules, so the zone-2 pixel keeps last year's value.
         output, updated = _update([[121, 121]], zone=np.array([[1, 2]]))

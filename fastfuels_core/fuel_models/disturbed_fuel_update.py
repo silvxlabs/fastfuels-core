@@ -17,6 +17,10 @@ import pandas as pd
 from fastfuels_core.fuel_models.ruleset_lookup import match_rulesets
 
 
+# Master_Rulesets' value for "no fuel model code".
+_NO_FUEL_MODEL = 9999
+
+
 def update_fuel_models(
     previous: np.ndarray,
     *,
@@ -66,8 +70,8 @@ def update_fuel_models(
     -----
     Every grid must be on the same grid as ``previous``. A pixel keeps last
     year's value wherever there is no new one: it wasn't disturbed, it
-    matched no rule, or its matched row has no value for ``fuel_model``.
-    The number of disturbed pixels that kept last year's value is
+    matched no rule, or its rule's value is empty or 9999 (no fuel model
+    code). The number of disturbed pixels that kept last year's value is
     ``((dist > 0) & ~updated).sum()``.
     """
     if fuel_model not in rules.columns:
@@ -98,7 +102,12 @@ def update_fuel_models(
         rules=rules,
         output_column=fuel_model,
     )
-    has_value = matched & ~pd.isna(new_values)
+    # A matched rule may still have no value: an empty cell (<NA> when the
+    # code column is built with .astype("Int64")) or 9999. Those pixels keep
+    # last year's value. The checks go through pandas because <NA> != 9999
+    # is <NA>, which NumPy can't use as a mask.
+    values = pd.Series(new_values)
+    has_value = matched & (values.notna() & (values != _NO_FUEL_MODEL)).to_numpy()
 
     output = np.array(previous, copy=True)
     output[disturbed] = np.where(has_value, new_values, output[disturbed])
