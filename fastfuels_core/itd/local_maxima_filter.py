@@ -13,6 +13,7 @@ from scipy.ndimage import label as scipy_label
 from scipy.ndimage import maximum_filter as scipy_maximum_filter
 
 DEFAULT_CHUNK_SIZE = 2048
+_MIN_WINDOW_PIXELS = 3
 
 _CANDIDATE_COLUMNS = [
     "label",
@@ -20,6 +21,8 @@ _CANDIDATE_COLUMNS = [
     "centroid_row_sum",
     "centroid_col_sum",
     "centroid_count",
+    "row",
+    "col",
     "is_boundary",
 ]
 
@@ -38,9 +41,13 @@ _CANDIDATE_META = pd.DataFrame(
         "centroid_row_sum": pd.Series(dtype="float64"),
         "centroid_col_sum": pd.Series(dtype="float64"),
         "centroid_count": pd.Series(dtype="int64"),
+        "row": pd.Series(dtype="int64"),
+        "col": pd.Series(dtype="int64"),
         "is_boundary": pd.Series(dtype="bool"),
     }
 )
+
+_BOUNDARY_PIXEL_COLUMNS = ["label", "row", "col"]
 
 
 def _prepare_chm(chm_da: xr.DataArray) -> tuple[da.Array, rio.Affine]:
@@ -70,9 +77,13 @@ def _build_circular_footprint(window_size_pixels: int) -> np.ndarray:
 
 
 def _chunked_maximum_filter(chm: da.Array, footprint: np.ndarray) -> da.Array:
-    """Apply scipy maximum_filter chunk-wise via map_overlap."""
+    """Apply scipy maximum_filter chunk-wise via map_overlap.
+
+    ``map_overlap`` rechunks when a chunk is thinner than the overlap depth;
+    the result is rechunked back so its blocks line up with ``chm``'s.
+    """
     depth = {i: s // 2 for i, s in enumerate(footprint.shape)}
-    return da.map_overlap(
+    filtered = da.map_overlap(
         scipy_maximum_filter,
         chm,
         depth=depth,
@@ -80,6 +91,37 @@ def _chunked_maximum_filter(chm: da.Array, footprint: np.ndarray) -> da.Array:
         dtype=chm.dtype,
         footprint=footprint,
     )
+    return filtered.rechunk(chm.chunks)
+
+
+def _nearest_to_centroid(
+    labels: np.ndarray,
+    rows: np.ndarray,
+    cols: np.ndarray,
+    row_sum: np.ndarray,
+    col_sum: np.ndarray,
+    count: np.ndarray,
+) -> np.ndarray:
+    """Return the index of each label's pixel nearest its component centroid.
+
+    ``labels``, ``rows`` and ``cols`` describe one pixel each, in global pixel
+    indices; ``row_sum``, ``col_sum`` and ``count`` are the whole component's
+    totals, aligned with the pixels.  Ties go to the smallest row, then the
+    smallest column.  The result depends only on the component's pixels, so it
+    is the same for every chunk layout.
+
+    Returns indices into the pixel arrays, one per distinct label, in label
+    order.
+    """
+    # Distances are scaled by ``count`` so the centroid is never divided out.
+    dr = rows * count.astype(np.float64) - row_sum
+    dc = cols * count.astype(np.float64) - col_sum
+    d2 = dr * dr + dc * dc
+    order = np.lexsort((cols, rows, d2, labels))
+    sorted_labels = labels[order]
+    first = np.ones(len(order), dtype=bool)
+    first[1:] = sorted_labels[1:] != sorted_labels[:-1]
+    return order[first]
 
 
 def _extract_block_candidates(
@@ -88,17 +130,21 @@ def _extract_block_candidates(
     row_offset: int,
     col_offset: int,
     label_offset: int,
-) -> tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray, np.ndarray, pd.DataFrame]:
     """Per-chunk: label locally, extract candidates, and return boundary edges.
 
     Runs ``scipy.ndimage.label`` on the chunk's local-maxima mask and extracts
     one candidate per connected component.  Labels are offset by
     ``label_offset`` to be globally unique across chunks.
 
-    Within the local-maxima mask every pixel of a connected component has the
-    same CHM value (a pixel whose neighbor is higher cannot satisfy
-    ``chm == max_filter``).  The centroid of all component pixels is therefore
-    a natural, chunk-layout-invariant representative position.
+    Every search window is at least 3 pixels, so it contains a pixel's four
+    neighbours, and two 4-connected mask pixels must have the same CHM value.
+    A component is still not necessarily convex: on a quantised CHM a plateau
+    can be ring-shaped, and its centroid can fall outside it.  The treetop is
+    therefore placed on the component pixel nearest the centroid (see
+    ``_nearest_to_centroid``).  Interior components resolve that pixel here;
+    components touching the chunk edge also return their pixels so it can be
+    resolved after the cross-chunk merge.
 
     Returns a tuple of:
     - candidates DataFrame
@@ -106,72 +152,106 @@ def _extract_block_candidates(
     - right_edge_labels: 1-D array of labels along the last column
     - top_edge_labels: 1-D array of labels along the first row
     - left_edge_labels: 1-D array of labels along the first column
+    - boundary pixels DataFrame: ``label``, ``row``, ``col`` (global indices)
+      of every pixel in a component touching the chunk edge
 
     Edge label arrays are used by the boundary adjacency step to detect
     cross-chunk connections without materializing the full labeled array.
     """
-    labeled_block, _ = scipy_label(mask_block)
+    labeled_block, n_labels = scipy_label(mask_block)
 
-    # Offset labels to be globally unique
-    labeled_block[labeled_block > 0] += label_offset
+    def global_labels(local: np.ndarray) -> np.ndarray:
+        out = local.astype(np.int64)
+        out[out > 0] += label_offset
+        return out
 
     # Extract boundary edge labels for adjacency detection
-    bottom_edge = labeled_block[-1, :].copy()
-    right_edge = labeled_block[:, -1].copy()
-    top_edge = labeled_block[0, :].copy()
-    left_edge = labeled_block[:, 0].copy()
+    bottom_edge = global_labels(labeled_block[-1, :])
+    right_edge = global_labels(labeled_block[:, -1])
+    top_edge = global_labels(labeled_block[0, :])
+    left_edge = global_labels(labeled_block[:, 0])
 
-    unique_labels = np.unique(labeled_block)
-    unique_labels = unique_labels[unique_labels > 0]
-
-    if len(unique_labels) == 0:
-        empty = _CANDIDATE_META.copy()
-        return empty, bottom_edge, right_edge, top_edge, left_edge
-
-    nrows, ncols = labeled_block.shape
-    edge_mask = np.zeros((nrows, ncols), dtype=bool)
-    edge_mask[0, :] = True
-    edge_mask[-1, :] = True
-    edge_mask[:, 0] = True
-    edge_mask[:, -1] = True
-
-    records = []
-    for lbl in unique_labels:
-        mask = labeled_block == lbl
-        rows_arr, cols_arr = np.where(mask)
-        n_pixels = len(rows_arr)
-
-        records.append(
-            {
-                "label": int(lbl),
-                "height": float(chm_block[rows_arr[0], cols_arr[0]]),
-                "centroid_row_sum": float(np.sum(rows_arr)) + row_offset * n_pixels,
-                "centroid_col_sum": float(np.sum(cols_arr)) + col_offset * n_pixels,
-                "centroid_count": n_pixels,
-                "is_boundary": bool(np.any(mask & edge_mask)),
-            }
+    if n_labels == 0:
+        empty_pixels = pd.DataFrame(
+            {c: pd.Series(dtype="int64") for c in _BOUNDARY_PIXEL_COLUMNS}
+        )
+        return (
+            _CANDIDATE_META.copy(),
+            bottom_edge,
+            right_edge,
+            top_edge,
+            left_edge,
+            empty_pixels,
         )
 
-    df = pd.DataFrame(records, columns=_CANDIDATE_COLUMNS)
-    return df, bottom_edge, right_edge, top_edge, left_edge
+    flat = np.flatnonzero(labeled_block)
+    local_ids = labeled_block.ravel()[flat].astype(np.int64)
+    pixel_labels = local_ids + label_offset
+    local_rows, local_cols = np.divmod(flat, labeled_block.shape[1])
+    rows = local_rows + row_offset
+    cols = local_cols + col_offset
+
+    # Per-label totals, indexed by local label.
+    count = np.bincount(local_ids, minlength=n_labels + 1)
+    row_sum = np.bincount(local_ids, weights=rows, minlength=n_labels + 1)
+    col_sum = np.bincount(local_ids, weights=cols, minlength=n_labels + 1)
+
+    edges = np.concatenate([bottom_edge, right_edge, top_edge, left_edge])
+    is_boundary = np.zeros(n_labels + 1, dtype=bool)
+    is_boundary[edges[edges > 0] - label_offset] = True
+
+    nearest = _nearest_to_centroid(
+        pixel_labels,
+        rows,
+        cols,
+        row_sum[local_ids],
+        col_sum[local_ids],
+        count[local_ids],
+    )
+    ids = local_ids[nearest]
+    candidates = pd.DataFrame(
+        {
+            "label": pixel_labels[nearest],
+            "height": chm_block[local_rows[nearest], local_cols[nearest]].astype(
+                np.float64
+            ),
+            "centroid_row_sum": row_sum[ids],
+            "centroid_col_sum": col_sum[ids],
+            "centroid_count": count[ids],
+            "row": rows[nearest],
+            "col": cols[nearest],
+            "is_boundary": is_boundary[ids],
+        },
+        columns=_CANDIDATE_COLUMNS,
+    )
+
+    on_boundary = is_boundary[local_ids]
+    boundary_pixels = pd.DataFrame(
+        {
+            "label": pixel_labels[on_boundary],
+            "row": rows[on_boundary],
+            "col": cols[on_boundary],
+        }
+    )
+    return candidates, bottom_edge, right_edge, top_edge, left_edge, boundary_pixels
 
 
-def _candidates_to_spatial(
-    candidates: pd.DataFrame,
+def _pixels_to_spatial(
+    rows: np.ndarray,
+    cols: np.ndarray,
+    heights: np.ndarray,
     transform: rio.Affine,
 ) -> pd.DataFrame:
-    """Convert centroid pixel coordinates to x/y spatial coordinates."""
-    if candidates.empty:
+    """Convert treetop pixel indices to x/y pixel-centre coordinates."""
+    if len(rows) == 0:
         return _OUTPUT_META.copy()
 
-    rows = candidates["centroid_row_sum"].values / candidates["centroid_count"].values
-    cols = candidates["centroid_col_sum"].values / candidates["centroid_count"].values
     xs, ys = rio.transform.xy(transform, rows.tolist(), cols.tolist())
     return pd.DataFrame(
         {
             "x": np.asarray(xs, dtype=np.float64),
             "y": np.asarray(ys, dtype=np.float64),
-            "height": candidates["height"].values.astype(np.float64),
+            "height": np.asarray(heights, dtype=np.float64),
         }
     )
 
@@ -186,7 +266,12 @@ def _process_interior_candidates(
     deduplication is needed — convert and emit immediately.
     """
     interior = partition[~partition["is_boundary"]]
-    return _candidates_to_spatial(interior, transform)
+    return _pixels_to_spatial(
+        interior["row"].values,
+        interior["col"].values,
+        interior["height"].values,
+        transform,
+    )
 
 
 def _find_edge_merge_pairs(
@@ -209,10 +294,10 @@ def _find_edge_merge_pairs(
     return pairs
 
 
-_BOUNDARY_PIXEL_META = pd.DataFrame(
+_BOUNDARY_TREETOP_META = pd.DataFrame(
     {
-        "centroid_row": pd.Series(dtype="float64"),
-        "centroid_col": pd.Series(dtype="float64"),
+        "row": pd.Series(dtype="int64"),
+        "col": pd.Series(dtype="int64"),
         "height": pd.Series(dtype="float64"),
     }
 )
@@ -221,15 +306,18 @@ _BOUNDARY_PIXEL_META = pd.DataFrame(
 def _union_find_merge_to_pixels(
     all_candidates: pd.DataFrame,
     merge_pairs: list[tuple[int, int]],
+    boundary_pixels: Sequence[pd.DataFrame],
 ) -> pd.DataFrame:
-    """Merge boundary candidates and return pixel-space coordinates.
+    """Merge boundary candidates and return each treetop's pixel indices.
 
-    Same logic as ``_union_find_merge`` but defers the affine transform so
-    callers can first route each merged treetop to the chunk that owns its
-    centroid pixel.
+    Labels joined by ``merge_pairs`` form one component.  Its treetop is the
+    component pixel nearest the merged centroid, chosen from
+    ``boundary_pixels`` by the same rule as for interior components.  The
+    affine transform is deferred so callers can first route each merged
+    treetop to the chunk that owns its pixel.
     """
     if all_candidates.empty:
-        return _BOUNDARY_PIXEL_META.copy()
+        return _BOUNDARY_TREETOP_META.copy()
 
     parent: dict[int, int] = {}
 
@@ -247,29 +335,42 @@ def _union_find_merge_to_pixels(
     for a, b in merge_pairs:
         union(a, b)
 
-    all_candidates = all_candidates.copy()
-    all_candidates["group"] = all_candidates["label"].map(lambda lbl: find(lbl))
-
-    combined = (
-        all_candidates.groupby("group")
-        .agg(
+    labels = all_candidates["label"].to_numpy(dtype=np.int64)
+    groups = np.fromiter((find(int(lbl)) for lbl in labels), np.int64, len(labels))
+    totals = (
+        pd.DataFrame(
             {
-                "height": "first",
-                "centroid_row_sum": "sum",
-                "centroid_col_sum": "sum",
-                "centroid_count": "sum",
+                "group": groups,
+                "height": all_candidates["height"].to_numpy(dtype=np.float64),
+                "row_sum": all_candidates["centroid_row_sum"].to_numpy(),
+                "col_sum": all_candidates["centroid_col_sum"].to_numpy(),
+                "count": all_candidates["centroid_count"].to_numpy(),
             }
         )
-        .reset_index()
+        .groupby("group")
+        .agg({"height": "first", "row_sum": "sum", "col_sum": "sum", "count": "sum"})
     )
 
+    pixels = pd.concat([p for p in boundary_pixels if not p.empty], ignore_index=True)
+    group_of_label = pd.Series(groups, index=labels)
+    pixel_groups = group_of_label.reindex(pixels["label"].to_numpy()).to_numpy()
+    pixel_totals = totals.reindex(pixel_groups)
+    rows = pixels["row"].to_numpy(dtype=np.int64)
+    cols = pixels["col"].to_numpy(dtype=np.int64)
+
+    nearest = _nearest_to_centroid(
+        pixel_groups,
+        rows,
+        cols,
+        pixel_totals["row_sum"].to_numpy(),
+        pixel_totals["col_sum"].to_numpy(),
+        pixel_totals["count"].to_numpy(),
+    )
     return pd.DataFrame(
         {
-            "centroid_row": combined["centroid_row_sum"].values
-            / combined["centroid_count"].values,
-            "centroid_col": combined["centroid_col_sum"].values
-            / combined["centroid_count"].values,
-            "height": combined["height"].values.astype(np.float64),
+            "row": rows[nearest],
+            "col": cols[nearest],
+            "height": pixel_totals["height"].to_numpy()[nearest],
         }
     )
 
@@ -277,6 +378,7 @@ def _union_find_merge_to_pixels(
 def _union_find_merge(
     all_candidates: pd.DataFrame,
     merge_pairs: list[tuple[int, int]],
+    boundary_pixels: Sequence[pd.DataFrame],
     transform: rio.Affine,
 ) -> pd.DataFrame:
     """Merge boundary candidates and return spatial (x, y, height) output.
@@ -285,19 +387,9 @@ def _union_find_merge(
     transform.  Kept for direct callers/tests that want the merged spatial
     output in one step.
     """
-    pixels = _union_find_merge_to_pixels(all_candidates, merge_pairs)
-    if pixels.empty:
-        return _OUTPUT_META.copy()
-
-    xs, ys = rio.transform.xy(
-        transform, pixels["centroid_row"].tolist(), pixels["centroid_col"].tolist()
-    )
-    return pd.DataFrame(
-        {
-            "x": np.asarray(xs, dtype=np.float64),
-            "y": np.asarray(ys, dtype=np.float64),
-            "height": pixels["height"].values.astype(np.float64),
-        }
+    merged = _union_find_merge_to_pixels(all_candidates, merge_pairs, boundary_pixels)
+    return _pixels_to_spatial(
+        merged["row"].values, merged["col"].values, merged["height"].values, transform
     )
 
 
@@ -312,37 +404,17 @@ def _slice_boundary_to_chunk_and_transform(
     """Filter merged boundary treetops to a single chunk's pixel bounds.
 
     A merged treetop belongs to chunk ``[row_lo, row_hi) × [col_lo, col_hi)``
-    iff ``floor(centroid_row)`` falls in the row range and ``floor(centroid_col)``
-    falls in the column range.  This is a total assignment: each merged
-    treetop lands in exactly one chunk's partition.
+    iff its pixel lies in that range.  Each merged treetop therefore lands in
+    exactly one chunk's partition.
     """
-    if merged_boundary_pixels.empty:
-        return _OUTPUT_META.copy()
-
-    rows = merged_boundary_pixels["centroid_row"].values
-    cols = merged_boundary_pixels["centroid_col"].values
-    floor_rows = np.floor(rows).astype(int)
-    floor_cols = np.floor(cols).astype(int)
-    mask = (
-        (floor_rows >= row_lo)
-        & (floor_rows < row_hi)
-        & (floor_cols >= col_lo)
-        & (floor_cols < col_hi)
-    )
-    if not mask.any():
-        return _OUTPUT_META.copy()
-
-    sel_rows = rows[mask]
-    sel_cols = cols[mask]
-    heights = merged_boundary_pixels["height"].values[mask]
-
-    xs, ys = rio.transform.xy(transform, sel_rows.tolist(), sel_cols.tolist())
-    return pd.DataFrame(
-        {
-            "x": np.asarray(xs, dtype=np.float64),
-            "y": np.asarray(ys, dtype=np.float64),
-            "height": heights.astype(np.float64),
-        }
+    rows = merged_boundary_pixels["row"].values
+    cols = merged_boundary_pixels["col"].values
+    mask = (rows >= row_lo) & (rows < row_hi) & (cols >= col_lo) & (cols < col_hi)
+    return _pixels_to_spatial(
+        rows[mask],
+        cols[mask],
+        merged_boundary_pixels["height"].values[mask],
+        transform,
     )
 
 
@@ -406,7 +478,7 @@ def _extract_treetops(
         )
 
     # Step 4: boundary adjacency detection (lazy, operates on 1-D edge slices)
-    # Each chunk_result is (candidates_df, bottom, right, top, left).
+    # Each chunk_result is (candidates_df, bottom, right, top, left, pixels).
     # Compare adjacent chunks' shared edges to find merge pairs.
     edge_merge_delayed = []
     for i in range(n_row_chunks):
@@ -446,9 +518,10 @@ def _extract_treetops(
         _process_interior_candidates, transform, meta=_OUTPUT_META
     )
 
-    # Step 6b: boundary labels — collect and merge via union-find. Defer the
-    # transform so we can first route each merged treetop to the chunk that
-    # owns it.
+    # Step 6b: boundary labels — collect and merge via union-find, then place
+    # each merged treetop on its component pixel nearest the merged centroid.
+    # Defer the transform so we can first route each merged treetop to the
+    # chunk that owns it.
     boundary_candidates = candidates.map_partitions(
         lambda part: part[part["is_boundary"]], meta=_CANDIDATE_META
     )
@@ -462,7 +535,7 @@ def _extract_treetops(
     all_merge_pairs = dask.delayed(_collect_merge_pairs)(*edge_merge_delayed)
 
     merged_boundary_pixels = dask.delayed(_union_find_merge_to_pixels)(
-        boundary_candidates, all_merge_pairs
+        boundary_candidates, all_merge_pairs, [cr[5] for cr in chunk_results]
     )
 
     # Step 7: route each merged boundary treetop to the chunk that contains it,
@@ -502,6 +575,11 @@ def variable_window_filter(
 
     Calculates the search window size dynamically using a linear allometric
     relationship: Crown_Width_m = (Height_m * crown_ratio) + crown_offset.
+    The window is rounded up to an odd number of pixels, and is at least 3.
+
+    Each treetop is placed at the centre of a pixel of its local maximum: the
+    pixel nearest the maximum's centroid, with ties going to the smallest row,
+    then column. No two treetops share a CHM cell.
 
     Algorithm Validation & Scientific Context:
     - Popescu & Wynne (2004): Validated dynamic window sizing based on allometry.
@@ -524,7 +602,8 @@ def variable_window_filter(
             a superset of the window sizes that actually appear in the data;
             sizes missing from the list will silently produce no treetops at
             the corresponding pixels.  Extra sizes are safe but cost one
-            ``map_overlap`` pass each at compute time.
+            ``map_overlap`` pass each at compute time.  Sizes below 3 are
+            raised to 3, like the computed windows.
 
     Returns:
         dd.DataFrame: Detected treetops with explicit 'x', 'y', and 'height' columns.
@@ -547,6 +626,9 @@ def variable_window_filter(
     required_windows = da.where(
         required_windows % 2 == 0, required_windows + 1, required_windows
     )
+    # A 1-pixel window equals its own maximum, so every such pixel would enter
+    # the mask; 3 is the smallest window that compares a pixel to its neighbours.
+    required_windows = da.maximum(required_windows, _MIN_WINDOW_PIXELS)
 
     if windows_to_use is None:
         # Iterate only the window sizes that actually occur in the data. `da.unique`
@@ -558,9 +640,6 @@ def variable_window_filter(
     vw_max = da.zeros_like(chm)
     for w in windows_to_use:
         w = int(w)
-        if w <= 1:
-            vw_max = da.where(required_windows == w, chm, vw_max)
-            continue
         footprint = _build_circular_footprint(w)
         filtered = _chunked_maximum_filter(chm, footprint)
         vw_max = da.where(required_windows == w, filtered, vw_max)
@@ -585,7 +664,7 @@ def _validate_unique_windows(unique_windows: Sequence[int]) -> np.ndarray:
             raise ValueError(f"unique_windows entries must be >= 1, got {w}")
         if w % 2 == 0:
             raise ValueError(f"unique_windows entries must be odd, got {w}")
-        validated.append(w)
+        validated.append(max(w, _MIN_WINDOW_PIXELS))
     return np.asarray(sorted(set(validated)), dtype=int)
 
 
@@ -598,7 +677,7 @@ def fixed_window_filter(
     """Finds treetops from a CHM using a Fixed Window Local Maxima (FW-LM) filter.
 
     Applies a static, circular search window across the entire Canopy Height Model
-    to identify local maxima.
+    to identify local maxima.  Treetops are placed as in ``variable_window_filter``.
 
     Algorithm Validation & Scientific Context:
     - Wulder et al. (2000): The foundational paper validating the use of fixed-size
@@ -629,8 +708,8 @@ def fixed_window_filter(
     window_size_pixels = int(window_size_meters / spatial_resolution)
     if window_size_pixels % 2 == 0:
         window_size_pixels += 1
-    if window_size_pixels < 3:
-        window_size_pixels = 3
+    if window_size_pixels < _MIN_WINDOW_PIXELS:
+        window_size_pixels = _MIN_WINDOW_PIXELS
 
     footprint = _build_circular_footprint(window_size_pixels)
     chm_max_filtered = _chunked_maximum_filter(chm, footprint)

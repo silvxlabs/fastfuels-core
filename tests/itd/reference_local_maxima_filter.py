@@ -1,8 +1,12 @@
 """Reference (eager) implementation of local maxima filters for regression testing.
 
-This module is a frozen copy of the original scipy-based implementation prior to
-the dask-image refactor. It is used exclusively in tests to verify that the new
-chunked implementation produces identical results.
+A plain, unchunked scipy implementation of the same detection rules as the
+chunked filters.  It is used exclusively in tests to verify that the chunked
+implementation produces identical results.
+
+Each treetop is the pixel of its connected component nearest the component's
+centroid, ties going to the smallest row, then column.  Distances are compared
+exactly in integers.
 """
 
 from __future__ import annotations
@@ -26,17 +30,22 @@ def _extract_treetops_reference(
     if num_labels == 0:
         return pd.DataFrame(columns=["x", "y", "height"])
 
-    centroid_rows = []
-    centroid_cols = []
+    rows_out = []
+    cols_out = []
     heights = []
     for lbl in range(1, num_labels + 1):
-        mask = labeled_maxima == lbl
-        r_arr, c_arr = np.where(mask)
-        centroid_rows.append(float(np.mean(r_arr)))
-        centroid_cols.append(float(np.mean(c_arr)))
-        heights.append(float(chm[r_arr[0], c_arr[0]]))
+        r_arr, c_arr = np.where(labeled_maxima == lbl)
+        n = len(r_arr)
+        r_sum, c_sum = int(r_arr.sum()), int(c_arr.sum())
+        best = min(
+            zip(r_arr.tolist(), c_arr.tolist()),
+            key=lambda rc: ((rc[0] * n - r_sum) ** 2 + (rc[1] * n - c_sum) ** 2, rc),
+        )
+        rows_out.append(best[0])
+        cols_out.append(best[1])
+        heights.append(float(chm[best]))
 
-    xs, ys = rio.transform.xy(transform, centroid_rows, centroid_cols)
+    xs, ys = rio.transform.xy(transform, rows_out, cols_out)
 
     return pd.DataFrame({"x": xs, "y": ys, "height": heights})
 
@@ -81,16 +90,12 @@ def variable_window_filter_reference(
     required_windows = np.where(
         required_windows % 2 == 0, required_windows + 1, required_windows
     )
+    required_windows = np.maximum(required_windows, 3)
 
     vw_max = np.zeros_like(chm)
     unique_windows = np.unique(required_windows)
 
     for w in unique_windows:
-        if w <= 1:
-            mask = required_windows == w
-            vw_max[mask] = chm[mask]
-            continue
-
         y, x = np.ogrid[-w // 2 : w // 2 + 1, -w // 2 : w // 2 + 1]
         footprint = x * x + y * y <= (w // 2) ** 2
         chm_max_filtered = maximum_filter(chm, footprint=footprint)
