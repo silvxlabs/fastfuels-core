@@ -2367,7 +2367,7 @@ def _pixels_chm(pixels: list[tuple[int, int]], height: float, size: int = 64):
 
 
 @pytest.mark.parametrize("filter_name", ["fixed", "variable"])
-@pytest.mark.parametrize("chunk", [None, 16])
+@pytest.mark.parametrize("split", [None, "row", "col", "corner"])
 @pytest.mark.parametrize(
     "pixels, height",
     [
@@ -2378,11 +2378,18 @@ def _pixels_chm(pixels: list[tuple[int, int]], height: float, size: int = 64):
     ids=["diagonal", "anti_diagonal", "v_shape"],
 )
 def test_diagonal_equal_maxima_give_one_treetop(
-    filter_name: str, chunk: int | None, pixels: list, height: float
+    filter_name: str, split: str | None, pixels: list, height: float
 ):
+    """Chunked, the first diagonal step straddles a row edge, a column edge,
+    or the corner shared by four chunks."""
     chm_da = _pixels_chm(pixels, height)
-    if chunk is not None:
-        chm_da = chm_da.chunk({"y": chunk, "x": chunk})
+    if split is not None:
+        size = chm_da.shape[0]
+        row = min(r for r, _ in pixels) + 1
+        col = min(c for _, c in pixels) + 1
+        rows = (row, size - row) if split in ("row", "corner") else size
+        cols = (col, size - col) if split in ("col", "corner") else size
+        chm_da = chm_da.chunk({"y": rows, "x": cols})
 
     treetops = _detect(filter_name, chm_da)
 
@@ -2401,10 +2408,11 @@ def test_diagonal_equal_maxima_give_one_treetop(
         [(31, 31), (32, 32)],
         [(31, 32), (32, 31)],
         [(29, 29), (30, 30), (31, 31), (32, 32), (33, 33)],
-        [(30, 34), (31, 33), (32, 32), (33, 31), (34, 30)],
+        [(29, 34), (30, 33), (31, 32), (32, 31), (33, 30)],
         [(31, 10), (32, 11)],
         [(10, 31), (11, 32)],
         [(31, 11), (32, 10)],
+        [(10, 32), (11, 31)],
     ],
     ids=[
         "corner_diagonal",
@@ -2414,6 +2422,7 @@ def test_diagonal_equal_maxima_give_one_treetop(
         "row_edge",
         "col_edge",
         "row_edge_anti",
+        "col_edge_anti",
     ],
 )
 def test_diagonal_component_across_chunk_boundary_gives_one_treetop(
