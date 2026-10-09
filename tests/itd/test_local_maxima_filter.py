@@ -2102,7 +2102,7 @@ def _treetop_rows_cols(
 def _local_maxima_components(
     chm: np.ndarray, filter_name: str, min_height: float = 2.0
 ) -> tuple[np.ndarray, int]:
-    """Label the 4-connected local-maxima plateaus at 1 m, filter defaults."""
+    """Label the 8-connected local-maxima plateaus at 1 m, filter defaults."""
     if filter_name == "fixed":
         windows = np.full(chm.shape, 3)
     else:
@@ -2115,7 +2115,9 @@ def _local_maxima_components(
     for w in np.unique(windows):
         filtered = maximum_filter(chm, footprint=circular_footprint_reference(w))
         window_max[windows == w] = filtered[windows == w]
-    return scipy_label((chm == window_max) & (chm > min_height))
+    return scipy_label(
+        (chm == window_max) & (chm > min_height), structure=np.ones((3, 3))
+    )
 
 
 @pytest.mark.parametrize("filter_name", ["fixed", "variable"])
@@ -2350,3 +2352,93 @@ def test_chunked_maximum_filter_matches_in_array_maximum(
     ).compute()
 
     np.testing.assert_array_equal(result, expected)
+
+
+# ---------------------------------------------------------------------------
+# Diagonally touching maxima are one local maximum (#120)
+# ---------------------------------------------------------------------------
+
+
+def _pixels_chm(pixels: list[tuple[int, int]], height: float, size: int = 64):
+    chm = np.zeros((size, size))
+    for r, c in pixels:
+        chm[r, c] = height
+    return _geo_chm(chm)
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+@pytest.mark.parametrize("chunk", [None, 16])
+@pytest.mark.parametrize(
+    "pixels, height",
+    [
+        ([(20, 20), (21, 21)], 10.0),
+        ([(20, 21), (21, 20)], 10.0),
+        ([(30, 40), (31, 41), (30, 42)], 9.0),
+    ],
+    ids=["diagonal", "anti_diagonal", "v_shape"],
+)
+def test_diagonal_equal_maxima_give_one_treetop(
+    filter_name: str, chunk: int | None, pixels: list, height: float
+):
+    chm_da = _pixels_chm(pixels, height)
+    if chunk is not None:
+        chm_da = chm_da.chunk({"y": chunk, "x": chunk})
+
+    treetops = _detect(filter_name, chm_da)
+
+    assert len(treetops) == 1
+    rows, cols = _treetop_rows_cols(chm_da, treetops)
+    assert (int(rows[0]), int(cols[0])) in pixels
+    _assert_same_output(
+        treetops, _run_reference_1m(filter_name, _pixels_chm(pixels, height))
+    )
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+@pytest.mark.parametrize(
+    "pixels",
+    [
+        [(31, 31), (32, 32)],
+        [(31, 32), (32, 31)],
+        [(29, 29), (30, 30), (31, 31), (32, 32), (33, 33)],
+        [(30, 34), (31, 33), (32, 32), (33, 31), (34, 30)],
+        [(31, 10), (32, 11)],
+        [(10, 31), (11, 32)],
+        [(31, 11), (32, 10)],
+    ],
+    ids=[
+        "corner_diagonal",
+        "corner_anti_diagonal",
+        "corner_diagonal_line",
+        "corner_anti_diagonal_line",
+        "row_edge",
+        "col_edge",
+        "row_edge_anti",
+    ],
+)
+def test_diagonal_component_across_chunk_boundary_gives_one_treetop(
+    filter_name: str, pixels: list
+):
+    """With 32-pixel chunks the diagonal step crosses a chunk edge, or the
+    corner shared by four chunks, touching neither shared edge."""
+    chm_da = _pixels_chm(pixels, 12.0)
+    unchunked = _detect(filter_name, chm_da)
+    chunked = _detect(filter_name, chm_da.chunk({"y": 32, "x": 32}))
+
+    assert len(unchunked) == 1
+    _assert_same_output(chunked, unchunked)
+
+
+def test_find_edge_merge_pairs_joins_diagonal_neighbours():
+    bottom = np.array([0, 5, 0, 0, 8, 0])
+    top = np.array([0, 0, 7, 0, 0, 9])
+    assert sorted(local_maxima_filter._find_edge_merge_pairs(bottom, top)) == [
+        (5, 7),
+        (8, 9),
+    ]
+    assert (
+        local_maxima_filter._find_edge_merge_pairs(
+            np.array([3, 0, 0]), np.array([0, 0, 4])
+        )
+        == []
+    )

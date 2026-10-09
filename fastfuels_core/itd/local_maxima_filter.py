@@ -49,6 +49,9 @@ _CANDIDATE_META = pd.DataFrame(
 
 _BOUNDARY_PIXEL_COLUMNS = ["label", "row", "col"]
 
+# Local maxima are labelled 8-connected: pixels touching at a corner join.
+_CONNECTIVITY = np.ones((3, 3), dtype=bool)
+
 
 def _prepare_chm(chm_da: xr.DataArray) -> tuple[da.Array, rio.Affine]:
     """Return the CHM as a chunked dask array and its affine transform.
@@ -146,11 +149,12 @@ def _extract_block_candidates(
     """Per-chunk: label locally, extract candidates, and return boundary edges.
 
     Runs ``scipy.ndimage.label`` on the chunk's local-maxima mask and extracts
-    one candidate per connected component.  Labels are offset by
+    one candidate per 8-connected component.  Labels are offset by
     ``label_offset`` to be globally unique across chunks.
 
     Every search window is at least 3 pixels, so it contains a pixel's eight
-    neighbours, and two adjacent mask pixels must have the same CHM value.
+    neighbours, and two mask pixels touching at an edge or a corner must have
+    the same CHM value: a component is one plateau.
     A component is still not necessarily convex: on a quantised CHM a plateau
     can be ring-shaped, and its centroid can fall outside it.  The treetop is
     therefore placed on the component pixel nearest the centroid (see
@@ -170,7 +174,7 @@ def _extract_block_candidates(
     Edge label arrays are used by the boundary adjacency step to detect
     cross-chunk connections without materializing the full labeled array.
     """
-    labeled_block, n_labels = scipy_label(mask_block)
+    labeled_block, n_labels = scipy_label(mask_block, structure=_CONNECTIVITY)
 
     def global_labels(local: np.ndarray) -> np.ndarray:
         out = local.astype(np.int64)
@@ -290,20 +294,25 @@ def _find_edge_merge_pairs(
     bottom_edge: np.ndarray,
     top_edge: np.ndarray,
 ) -> list[tuple[int, int]]:
-    """Find label pairs that should merge across a horizontal chunk boundary.
+    """Find label pairs that should merge across a shared chunk edge.
 
-    ``bottom_edge`` is the last row of labels from the upper chunk;
-    ``top_edge`` is the first row of labels from the lower chunk.
-    Where both have a non-zero label at the same column, those two labels
-    are connected (part of the same plateau straddling the boundary).
+    ``bottom_edge`` is the last row (or column) of labels from one chunk;
+    ``top_edge`` is the first row (or column) of labels from the chunk across
+    the edge.  Two non-zero labels in the same or neighbouring positions are
+    8-connected (part of the same plateau straddling the edge).
     """
     pairs = []
-    connected = (bottom_edge > 0) & (top_edge > 0)
-    for idx in np.flatnonzero(connected):
-        a, b = int(bottom_edge[idx]), int(top_edge[idx])
-        if a != b:
-            pairs.append((a, b))
+    for shift in (-1, 0, 1):
+        a = bottom_edge[max(0, -shift) : len(bottom_edge) - max(0, shift)]
+        b = top_edge[max(0, shift) : len(top_edge) - max(0, -shift)]
+        connected = (a > 0) & (b > 0) & (a != b)
+        pairs.extend(zip(a[connected].tolist(), b[connected].tolist()))
     return pairs
+
+
+def _find_corner_merge_pairs(a: int, b: int) -> list[tuple[int, int]]:
+    """Merge two corner pixels of diagonally adjacent chunks if both are set."""
+    return [(int(a), int(b))] if a > 0 and b > 0 else []
 
 
 _BOUNDARY_TREETOP_META = pd.DataFrame(
@@ -514,6 +523,21 @@ def _extract_treetops(
                         chunk_results[k_right][4],  # left edge
                     )
                 )
+            # Diagonal adjacency across the corner shared by four chunks:
+            # bottom-right pixel ↔ the lower-right chunk's top-left pixel, and
+            # the right chunk's bottom-left pixel ↔ the lower chunk's top-right.
+            if i + 1 < n_row_chunks and j + 1 < n_col_chunks:
+                k_below = (i + 1) * n_col_chunks + j
+                edge_merge_delayed.append(
+                    dask.delayed(_find_corner_merge_pairs)(
+                        chunk_results[k][1][-1], chunk_results[k_below + 1][3][0]
+                    )
+                )
+                edge_merge_delayed.append(
+                    dask.delayed(_find_corner_merge_pairs)(
+                        chunk_results[k + 1][1][0], chunk_results[k_below][3][-1]
+                    )
+                )
 
     # Step 5: build candidate partitions from chunk results
     partitions = [
@@ -593,9 +617,11 @@ def variable_window_filter(
     https://doi.org/10.1371/journal.pcbi.1009180), the defaults scored best
     at 0.5 m and tied for best at 1 m.
 
-    Each treetop is placed at the centre of a pixel of its local maximum: the
-    pixel nearest the maximum's centroid, with ties going to the smallest row,
-    then column. No two treetops share a CHM cell.
+    A local maximum is an 8-connected set of equal-height pixels, each at
+    least as tall as every pixel in its window.  Each treetop is placed at the
+    centre of a pixel of its local maximum: the pixel nearest the maximum's
+    centroid, with ties going to the smallest row, then column.  No two
+    treetops share a CHM cell.
 
     Algorithm Validation & Scientific Context:
     - Popescu & Wynne (2004): Validated dynamic window sizing based on allometry.

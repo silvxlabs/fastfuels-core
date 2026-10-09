@@ -37,7 +37,7 @@ F1_FLOOR = 0.55
 DETECTION_RATIO_RANGE = (0.8, 1.2)
 # Exact (treetops, matched) at MIN_HEIGHT.  Detection is deterministic, so any
 # change here is a behaviour change: if it is intended, update these numbers.
-EXPECTED_COUNTS = {"lmf_3px": (6611, 3657), "vwf_defaults": (5831, 3467)}
+EXPECTED_COUNTS = {"lmf_3px": (6600, 3656), "vwf_defaults": (5822, 3466)}
 
 
 def load_fixture() -> dict[str, np.ndarray]:
