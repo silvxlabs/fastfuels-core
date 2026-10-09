@@ -4,7 +4,7 @@ A plain, unchunked scipy implementation of the same detection rules as the
 chunked filters.  It is used exclusively in tests to verify that the chunked
 implementation produces identical results.
 
-Each treetop is the pixel of its connected component nearest the component's
+Each treetop is the pixel of its 8-connected component nearest the component's
 centroid, ties going to the smallest row, then column.  Distances are compared
 exactly in integers.
 """
@@ -40,7 +40,7 @@ def _extract_treetops_reference(
     min_height: float,
 ) -> pd.DataFrame:
     local_maxima_mask = (chm == chm_max_filtered) & (chm > min_height)
-    labeled_maxima, num_labels = label(local_maxima_mask)
+    labeled_maxima, num_labels = label(local_maxima_mask, structure=np.ones((3, 3)))
 
     if num_labels == 0:
         return pd.DataFrame(columns=["x", "y", "height"])
