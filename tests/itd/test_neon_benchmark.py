@@ -3,10 +3,11 @@
 The fixture holds 187 1 m NEON CHM plots (40 m x 40 m) with hand-labelled
 crown boxes; see ``data/README.md``.  A treetop matches a crown if its pixel
 centre lies inside the crown's box; matching is one-to-one and maximises the
-number of matches.  The floors sit a little below the scores at the time of
-writing (VWF defaults F1 0.576, LMF 3 px F1 0.571) and well above those of the
-pre-#118 footprint and defaults (F1 0.517 and 0.506, with 1.7x and 1.8x as
-many treetops as crowns).
+number of matches.
+
+Two checks: an accuracy floor (F1 and treetops per crown), which the pre-#118
+footprint fails (F1 0.517 and 0.506, 1.7x and 1.8x as many treetops as
+crowns); and the exact treetop and match counts, which pin current behaviour.
 """
 
 from __future__ import annotations
@@ -34,6 +35,9 @@ PLOT_PIXELS = 40
 GAP_PIXELS = 10
 F1_FLOOR = 0.55
 DETECTION_RATIO_RANGE = (0.8, 1.2)
+# Exact (treetops, matched) at MIN_HEIGHT.  Detection is deterministic, so any
+# change here is a behaviour change: if it is intended, update these numbers.
+EXPECTED_COUNTS = {"lmf_3px": (6611, 3657), "vwf_defaults": (5831, 3467)}
 
 
 def load_fixture() -> dict[str, np.ndarray]:
@@ -128,11 +132,21 @@ def test_fixture_shape(neon: dict[str, np.ndarray]):
     assert (neon["chm"] >= 0).all()
 
 
-@pytest.mark.parametrize(
-    "detect", [detect_lmf, detect_vwf], ids=["lmf_3px", "vwf_defaults"]
-)
-def test_detection_meets_benchmark_floors(detect, neon: dict[str, np.ndarray]):
-    result = score(detect, neon)
+DETECTORS = {"lmf_3px": detect_lmf, "vwf_defaults": detect_vwf}
+
+
+@pytest.fixture(scope="module", params=list(DETECTORS))
+def scored(request, neon: dict[str, np.ndarray]) -> tuple[str, dict[str, float]]:
+    return request.param, score(DETECTORS[request.param], neon)
+
+
+def test_detection_meets_benchmark_floors(scored):
+    _, result = scored
     ratio = result["treetops"] / result["crowns"]
     assert result["f1"] >= F1_FLOOR, result
     assert DETECTION_RATIO_RANGE[0] <= ratio <= DETECTION_RATIO_RANGE[1], result
+
+
+def test_detection_counts_are_unchanged(scored):
+    name, result = scored
+    assert (result["treetops"], result["matched"]) == EXPECTED_COUNTS[name], result

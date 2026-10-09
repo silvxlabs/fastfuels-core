@@ -16,8 +16,11 @@ Usage (from the repository root; needs network access):
 # Core imports
 import http.client
 import io
+import os
 import sys
+import tempfile
 import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -42,18 +45,35 @@ DEFAULT_OUTPUT = (
 
 
 def fetch(request: urllib.request.Request, expected_bytes: int | None = None):
-    """Open ``request`` and return (final URL, headers, body), with retries."""
+    """Open ``request`` and return (final URL, headers, body).
+
+    Retries timeouts, 5xx, 429 and short reads; other 4xx errors are raised at
+    once.  With ``expected_bytes``, the request is a range request and the
+    server must answer 206 Partial Content.
+    """
     for attempt in range(MAX_ATTEMPTS):
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
+                if expected_bytes is not None and (
+                    response.status != 206 or "Content-Range" not in response.headers
+                ):
+                    raise RuntimeError(
+                        f"{response.url} ignored the Range header "
+                        f"(status {response.status})"
+                    )
                 body = response.read()
                 if expected_bytes is not None and len(body) != expected_bytes:
                     raise OSError(f"expected {expected_bytes} bytes, got {len(body)}")
                 return response.url, response.headers, body
+        except urllib.error.HTTPError as error:
+            if 400 <= error.code < 500 and error.code != 429:
+                raise
+            if attempt == MAX_ATTEMPTS - 1:
+                raise
         except (OSError, http.client.HTTPException):
             if attempt == MAX_ATTEMPTS - 1:
                 raise
-            time.sleep(min(2**attempt, 60))
+        time.sleep(min(2**attempt, 60))
 
 
 class HttpRangeFile(io.RawIOBase):
@@ -127,15 +147,20 @@ def main(output: Path):
         chms.append(chm)
         print(f"{plot}: {len(crowns)} crowns", flush=True)
 
+    # Write next to the output and rename, so a failed run leaves it intact.
     output.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        output,
-        chm=np.stack(chms),
-        boxes_dm=np.concatenate(boxes),
-        box_plot=np.concatenate(box_plot),
-        plot=np.array(plots),
-        site=np.array([site_code(p) for p in plots]),
-    )
+    with tempfile.NamedTemporaryFile(
+        dir=output.parent, suffix=".npz.tmp", delete=False
+    ) as tmp:
+        np.savez_compressed(
+            tmp,
+            chm=np.stack(chms),
+            boxes_dm=np.concatenate(boxes),
+            box_plot=np.concatenate(box_plot),
+            plot=np.array(plots),
+            site=np.array([site_code(p) for p in plots]),
+        )
+    os.replace(tmp.name, output)
     print(f"Wrote {output}: {len(plots)} plots, {sum(map(len, boxes))} crowns")
     print("Dropped (truncated CHM):", ", ".join(dropped) or "none")
 

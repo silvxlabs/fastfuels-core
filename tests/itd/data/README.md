@@ -10,8 +10,9 @@ and hyperspectral imagery from the National Ecological Observation Network.
 *PLOS Computational Biology* 17(7): e1009180.
 https://doi.org/10.1371/journal.pcbi.1009180
 
-Data: "Data for the NeonTreeEvaluation Benchmark", Zenodo record 5914554,
-version 0.2.2, https://zenodo.org/records/5914554. Licensed under
+Data: Weinstein, B., Marconi, S., & White, E. (2022). Data for the
+NeonTreeEvaluation Benchmark (Version 0.2.2) [Data set]. Zenodo.
+https://doi.org/10.5281/zenodo.5914554. Licensed under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 **What was extracted.** From `evaluation.zip`: the hand-labelled crown boxes
@@ -35,7 +36,8 @@ stored as float32. Nothing else is changed.
 | `site` | (187,) str | four-letter NEON site code |
 
 The boxes were drawn on 0.1 m RGB images of the same 40 m plots, so their
-pixel coordinates are decimetres. RGB and CHM corners agree within 0.5 m.
+pixel coordinates are decimetres. RGB and CHM corners differ by up to
+0.5 m, so F1 differences of about 0.003 at 1 m are within alignment noise.
 
 **Rebuilding.** `python scripts/build_neon_itd_fixture.py` downloads the
 annotations and CHMs from Zenodo with HTTP range requests, without
