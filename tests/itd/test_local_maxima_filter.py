@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List
 
 import dask
+import dask.array
 import dask.dataframe as dd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -2292,3 +2293,60 @@ def test_no_treetop_has_taller_pixel_in_its_footprint(filter_name: str, seed: in
         h = w // 2
         window = padded[r + 40 - h : r + 40 + h + 1, c + 40 - h : c + 40 + h + 1]
         assert window[circular_footprint_reference(w)].max() == chm[r, c]
+
+
+def _tiny_chm(shape: tuple[int, int], pixel_size: float) -> xr.DataArray:
+    """Two overlapping cones on a small grid; corners stay below 2 m."""
+    rows, cols = np.mgrid[: shape[0], : shape[1]] * pixel_size
+    peaks = [(0.3, 0.4, 18.0), (0.8, 3.0, 12.0)]
+    chm = np.zeros(shape)
+    for r, c, h in peaks:
+        np.maximum(chm, h - 4.0 * np.hypot(rows - r, cols - c), out=chm)
+    chm[0, 0] = max(chm[0, 0], 10.0)
+    return _geo_chm(np.round(np.clip(chm, 0.0, None), 1), pixel_size)
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+@pytest.mark.parametrize(
+    "shape, pixel_size",
+    [((1, 1), 0.1), ((3, 3), 0.1), ((12, 12), 0.1), ((2, 50), 0.1), ((50, 2), 0.5)],
+)
+@pytest.mark.parametrize("chunk", [None, 1, 5])
+def test_windows_larger_than_the_chm_match_reference(
+    filter_name: str, shape: tuple[int, int], pixel_size: float, chunk: int | None
+):
+    """Footprints wider than the whole CHM give the eager reference's result."""
+    chm_da = _tiny_chm(shape, pixel_size)
+    if filter_name == "fixed":
+        reference = fixed_window_filter_reference(chm_da, 2.0, pixel_size, 3.0)
+    else:
+        reference = variable_window_filter_reference(chm_da, 2.0, pixel_size)
+    if chunk is not None:
+        chm_da = chm_da.chunk({"y": chunk, "x": chunk})
+
+    if filter_name == "fixed":
+        result = fixed_window_filter(chm_da, 2.0, pixel_size, 3.0).compute()
+    else:
+        result = variable_window_filter(chm_da, 2.0, pixel_size).compute()
+
+    assert len(reference) > 0
+    _assert_same_output(result, reference.astype(np.float64))
+
+
+@pytest.mark.parametrize("shape", [(1, 1), (1, 7), (2, 50), (5, 3), (12, 12)])
+@pytest.mark.parametrize("w", [3, 5, 9, 31])
+@pytest.mark.parametrize("chunk", [1, 4, -1])
+def test_chunked_maximum_filter_matches_in_array_maximum(
+    shape: tuple[int, int], w: int, chunk: int
+):
+    """The chunked filter equals the maximum over the footprint's in-array
+    pixels, however large the footprint is relative to the array."""
+    chm = np.random.default_rng(w).random(shape)
+    footprint = _build_circular_footprint(w)
+    expected = maximum_filter(chm, footprint=footprint, mode="constant", cval=-np.inf)
+
+    result = local_maxima_filter._chunked_maximum_filter(
+        dask.array.from_array(chm, chunks=chunk), footprint
+    ).compute()
+
+    np.testing.assert_array_equal(result, expected)

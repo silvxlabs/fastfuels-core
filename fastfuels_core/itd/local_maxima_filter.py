@@ -82,14 +82,23 @@ def _build_circular_footprint(window_size_pixels: int) -> np.ndarray:
 def _chunked_maximum_filter(chm: da.Array, footprint: np.ndarray) -> da.Array:
     """Apply scipy maximum_filter chunk-wise via map_overlap.
 
+    The footprint is first cropped to offsets shorter than the array along
+    each axis.  A reflected neighbour is never farther from the pixel than
+    the offset that reached it, so the cropped disc has the same maximum, and
+    the halo never exceeds the array (``map_overlap`` cannot pad further, and
+    scipy's reflect mode misreads memory when a footprint is much larger
+    than the array).
+
     ``map_overlap`` rechunks when a chunk is thinner than the overlap depth;
     the result is rechunked back so its blocks line up with ``chm``'s.
     """
-    depth = {i: s // 2 for i, s in enumerate(footprint.shape)}
+    half = [min(s // 2, n - 1) for s, n in zip(footprint.shape, chm.shape)]
+    centre = [s // 2 for s in footprint.shape]
+    footprint = footprint[tuple(slice(c - h, c + h + 1) for c, h in zip(centre, half))]
     filtered = da.map_overlap(
         scipy_maximum_filter,
         chm,
-        depth=depth,
+        depth=dict(enumerate(half)),
         boundary="reflect",
         dtype=chm.dtype,
         footprint=footprint,
@@ -579,9 +588,10 @@ def variable_window_filter(
     Calculates the search window size dynamically using a linear allometric
     relationship: Crown_Width_m = (Height_m * crown_ratio) + crown_offset.
     The window is rounded up to an odd number of pixels, and is at least 3.
-    The defaults scored best, at 0.5 m and 1 m, of the linear forms and
-    Popescu & Wynne's quadratics tried on the NeonTreeEvaluation benchmark
-    (Weinstein et al. 2021, https://doi.org/10.1371/journal.pcbi.1009180).
+    Of the linear forms and Popescu & Wynne's quadratics tried on the
+    NeonTreeEvaluation benchmark (Weinstein et al. 2021,
+    https://doi.org/10.1371/journal.pcbi.1009180), the defaults scored best
+    at 0.5 m and tied for best at 1 m.
 
     Each treetop is placed at the centre of a pixel of its local maximum: the
     pixel nearest the maximum's centroid, with ties going to the smallest row,
