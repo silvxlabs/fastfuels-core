@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import os
 import threading
 import time
@@ -7,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List
 
 import dask
+import dask.array
 import dask.dataframe as dd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,12 +26,14 @@ from scipy.ndimage import maximum_filter
 import fastfuels_core.itd.local_maxima_filter as local_maxima_filter
 from fastfuels_core.itd.crown_segmentation import dalponte2016
 from fastfuels_core.itd.local_maxima_filter import (
+    _build_circular_footprint,
     _extract_block_candidates,
     _union_find_merge,
     fixed_window_filter,
     variable_window_filter,
 )
 from tests.itd.reference_local_maxima_filter import (
+    circular_footprint_reference,
     fixed_window_filter_reference,
     variable_window_filter_reference,
 )
@@ -2102,12 +2106,14 @@ def _local_maxima_components(
     if filter_name == "fixed":
         windows = np.full(chm.shape, 3)
     else:
-        windows = (chm * 0.1 + 1.0).astype(int)
+        defaults = inspect.signature(variable_window_filter).parameters
+        ratio = defaults["crown_ratio"].default
+        offset = defaults["crown_offset"].default
+        windows = (chm * ratio + offset).astype(int)
         windows = np.maximum(np.where(windows % 2 == 0, windows + 1, windows), 3)
     window_max = np.zeros_like(chm)
     for w in np.unique(windows):
-        y, x = np.ogrid[-(w // 2) : w // 2 + 1, -(w // 2) : w // 2 + 1]
-        filtered = maximum_filter(chm, footprint=x * x + y * y <= (w // 2) ** 2)
+        filtered = maximum_filter(chm, footprint=circular_footprint_reference(w))
         window_max[windows == w] = filtered[windows == w]
     return scipy_label((chm == window_max) & (chm > min_height))
 
@@ -2213,3 +2219,134 @@ def test_variable_window_raises_supplied_windows_below_three():
         chm_da=chm_da, min_height=2.0, spatial_resolution=2.0, unique_windows=[1]
     ).compute()
     _assert_same_output(auto, supplied)
+
+
+@pytest.mark.parametrize(
+    "w, n_pixels", [(1, 1), (3, 9), (5, 21), (7, 37), (9, 69), (21, 349)]
+)
+def test_circular_footprint_is_disc_of_diameter_w(w: int, n_pixels: int):
+    """The footprint is w x w and keeps every offset within w / 2."""
+    footprint = _build_circular_footprint(w)
+    assert footprint.shape == (w, w)
+    assert footprint.sum() == n_pixels
+    np.testing.assert_array_equal(footprint, circular_footprint_reference(w))
+    np.testing.assert_array_equal(footprint, footprint[::-1, ::-1])
+    np.testing.assert_array_equal(footprint, footprint.T)
+    # The full row and column through the centre are always inside.
+    assert footprint[w // 2].all() and footprint[:, w // 2].all()
+
+
+def test_three_pixel_footprint_is_full_square():
+    assert _build_circular_footprint(3).all()
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+@pytest.mark.parametrize("chunk", [None, 5, 6])
+def test_taller_diagonal_neighbour_suppresses_treetop(
+    filter_name: str, chunk: int | None
+):
+    """A pixel whose only taller neighbour is diagonal is not a treetop with
+    a 3-pixel window."""
+    chm_array = np.zeros((11, 11), dtype=np.float64)
+    chm_array[5, 5] = 10.0
+    chm_array[6, 6] = 11.0
+    chm_da = xr.DataArray(chm_array, dims=["y", "x"])
+    chm_da.rio.write_crs("EPSG:32611", inplace=True)
+    chm_da.rio.write_transform(from_origin(0, 11, 1.0, 1.0), inplace=True)
+    if chunk is not None:
+        chm_da = chm_da.chunk({"y": chunk, "x": chunk})
+
+    if filter_name == "fixed":
+        result = fixed_window_filter(chm_da, 2.0, 1.0, 3.0).compute()
+    else:
+        # Windows of 3 pixels at both heights.
+        result = variable_window_filter(
+            chm_da, 2.0, 1.0, crown_ratio=0.0, crown_offset=3.0
+        ).compute()
+    rows, cols = _treetop_rows_cols(chm_da, result)
+
+    assert list(zip(rows.tolist(), cols.tolist())) == [(6, 6)]
+    assert result["height"].tolist() == [11.0]
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_no_treetop_has_taller_pixel_in_its_footprint(filter_name: str, seed: int):
+    """Every treetop is the maximum of its full circular footprint."""
+    chm_da = _stand_chm(seed).chunk({"y": 20, "x": 20})
+    chm = chm_da.values
+    result = _detect(filter_name, chm_da)
+    rows, cols = _treetop_rows_cols(chm_da, result)
+
+    if filter_name == "fixed":
+        windows = np.full(len(rows), 3)
+    else:
+        defaults = inspect.signature(variable_window_filter).parameters
+        width = (
+            chm[rows, cols] * defaults["crown_ratio"].default
+            + defaults["crown_offset"].default
+        )
+        windows = width.astype(int)
+        windows = np.maximum(np.where(windows % 2 == 0, windows + 1, windows), 3)
+    padded = np.pad(chm, 40, constant_values=0.0)
+    for r, c, w in zip(rows, cols, windows):
+        h = w // 2
+        window = padded[r + 40 - h : r + 40 + h + 1, c + 40 - h : c + 40 + h + 1]
+        assert window[circular_footprint_reference(w)].max() == chm[r, c]
+
+
+def _tiny_chm(shape: tuple[int, int], pixel_size: float) -> xr.DataArray:
+    """Two overlapping cones on a small grid; corners stay below 2 m."""
+    rows, cols = np.mgrid[: shape[0], : shape[1]] * pixel_size
+    peaks = [(0.3, 0.4, 18.0), (0.8, 3.0, 12.0)]
+    chm = np.zeros(shape)
+    for r, c, h in peaks:
+        np.maximum(chm, h - 4.0 * np.hypot(rows - r, cols - c), out=chm)
+    chm[0, 0] = max(chm[0, 0], 10.0)
+    return _geo_chm(np.round(np.clip(chm, 0.0, None), 1), pixel_size)
+
+
+@pytest.mark.parametrize("filter_name", ["fixed", "variable"])
+@pytest.mark.parametrize(
+    "shape, pixel_size",
+    [((1, 1), 0.1), ((3, 3), 0.1), ((12, 12), 0.1), ((2, 50), 0.1), ((50, 2), 0.5)],
+)
+@pytest.mark.parametrize("chunk", [None, 1, 5])
+def test_windows_larger_than_the_chm_match_reference(
+    filter_name: str, shape: tuple[int, int], pixel_size: float, chunk: int | None
+):
+    """Footprints wider than the whole CHM give the eager reference's result."""
+    chm_da = _tiny_chm(shape, pixel_size)
+    if filter_name == "fixed":
+        reference = fixed_window_filter_reference(chm_da, 2.0, pixel_size, 3.0)
+    else:
+        reference = variable_window_filter_reference(chm_da, 2.0, pixel_size)
+    if chunk is not None:
+        chm_da = chm_da.chunk({"y": chunk, "x": chunk})
+
+    if filter_name == "fixed":
+        result = fixed_window_filter(chm_da, 2.0, pixel_size, 3.0).compute()
+    else:
+        result = variable_window_filter(chm_da, 2.0, pixel_size).compute()
+
+    assert len(reference) > 0
+    _assert_same_output(result, reference.astype(np.float64))
+
+
+@pytest.mark.parametrize("shape", [(1, 1), (1, 7), (2, 50), (5, 3), (12, 12)])
+@pytest.mark.parametrize("w", [3, 5, 9, 31])
+@pytest.mark.parametrize("chunk", [1, 4, -1])
+def test_chunked_maximum_filter_matches_in_array_maximum(
+    shape: tuple[int, int], w: int, chunk: int
+):
+    """The chunked filter equals the maximum over the footprint's in-array
+    pixels, however large the footprint is relative to the array."""
+    chm = np.random.default_rng(w).random(shape)
+    footprint = _build_circular_footprint(w)
+    expected = maximum_filter(chm, footprint=footprint, mode="constant", cval=-np.inf)
+
+    result = local_maxima_filter._chunked_maximum_filter(
+        dask.array.from_array(chm, chunks=chunk), footprint
+    ).compute()
+
+    np.testing.assert_array_equal(result, expected)

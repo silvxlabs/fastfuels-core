@@ -69,24 +69,36 @@ def _prepare_chm(chm_da: xr.DataArray) -> tuple[da.Array, rio.Affine]:
 
 
 def _build_circular_footprint(window_size_pixels: int) -> np.ndarray:
-    y, x = np.ogrid[
-        -window_size_pixels // 2 : window_size_pixels // 2 + 1,
-        -window_size_pixels // 2 : window_size_pixels // 2 + 1,
-    ]
-    return x * x + y * y <= (window_size_pixels // 2) ** 2
+    """Return a ``w`` x ``w`` disc of diameter ``w`` pixels (``w`` odd).
+
+    Keeps every offset within ``w / 2`` of the centre, so ``w = 3`` is the
+    full 3 x 3 neighbourhood.
+    """
+    half = window_size_pixels // 2
+    y, x = np.ogrid[-half : half + 1, -half : half + 1]
+    return x * x + y * y <= (window_size_pixels / 2) ** 2
 
 
 def _chunked_maximum_filter(chm: da.Array, footprint: np.ndarray) -> da.Array:
     """Apply scipy maximum_filter chunk-wise via map_overlap.
 
+    The footprint is first cropped to offsets shorter than the array along
+    each axis.  A reflected neighbour is never farther from the pixel than
+    the offset that reached it, so the cropped disc has the same maximum, and
+    the halo never exceeds the array (``map_overlap`` cannot pad further, and
+    scipy's reflect mode misreads memory when a footprint is much larger
+    than the array).
+
     ``map_overlap`` rechunks when a chunk is thinner than the overlap depth;
     the result is rechunked back so its blocks line up with ``chm``'s.
     """
-    depth = {i: s // 2 for i, s in enumerate(footprint.shape)}
+    half = [min(s // 2, n - 1) for s, n in zip(footprint.shape, chm.shape)]
+    centre = [s // 2 for s in footprint.shape]
+    footprint = footprint[tuple(slice(c - h, c + h + 1) for c, h in zip(centre, half))]
     filtered = da.map_overlap(
         scipy_maximum_filter,
         chm,
-        depth=depth,
+        depth=dict(enumerate(half)),
         boundary="reflect",
         dtype=chm.dtype,
         footprint=footprint,
@@ -137,8 +149,8 @@ def _extract_block_candidates(
     one candidate per connected component.  Labels are offset by
     ``label_offset`` to be globally unique across chunks.
 
-    Every search window is at least 3 pixels, so it contains a pixel's four
-    neighbours, and two 4-connected mask pixels must have the same CHM value.
+    Every search window is at least 3 pixels, so it contains a pixel's eight
+    neighbours, and two adjacent mask pixels must have the same CHM value.
     A component is still not necessarily convex: on a quantised CHM a plateau
     can be ring-shaped, and its centroid can fall outside it.  The treetop is
     therefore placed on the component pixel nearest the centroid (see
@@ -567,8 +579,8 @@ def variable_window_filter(
     chm_da: xr.DataArray,
     min_height: float,
     spatial_resolution: float,
-    crown_ratio: float = 0.10,
-    crown_offset: float = 1.0,
+    crown_ratio: float = 0.05,
+    crown_offset: float = 3.0,
     unique_windows: Sequence[int] | None = None,
 ) -> dd.DataFrame:
     """Finds treetops from a CHM using a Variable Window Filter (VWF).
@@ -576,6 +588,10 @@ def variable_window_filter(
     Calculates the search window size dynamically using a linear allometric
     relationship: Crown_Width_m = (Height_m * crown_ratio) + crown_offset.
     The window is rounded up to an odd number of pixels, and is at least 3.
+    Of the linear forms and Popescu & Wynne's quadratics tried on the
+    NeonTreeEvaluation benchmark (Weinstein et al. 2021,
+    https://doi.org/10.1371/journal.pcbi.1009180), the defaults scored best
+    at 0.5 m and tied for best at 1 m.
 
     Each treetop is placed at the centre of a pixel of its local maximum: the
     pixel nearest the maximum's centroid, with ties going to the smallest row,
@@ -592,8 +608,8 @@ def variable_window_filter(
         min_height (float): Minimum height threshold in CHM units (meters).
         spatial_resolution (float): Pixel size of the CHM in meters (e.g., 0.5, 1.0).
         crown_ratio (float): The multiplier for tree height to estimate crown width.
-            Defaults to 0.10 (10%).
-        crown_offset (float): The base crown width in meters. Defaults to 1.0m.
+            Defaults to 0.05 (5%).
+        crown_offset (float): The base crown width in meters. Defaults to 3.0m.
         unique_windows: Optional caller-supplied list of odd, positive window
             sizes (in pixels) to iterate.  When provided, skips the internal
             ``da.unique`` scan over the CHM — this is the only synchronous

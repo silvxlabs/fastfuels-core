@@ -18,6 +18,21 @@ import xarray as xr
 from scipy.ndimage import label, maximum_filter
 
 
+def _maximum_filter(chm: np.ndarray, footprint: np.ndarray) -> np.ndarray:
+    """Maximum over the in-array pixels of the footprint.
+
+    For a disc this equals scipy's reflect boundary; constant -inf padding
+    also stays correct when the footprint is much larger than the array.
+    """
+    return maximum_filter(chm, footprint=footprint, mode="constant", cval=-np.inf)
+
+
+def circular_footprint_reference(w: int) -> np.ndarray:
+    """Disc of diameter ``w`` pixels: offsets within ``w / 2``, ``w`` x ``w``."""
+    offsets = np.arange(w) - w // 2
+    return offsets[:, None] ** 2 + offsets[None, :] ** 2 <= (w / 2) ** 2
+
+
 def _extract_treetops_reference(
     chm: np.ndarray,
     chm_max_filtered: np.ndarray,
@@ -65,12 +80,8 @@ def fixed_window_filter_reference(
     if window_size_pixels < 3:
         window_size_pixels = 3
 
-    y, x = np.ogrid[
-        -window_size_pixels // 2 : window_size_pixels // 2 + 1,
-        -window_size_pixels // 2 : window_size_pixels // 2 + 1,
-    ]
-    footprint = x * x + y * y <= (window_size_pixels // 2) ** 2
-    chm_max_filtered = maximum_filter(chm, footprint=footprint)
+    footprint = circular_footprint_reference(window_size_pixels)
+    chm_max_filtered = _maximum_filter(chm, footprint)
 
     return _extract_treetops_reference(chm, chm_max_filtered, transform, min_height)
 
@@ -79,8 +90,8 @@ def variable_window_filter_reference(
     chm_da: xr.DataArray,
     min_height: float,
     spatial_resolution: float,
-    crown_ratio: float = 0.10,
-    crown_offset: float = 1.0,
+    crown_ratio: float = 0.05,
+    crown_offset: float = 3.0,
 ) -> pd.DataFrame:
     chm = chm_da.values
     transform = chm_da.rio.transform()
@@ -96,9 +107,8 @@ def variable_window_filter_reference(
     unique_windows = np.unique(required_windows)
 
     for w in unique_windows:
-        y, x = np.ogrid[-w // 2 : w // 2 + 1, -w // 2 : w // 2 + 1]
-        footprint = x * x + y * y <= (w // 2) ** 2
-        chm_max_filtered = maximum_filter(chm, footprint=footprint)
+        footprint = circular_footprint_reference(int(w))
+        chm_max_filtered = _maximum_filter(chm, footprint)
         mask = required_windows == w
         vw_max[mask] = chm_max_filtered[mask]
 
