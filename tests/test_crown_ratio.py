@@ -1,4 +1,5 @@
-"""Tests for ``allometry.crown_ratio``, the uncompacted crown ratio model.
+"""Tests for ``allometry.crown_ratio``, the uncompacted crown ratio model
+and the crown base height built on it.
 
 The coefficient rows used as oracles are transcribed here from the 2026-10
 national refit, so a later edit to ``REF_CROWN_RATIO.csv`` shows up as a
@@ -11,7 +12,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from fastfuels_core.allometry.crown_ratio import uncompacted_crown_ratio
+from fastfuels_core.allometry.crown_ratio import (
+    crown_base_height,
+    uncompacted_crown_ratio,
+)
 from fastfuels_core.ref_data import DATA_PATH, REF_SPECIES
 from fastfuels_core.units import CM_TO_IN, M_TO_FT
 
@@ -111,6 +115,59 @@ class TestRules:
     def test_percent_raises(self):
         with pytest.raises(ValueError, match=r"fraction in \[0, 1\]"):
             uncompacted_crown_ratio(202, 40.0, 25.4, 20.0)
+
+
+class TestCrownBaseHeight:
+    def test_matches_uncompacted_ratio(self):
+        args = (
+            [202, 202, AILANTHUS_VARIETY, ARAUCARIA],
+            [0.4, 0.4, 0.7, 0.2],
+            [25.4, 25.4, 12.0, 60.0],
+            [20.0, 20.0, 9.5, 35.0],
+            [False, True, False, True],
+        )
+        expected = np.asarray(args[3]) * (1.0 - uncompacted_crown_ratio(*args))
+        np.testing.assert_allclose(crown_base_height(*args), expected, rtol=1e-12)
+
+    def test_hand_computed_value(self):
+        # Douglas-fir UCR 0.54630 at CCR 0.4, 25.4 cm, 20 m
+        assert crown_base_height(202, 0.4, 25.4, 20.0)[0] == pytest.approx(
+            20.0 * (1.0 - 0.54630), abs=1e-4
+        )
+
+    def test_zero_crown_is_full_height(self):
+        assert crown_base_height(202, 0.0, 25.4, 20.0)[0] == 20.0
+
+    @pytest.mark.parametrize(
+        "ccr, dbh_cm, height_m",
+        [
+            (np.nan, 25.4, 20.0),
+            (0.4, 25.4, np.nan),
+            (0.4, 25.4, 0.0),
+            (0.4, 25.4, -1.0),
+            (0.4, 0.0, 20.0),
+            (0.0, 25.4, 0.0),
+        ],
+    )
+    def test_missing_inputs_give_nan(self, ccr, dbh_cm, height_m):
+        assert np.isnan(crown_base_height(202, ccr, dbh_cm, height_m)[0])
+
+    def test_within_tree_height(self):
+        ccr = np.linspace(0.0, 1.0, 101)
+        n = len(ccr)
+        height = np.linspace(1.0, 60.0, n)
+        got = crown_base_height(np.full(n, 202), ccr, np.full(n, 40.0), height)
+        assert (got >= 0.0).all()
+        assert (got <= height).all()
+
+    def test_scalar_returns_length_one_array(self):
+        got = crown_base_height(202, 0.4, 25.4, 20.0)
+        assert isinstance(got, np.ndarray)
+        assert got.shape == (1,)
+
+    def test_percent_raises(self):
+        with pytest.raises(ValueError, match=r"fraction in \[0, 1\]"):
+            crown_base_height(202, 40.0, 25.4, 20.0)
 
 
 def test_coefficient_file_integrity():

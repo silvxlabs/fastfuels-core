@@ -26,6 +26,9 @@ its softwood/hardwood class. The result is never below the compacted
 ratio, and a compacted ratio of zero stays zero (no crown, not a compact
 one). Diameters are in centimeters and heights in meters, the FastFuels
 convention; the model's own inches and feet are converted here.
+
+``crown_base_height`` turns the uncompacted ratio into the height of the
+crown base in meters.
 """
 
 from __future__ import annotations
@@ -124,3 +127,23 @@ def uncompacted_crown_ratio(
     ucr = np.fmax(ucr, ccr)
     ucr = np.where(ccr == 0.0, 0.0, ucr)
     return np.where(valid, np.clip(ucr, 0.0, 1.0), np.nan)
+
+
+def crown_base_height(
+    species_code: np.ndarray,
+    compacted_crown_ratio: np.ndarray,
+    dbh_cm: np.ndarray,
+    height_m: np.ndarray,
+    pacific_northwest: bool | np.ndarray = False,
+) -> np.ndarray:
+    """Per-tree crown base height (m) from the compacted crown ratio.
+
+    The height of the lowest live foliage, the base of the uncompacted crown
+    from ``uncompacted_crown_ratio``. A compacted ratio of zero gives the
+    full height; unknown inputs give NaN, and the same ValueErrors apply.
+    """
+    ht_m = np.atleast_1d(np.asarray(height_m, dtype=np.float64))
+    ucr = uncompacted_crown_ratio(
+        species_code, compacted_crown_ratio, dbh_cm, height_m, pacific_northwest
+    )
+    return ht_m * (1.0 - ucr)
