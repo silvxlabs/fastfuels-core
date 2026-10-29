@@ -54,6 +54,7 @@ def real_data():
     trees = pd.read_parquet(
         TEST_DATA_PATH / "tree_collection_from_treemap_2016.parquet"
     )
+    trees["CBH"] = trees["HT"] * (1 - trees["CR"])
     return roi, trees, plots
 
 

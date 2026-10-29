@@ -5,6 +5,8 @@ from pathlib import Path
 
 from fastfuels_core.trees import (
     Tree,
+    TreeSample,
+    TreePopulation,
     JenkinsBiomassEquations,
     NSVBEquations,
     REF_SPECIES,
@@ -22,6 +24,7 @@ from tests.utils import make_random_tree
 # External imports
 import pytest
 import numpy as np
+from pandera.errors import SchemaError
 
 TEST_PATH = Path(__file__).parent
 TEST_DATA_PATH = TEST_PATH / "data"
@@ -706,6 +709,91 @@ class TestFromRowDataFrame:
             tree = Tree.from_row(row)
             assert tree.foliage_biomass == 10.0
             assert tree.max_crown_radius == 3.5
+
+
+class TestCrownBaseHeightSchema:
+    """CBH column and the frame-level CBH <= HT check on the tree schemas."""
+
+    @staticmethod
+    def _frame(cbh, ht=(15.0, 15.0)):
+        import pandas as pd
+
+        return pd.DataFrame(
+            {
+                "TREE_ID": [1, 2],
+                "PLOT_ID": [1, 1],
+                "SPCD": [122, 202],
+                "STATUSCD": [1, 1],
+                "DIA": [25.0, 30.0],
+                "HT": list(ht),
+                "CR": [0.5, 0.4],
+                "CBH": list(cbh),
+                "TPA": [0.01, 0.01],
+            }
+        )
+
+    @pytest.mark.parametrize("cls", [TreeSample, TreePopulation])
+    def test_rejects_cbh_above_ht(self, cls):
+        with pytest.raises(SchemaError, match="CBH must be less than or equal to HT"):
+            cls(self._frame(cbh=[7.5, 15.1]))
+
+    @pytest.mark.parametrize("cls", [TreeSample, TreePopulation])
+    @pytest.mark.parametrize(
+        "cbh, ht",
+        [
+            ((15.0, 15.0), (15.0, 15.0)),  # no live crown: CBH == HT
+            ((0.0, 0.0), (15.0, 15.0)),  # crown reaches the ground
+            ((float("nan"), 7.5), (15.0, 15.0)),  # CBH unknown
+            ((20.0, 7.5), (float("nan"), 15.0)),  # HT unknown
+        ],
+    )
+    def test_accepts_valid_cbh(self, cls, cbh, ht):
+        frame = self._frame(cbh=cbh, ht=ht)
+        result = cls(frame)
+        np.testing.assert_array_equal(result.data["CBH"].values, frame["CBH"].values)
+
+    @pytest.mark.parametrize("cls", [TreeSample, TreePopulation])
+    def test_rejects_negative_cbh(self, cls):
+        with pytest.raises(SchemaError, match="greater_than_or_equal_to"):
+            cls(self._frame(cbh=[-0.1, 7.5]))
+
+    def test_tree_sample_requires_cbh(self):
+        with pytest.raises(SchemaError, match="column 'CBH' not in dataframe"):
+            TreeSample(self._frame(cbh=[7.5, 7.5]).drop(columns="CBH"))
+
+    def test_tree_population_adds_missing_cbh_as_nan(self):
+        population = TreePopulation(self._frame(cbh=[7.5, 7.5]).drop(columns="CBH"))
+        assert "CBH" in population.data.columns
+        assert population.data["CBH"].dtype == np.float64
+        assert population.data["CBH"].isna().all()
+
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_expand_to_roi_carries_cbh(self, lazy):
+        import geopandas as gpd
+        import pandas as pd
+
+        roi = gpd.read_file(TEST_DATA_PATH / "polygon.geojson")
+        roi = roi.to_crs(roi.estimate_utm_crs())
+        plots = gpd.read_file(TEST_DATA_PATH / "treemap_2016_plots_data.geojson")
+        plots = plots.to_crs(plots.estimate_utm_crs())
+        trees = pd.read_parquet(
+            TEST_DATA_PATH / "tree_collection_from_treemap_2016.parquet"
+        )
+        # A distinct CBH per sample tree, so each output row can be traced back.
+        fraction = np.linspace(0.05, 0.95, len(trees))
+        trees["CBH"] = trees["HT"] * fraction
+        assert trees["CBH"].dropna().is_unique
+
+        result = TreeSample(trees).expand_to_roi(
+            "inhomogeneous_poisson", roi, lazy=lazy, plots=plots, seed=42
+        )
+        expanded = result.compute() if lazy else result.data
+
+        assert len(expanded) > 0
+        assert "CBH" in expanded.columns
+        assert expanded["CBH"].notna().any()
+        expected = expanded["TREE_ID"].map(trees.set_index("TREE_ID")["CBH"])
+        np.testing.assert_array_equal(expanded["CBH"].values, expected.values)
 
 
 class TestGeometricCrownProfiles:

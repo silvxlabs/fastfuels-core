@@ -67,10 +67,33 @@ TREE_SCHEMA_COLS = {
         float,
         checks=Check.in_range(min_value=0, max_value=1),
         nullable=True,
-        title="Crown Ratio",
-        description="Ratio of the crown length to the total tree height",
+        title="Compacted Crown Ratio",
+        description="FIA TREE.CR as a 0-1 fraction: the crown ratio after lower "
+        "branches are visually moved up to fill gaps. Not used for crown "
+        "geometry; see CBH.",
+    ),
+    "CBH": Column(
+        float,
+        checks=Check.ge(0),
+        nullable=True,
+        title="Crown Base Height (m)",
+        description="Height of the lowest live foliage (the base of the "
+        "uncompacted crown). Equal to HT for a tree with no live crown.",
     ),
 }
+
+
+def _cbh_le_ht(df: pd.DataFrame) -> pd.Series | bool:
+    if "CBH" not in df or "HT" not in df:
+        return True
+    return df["CBH"].isna() | df["HT"].isna() | (df["CBH"] <= df["HT"])
+
+
+CBH_LE_HT_CHECK = Check(
+    _cbh_le_ht,
+    name="cbh_le_ht",
+    error="CBH must be less than or equal to HT",
+)
 
 
 class TreeSample(ObjectIterableDataFrame):
@@ -88,6 +111,7 @@ class TreeSample(ObjectIterableDataFrame):
                 ),
             },
         },
+        checks=[CBH_LE_HT_CHECK],
         coerce=True,
         index=Index(int, unique=True),
     )
@@ -151,6 +175,7 @@ class TreePopulation(ObjectIterableDataFrame):
                 ),
             },
         },
+        checks=[CBH_LE_HT_CHECK],
         coerce=True,
         add_missing_columns=True,
         index=Index(int, unique=True),
