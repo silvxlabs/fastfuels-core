@@ -34,17 +34,20 @@ class PurvesCrownProfile(CrownProfileModel):
         Diameter at breast height (cm).
     height : float
         Total height of the tree (m).
-    crown_ratio : float
-        Ratio of the crown length to the total height of the tree.
+    crown_base_height : float
+        Height of the lowest live foliage (m). Purves et al. (2007) was fitted
+        on FHM uncompacted crown ratio, which is the ratio derived here from
+        crown base height, so pass the base of the uncompacted crown, not one
+        derived from FIA's compacted CR.
 
     Attributes
     ----------
     height : float
         Total height of the tree (m).
-    crown_ratio : float
-        Ratio of the crown length to the total height of the tree.
     crown_base_height : float
-        Height at which the crown starts (m).
+        Height of the lowest live foliage (m).
+    crown_ratio : float
+        Uncompacted crown ratio, (height - crown_base_height) / height.
     max_theoretical_crown_radius : float
         Maximum radius of the crown (m).
     shape_parameter : float
@@ -72,7 +75,7 @@ class PurvesCrownProfile(CrownProfileModel):
         species_code: int | NDArray[np.int64],
         dbh: float | NDArray[np.float64],
         height: float | NDArray[np.float64],
-        crown_ratio: float | NDArray[np.float64],
+        crown_base_height: float | NDArray[np.float64],
     ):
         """
         Initializes the PurvesCrownProfile model with the given parameters.
@@ -87,8 +90,10 @@ class PurvesCrownProfile(CrownProfileModel):
             Diameter at breast height (cm).
         height : float or NDArray[np.float64]
             Total height of the tree (m).
-        crown_ratio : float or NDArray[np.float64]
-            Ratio of the crown length to the total height of the tree.
+        crown_base_height : float or NDArray[np.float64]
+            Height of the lowest live foliage (m). Pass the base of the
+            uncompacted crown (Purves et al. (2007) was fitted on FHM
+            uncompacted crown ratio), not one derived from FIA's compacted CR.
 
 
         Notes
@@ -102,8 +107,8 @@ class PurvesCrownProfile(CrownProfileModel):
         """
         # Store all tree parameters as 2D arrays [n_trees, 1]
         self.height = np.atleast_2d(height).T
-        self.crown_ratio = np.atleast_2d(crown_ratio).T
-        self.crown_base_height = np.atleast_2d(height - height * crown_ratio).T
+        self.crown_base_height = np.atleast_2d(crown_base_height).T
+        self.crown_ratio = (self.height - self.crown_base_height) / self.height
         self.species_code = np.atleast_2d(species_code).T
         self.dbh = np.atleast_2d(dbh).T
         self.trait_score = np.atleast_2d(self._get_purves_trait_score(species_code)).T

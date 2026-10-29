@@ -29,7 +29,7 @@ RADIUS = 5.0
 
 def _flat_profiles():
     return {
-        "purves": PurvesCrownProfile(122, 40.0, HEIGHT, (HEIGHT - CBH) / HEIGHT),
+        "purves": PurvesCrownProfile(122, 40.0, HEIGHT, CBH),
         "cone": ConeCrownProfile(CBH, HEIGHT, RADIUS),
         "cylinder": CylinderCrownProfile(CBH, HEIGHT, RADIUS),
         "single_ellipsoid": EllipsoidCrownProfile(CBH, HEIGHT, RADIUS, CBH),

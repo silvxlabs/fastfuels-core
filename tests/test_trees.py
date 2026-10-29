@@ -190,7 +190,7 @@ class TestCrownModelSpeedups:
 
     @pytest.mark.parametrize("spcd", [122, 202, 15, 93, 108])
     def test_purves_trait_score_matches_reference_table(self, spcd):
-        model = PurvesCrownProfile(spcd, dbh=25.0, height=18.0, crown_ratio=0.6)
+        model = PurvesCrownProfile(spcd, dbh=25.0, height=18.0, crown_base_height=7.2)
         assert model.trait_score.item() == REF_SPECIES.loc[spcd]["PURVES_TRAIT_SCORE"]
 
     def test_crown_profile_model_is_cached(self):

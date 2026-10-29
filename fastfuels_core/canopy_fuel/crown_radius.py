@@ -73,6 +73,6 @@ def max_crown_radius(
         trees["fia_species_code"],
         trees["dbh"],
         trees["height"],
-        trees["crown_ratio"],
+        trees["height"] - trees["height"] * trees["crown_ratio"],
     )
     return np.atleast_1d(np.asarray(model.get_max_radius(), dtype=np.float64))

@@ -349,7 +349,7 @@ class Tree:
             )
         elif self._crown_profile_model_type == "purves":
             return PurvesCrownProfile(
-                self.species_code, self.diameter, self.height, self.crown_ratio
+                self.species_code, self.diameter, self.height, self.crown_base_height
             )
         elif self._crown_profile_model_type == "cone":
             return ConeCrownProfile(

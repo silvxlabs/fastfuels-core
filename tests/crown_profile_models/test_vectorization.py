@@ -28,7 +28,7 @@ RADIUS = np.array([2.0, 3.5, 1.2, 2.8, 1.6])
 HD = np.array([CBH[0], HEIGHT[1], (CBH[2] + HEIGHT[2]) / 2, CBH[3] + 2.0, CBH[4]])
 
 PROFILES = {
-    "purves": lambda i: PurvesCrownProfile(SPCD[i], DBH[i], HEIGHT[i], CROWN_RATIO[i]),
+    "purves": lambda i: PurvesCrownProfile(SPCD[i], DBH[i], HEIGHT[i], CBH[i]),
     "beta": lambda i: BetaCrownProfile(SPCD[i], CBH[i], HEIGHT[i] - CBH[i]),
     "cone": lambda i: ConeCrownProfile(CBH[i], HEIGHT[i], RADIUS[i]),
     "cylinder": lambda i: CylinderCrownProfile(CBH[i], HEIGHT[i], RADIUS[i]),
