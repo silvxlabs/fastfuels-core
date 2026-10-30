@@ -13,8 +13,8 @@ import pandas as pd
 import pytest
 
 from fastfuels_core.allometry.crown_ratio import (
-    crown_base_height,
-    uncompacted_crown_ratio,
+    estimate_crown_base_height,
+    estimate_uncompacted_crown_ratio,
 )
 from fastfuels_core.ref_data import DATA_PATH, REF_SPECIES
 from fastfuels_core.units import CM_TO_IN, M_TO_FT
@@ -53,17 +53,19 @@ class TestLookup:
         ],
     )
     def test_most_specific_row(self, spcd, pnw, coefs):
-        got = uncompacted_crown_ratio(spcd, 0.4, 25.4, 20.0, pacific_northwest=pnw)
+        got = estimate_uncompacted_crown_ratio(
+            spcd, 0.4, 25.4, 20.0, pacific_northwest=pnw
+        )
         assert got[0] == pytest.approx(logistic(coefs, 0.4, 25.4, 20.0), rel=1e-12)
 
     def test_hand_computed_value(self):
         # 0.0686 + 4.57562*0.4 + 0.29439*ln(10 in) - 0.57148*ln(65.617 ft)
-        assert uncompacted_crown_ratio(202, 0.4, 25.4, 20.0)[0] == pytest.approx(
-            0.54630, abs=1e-5
-        )
+        assert estimate_uncompacted_crown_ratio(202, 0.4, 25.4, 20.0)[
+            0
+        ] == pytest.approx(0.54630, abs=1e-5)
 
     def test_pacific_northwest_per_tree(self):
-        got = uncompacted_crown_ratio(
+        got = estimate_uncompacted_crown_ratio(
             [202, 202], [0.4, 0.4], [25.4, 25.4], [20.0, 20.0], [False, True]
         )
         assert got[0] == pytest.approx(logistic(DOUGLAS_FIR, 0.4, 25.4, 20.0))
@@ -73,51 +75,51 @@ class TestLookup:
         spcd = REF_SPECIES.index.to_numpy()
         n = len(spcd)
         for pnw in (False, True):
-            got = uncompacted_crown_ratio(
+            got = estimate_uncompacted_crown_ratio(
                 spcd, np.full(n, 0.4), np.full(n, 25.4), np.full(n, 20.0), pnw
             )
             assert np.isfinite(got).all()
 
     def test_unknown_species_raises(self):
         with pytest.raises(ValueError, match="not in the FIA reference"):
-            uncompacted_crown_ratio(999999, 0.4, 25.4, 20.0)
+            estimate_uncompacted_crown_ratio(999999, 0.4, 25.4, 20.0)
 
     @pytest.mark.parametrize("spcd", [np.array(["202"]), 202.0, pd.Series([202])])
     def test_integral_species_codes_match_int(self, spcd):
         # A string code once missed the lookup and returned the compacted ratio
-        expected = uncompacted_crown_ratio(202, 0.4, 30.0, 20.0)
-        got = uncompacted_crown_ratio(spcd, 0.4, 30.0, 20.0)
+        expected = estimate_uncompacted_crown_ratio(202, 0.4, 30.0, 20.0)
+        got = estimate_uncompacted_crown_ratio(spcd, 0.4, 30.0, 20.0)
         np.testing.assert_array_equal(got, expected)
         assert got[0] > 0.4
 
     @pytest.mark.parametrize("spcd", ["abc", 202.5, np.nan, None])
     def test_non_integral_species_raises(self, spcd):
         with pytest.raises(ValueError, match="integer FIA codes"):
-            uncompacted_crown_ratio(spcd, 0.4, 30.0, 20.0)
+            estimate_uncompacted_crown_ratio(spcd, 0.4, 30.0, 20.0)
 
 
 class TestRules:
     def test_never_below_compacted(self):
         ccr = np.linspace(0.01, 1.0, 100)
         n = len(ccr)
-        got = uncompacted_crown_ratio(
+        got = estimate_uncompacted_crown_ratio(
             np.full(n, 202), ccr, np.full(n, 80.0), np.full(n, 60.0)
         )
         assert (got >= ccr).all()
         assert (got <= 1.0).all()
 
     def test_full_crown_stays_full(self):
-        assert uncompacted_crown_ratio(202, 1.0, 25.4, 20.0)[0] == 1.0
+        assert estimate_uncompacted_crown_ratio(202, 1.0, 25.4, 20.0)[0] == 1.0
 
     def test_zero_crown_stays_zero(self):
         # A dead tree carries CR 0; the logistic alone would give it a crown
-        assert uncompacted_crown_ratio(202, 0.0, 25.4, 20.0)[0] == 0.0
+        assert estimate_uncompacted_crown_ratio(202, 0.0, 25.4, 20.0)[0] == 0.0
 
     @pytest.mark.parametrize(
         "dbh_cm, height_m", [(np.nan, 20.0), (0.0, 20.0), (25.4, np.nan), (25.4, 0.0)]
     )
     def test_zero_crown_is_zero_without_dbh_or_height(self, dbh_cm, height_m):
-        assert uncompacted_crown_ratio(122, 0.0, dbh_cm, height_m)[0] == 0.0
+        assert estimate_uncompacted_crown_ratio(122, 0.0, dbh_cm, height_m)[0] == 0.0
 
     @pytest.mark.parametrize(
         "ccr, dbh_cm, height_m",
@@ -129,11 +131,11 @@ class TestRules:
         ],
     )
     def test_missing_inputs_give_nan(self, ccr, dbh_cm, height_m):
-        assert np.isnan(uncompacted_crown_ratio(202, ccr, dbh_cm, height_m)[0])
+        assert np.isnan(estimate_uncompacted_crown_ratio(202, ccr, dbh_cm, height_m)[0])
 
     def test_percent_raises(self):
         with pytest.raises(ValueError, match=r"fraction in \[0, 1\]"):
-            uncompacted_crown_ratio(202, 40.0, 25.4, 20.0)
+            estimate_uncompacted_crown_ratio(202, 40.0, 25.4, 20.0)
 
 
 class TestCrownBaseHeight:
@@ -145,21 +147,23 @@ class TestCrownBaseHeight:
             [20.0, 20.0, 9.5, 35.0],
             [False, True, False, True],
         )
-        expected = np.asarray(args[3]) * (1.0 - uncompacted_crown_ratio(*args))
-        np.testing.assert_allclose(crown_base_height(*args), expected, rtol=1e-12)
+        expected = np.asarray(args[3]) * (1.0 - estimate_uncompacted_crown_ratio(*args))
+        np.testing.assert_allclose(
+            estimate_crown_base_height(*args), expected, rtol=1e-12
+        )
 
     def test_hand_computed_value(self):
         # Douglas-fir UCR 0.54630 at CCR 0.4, 25.4 cm, 20 m
-        assert crown_base_height(202, 0.4, 25.4, 20.0)[0] == pytest.approx(
+        assert estimate_crown_base_height(202, 0.4, 25.4, 20.0)[0] == pytest.approx(
             20.0 * (1.0 - 0.54630), abs=1e-4
         )
 
     def test_zero_crown_is_full_height(self):
-        assert crown_base_height(202, 0.0, 25.4, 20.0)[0] == 20.0
+        assert estimate_crown_base_height(202, 0.0, 25.4, 20.0)[0] == 20.0
 
     @pytest.mark.parametrize("dbh_cm", [np.nan, 0.0])
     def test_zero_crown_without_dbh_is_full_height(self, dbh_cm):
-        assert crown_base_height(122, 0.0, dbh_cm, 20.0)[0] == 20.0
+        assert estimate_crown_base_height(122, 0.0, dbh_cm, 20.0)[0] == 20.0
 
     @pytest.mark.parametrize(
         "ccr, dbh_cm, height_m",
@@ -175,24 +179,24 @@ class TestCrownBaseHeight:
         ],
     )
     def test_missing_inputs_give_nan(self, ccr, dbh_cm, height_m):
-        assert np.isnan(crown_base_height(202, ccr, dbh_cm, height_m)[0])
+        assert np.isnan(estimate_crown_base_height(202, ccr, dbh_cm, height_m)[0])
 
     def test_within_tree_height(self):
         ccr = np.linspace(0.0, 1.0, 101)
         n = len(ccr)
         height = np.linspace(1.0, 60.0, n)
-        got = crown_base_height(np.full(n, 202), ccr, np.full(n, 40.0), height)
+        got = estimate_crown_base_height(np.full(n, 202), ccr, np.full(n, 40.0), height)
         assert (got >= 0.0).all()
         assert (got <= height).all()
 
     def test_scalar_returns_length_one_array(self):
-        got = crown_base_height(202, 0.4, 25.4, 20.0)
+        got = estimate_crown_base_height(202, 0.4, 25.4, 20.0)
         assert isinstance(got, np.ndarray)
         assert got.shape == (1,)
 
     def test_percent_raises(self):
         with pytest.raises(ValueError, match=r"fraction in \[0, 1\]"):
-            crown_base_height(202, 40.0, 25.4, 20.0)
+            estimate_crown_base_height(202, 40.0, 25.4, 20.0)
 
 
 def test_coefficient_file_integrity():

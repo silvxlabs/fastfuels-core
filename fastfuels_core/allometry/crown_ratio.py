@@ -27,7 +27,7 @@ ratio, and a compacted ratio of zero stays zero (no crown, not a compact
 one). Diameters are in centimeters and heights in meters, the FastFuels
 convention; the model's own inches and feet are converted here.
 
-``crown_base_height`` turns the uncompacted ratio into the height of the
+``estimate_crown_base_height`` turns the uncompacted ratio into the height of the
 crown base in meters.
 """
 
@@ -96,7 +96,7 @@ def _species_codes(species_code) -> np.ndarray:
     return as_float.astype(np.int64)
 
 
-def uncompacted_crown_ratio(
+def estimate_uncompacted_crown_ratio(
     species_code: np.ndarray,
     compacted_crown_ratio: np.ndarray,
     dbh_cm: np.ndarray,
@@ -147,7 +147,7 @@ def uncompacted_crown_ratio(
     return np.where(ccr == 0.0, 0.0, ucr)
 
 
-def crown_base_height(
+def estimate_crown_base_height(
     species_code: np.ndarray,
     compacted_crown_ratio: np.ndarray,
     dbh_cm: np.ndarray,
@@ -157,12 +157,12 @@ def crown_base_height(
     """Per-tree crown base height (m) from the compacted crown ratio.
 
     The height of the lowest live foliage, the base of the uncompacted crown
-    from ``uncompacted_crown_ratio``. A compacted ratio of zero gives the
-    full height whenever the height is valid; unknown inputs, or a missing or
-    non-positive height, give NaN, and the same ValueErrors apply.
+    from ``estimate_uncompacted_crown_ratio``. A compacted ratio of zero gives
+    the full height whenever the height is valid; unknown inputs, or a missing
+    or non-positive height, give NaN, and the same ValueErrors apply.
     """
     ht_m = np.atleast_1d(np.asarray(height_m, dtype=np.float64))
-    ucr = uncompacted_crown_ratio(
+    ucr = estimate_uncompacted_crown_ratio(
         species_code, compacted_crown_ratio, dbh_cm, height_m, pacific_northwest
     )
     return np.where(ht_m > 0, ht_m * (1.0 - ucr), np.nan)
