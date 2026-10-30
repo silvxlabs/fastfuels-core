@@ -37,7 +37,7 @@ def max_crown_radius(
         is the width behind FuelCalc's canopy cover.
     ``"purves"``
         Purves et al. (2007), from ``fia_species_code``, ``dbh``,
-        ``height`` and ``crown_ratio``; the allometry the rest of
+        ``height`` and ``crown_base_height``; the allometry the rest of
         fastfuels-core uses.
 
     The radius source is independent of how canopy cover treats
@@ -73,6 +73,6 @@ def max_crown_radius(
         trees["fia_species_code"],
         trees["dbh"],
         trees["height"],
-        trees["height"] - trees["height"] * trees["crown_ratio"],
+        trees["crown_base_height"],
     )
     return np.atleast_1d(np.asarray(model.get_max_radius(), dtype=np.float64))

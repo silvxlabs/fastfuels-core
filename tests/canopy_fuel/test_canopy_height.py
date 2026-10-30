@@ -222,7 +222,7 @@ class TestSmoothingEdge:
 class TestCrownBaseStatistic:
     """CBH as a plain summary statistic of the per-tree crown bases in a cell.
 
-    The crown base of a tree is ``height * (1 - crown_ratio)``; a cell's
+    The crown base of a tree is its ``crown_base_height``; a cell's
     value reduces its trees' crown bases by ``statistic``. The statistics
     form a conservative-to-liberal spectrum (minimum <= lower percentile
     <= median <= mean for a right-tailed stand), which is the point of
@@ -239,7 +239,7 @@ class TestCrownBaseStatistic:
                 "x": [15.0, 15.0, 15.0, 15.0],
                 "y": [-15.0, -15.0, -15.0, -15.0],
                 "height": [10.0, 10.0, 10.0, 20.0],
-                "crown_ratio": [0.8, 0.6, 0.4, 0.4],
+                "crown_base_height": [2.0, 4.0, 6.0, 12.0],
             }
         )
         fuel = np.array([1.0, 1.0, 1.0, 10.0])
@@ -283,7 +283,7 @@ class TestCrownBaseStatistic:
         assert minimum <= p20 <= median <= mean
 
     def test_an_empty_stand_is_all_nan(self):
-        trees = pd.DataFrame({"x": [], "y": [], "height": [], "crown_ratio": []})
+        trees = pd.DataFrame({"x": [], "y": [], "height": [], "crown_base_height": []})
         out = crown_base_statistic(
             trees, np.array([]), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
         )
@@ -377,13 +377,13 @@ class TestMeanCrownLength:
     """The mean per-tree crown length, a load-over-depth canopy depth."""
 
     def test_it_averages_the_crown_lengths_in_the_cell(self):
-        # Crown lengths height*crown_ratio: 5 m and 15 m, mean 10 m.
+        # Crown lengths height - crown_base_height: 5 m and 15 m, mean 10 m.
         trees = pd.DataFrame(
             {
                 "x": [15.0, 15.0],
                 "y": [-15.0, -15.0],
                 "height": [10.0, 30.0],
-                "crown_ratio": [0.5, 0.5],
+                "crown_base_height": [5.0, 15.0],
             }
         )
         out = mean_crown_length(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
@@ -397,14 +397,14 @@ class TestMeanCrownLength:
                 "x": [15.0, 15.0],
                 "y": [-15.0, -15.0],
                 "height": [4.0, 20.0],
-                "crown_ratio": [0.5, 0.5],
+                "crown_base_height": [2.0, 10.0],
             }
         )
         out = mean_crown_length(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
         np.testing.assert_allclose(out, [[6.0]])
 
     def test_an_empty_stand_is_all_nan(self):
-        trees = pd.DataFrame({"x": [], "y": [], "height": [], "crown_ratio": []})
+        trees = pd.DataFrame({"x": [], "y": [], "height": [], "crown_base_height": []})
         out = mean_crown_length(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
         assert np.isnan(out).all()
 
@@ -413,21 +413,21 @@ class TestHeightPercentileDepth:
     """90th-percentile tree height minus median crown base, a canopy depth."""
 
     def test_it_is_the_top_height_over_the_median_base(self):
-        # Heights 10/20/30 -> 90th percentile 28; crown bases (cr=0.5)
-        # 5/10/15 -> median 10. Depth 28 - 10 = 18 m.
+        # Heights 10/20/30 -> 90th percentile 28; crown bases 5/10/15
+        # -> median 10. Depth 28 - 10 = 18 m.
         trees = pd.DataFrame(
             {
                 "x": [15.0, 15.0, 15.0],
                 "y": [-15.0, -15.0, -15.0],
                 "height": [10.0, 20.0, 30.0],
-                "crown_ratio": [0.5, 0.5, 0.5],
+                "crown_base_height": [5.0, 10.0, 15.0],
             }
         )
         out = height_percentile_depth(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
         np.testing.assert_allclose(out, [[18.0]])
 
     def test_an_empty_stand_is_all_nan(self):
-        trees = pd.DataFrame({"x": [], "y": [], "height": [], "crown_ratio": []})
+        trees = pd.DataFrame({"x": [], "y": [], "height": [], "crown_base_height": []})
         out = height_percentile_depth(trees, ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
         assert np.isnan(out).all()
 
@@ -437,19 +437,19 @@ class TestOutOfLatticeStemsAreDropped:
     drops it: the result equals the same call with that tree removed.
 
     The single cell spans x 0-30, y -30-0; a tree at x = 100 bins outside
-    it. Its height and crown ratio are set so that including it would
+    it. Its height and crown base are set so that including it would
     change each statistic, proving the drop actually happens.
     """
 
     @staticmethod
     def in_cell():
-        # Three trees in the cell, heights 10/20/30, crown ratio 0.5.
+        # Three trees in the cell, heights 10/20/30, crown bases 5/10/15.
         return pd.DataFrame(
             {
                 "x": [15.0, 15.0, 15.0],
                 "y": [-15.0, -15.0, -15.0],
                 "height": [10.0, 20.0, 30.0],
-                "crown_ratio": [0.5, 0.5, 0.5],
+                "crown_base_height": [5.0, 10.0, 15.0],
             }
         )
 
@@ -457,7 +457,12 @@ class TestOutOfLatticeStemsAreDropped:
         # A fourth tree well outside the single cell, with extreme values.
         trees = self.in_cell()
         outlier = pd.DataFrame(
-            {"x": [100.0], "y": [-15.0], "height": [200.0], "crown_ratio": [0.05]}
+            {
+                "x": [100.0],
+                "y": [-15.0],
+                "height": [200.0],
+                "crown_base_height": [190.0],
+            }
         )
         return pd.concat([trees, outlier], ignore_index=True)
 
@@ -521,10 +526,68 @@ class TestOutOfLatticeStemsAreDropped:
                 "x": [100.0, 100.0],
                 "y": [-15.0, -15.0],
                 "height": [10.0, 20.0],
-                "crown_ratio": [0.5, 0.5],
+                "crown_base_height": [5.0, 10.0],
             }
         )
         out = crown_base_statistic(
             trees, np.ones(2), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE, statistic="mean"
         )
         assert np.isnan(out).all()
+
+
+def crown_ratio_only_stand():
+    """Two trees in the single cell carrying a crown ratio but no crown base."""
+    return pd.DataFrame(
+        {
+            "x": [15.0, 15.0],
+            "y": [-15.0, -15.0],
+            "height": [10.0, 20.0],
+            "crown_ratio": [0.5, 0.5],
+        }
+    )
+
+
+class TestCrownBaseHeightIsRequired:
+    """Crown base is read from ``crown_base_height``; there is no fallback
+    that derives it from a ``crown_ratio`` column."""
+
+    def test_crown_base_statistic_raises(self):
+        with pytest.raises(KeyError, match="crown_base_height"):
+            crown_base_statistic(
+                crown_ratio_only_stand(),
+                np.ones(2),
+                ONE_CELL_TRANSFORM,
+                ONE_CELL_SHAPE,
+            )
+
+    def test_mean_crown_length_raises(self):
+        with pytest.raises(KeyError, match="crown_base_height"):
+            mean_crown_length(
+                crown_ratio_only_stand(), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+            )
+
+    def test_height_percentile_depth_raises(self):
+        with pytest.raises(KeyError, match="crown_base_height"):
+            height_percentile_depth(
+                crown_ratio_only_stand(), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+            )
+
+
+class TestATreeWithNoLiveCrown:
+    """Crown base at the tree top: a zero-length crown based at its height."""
+
+    @staticmethod
+    def no_crown():
+        return pd.DataFrame(
+            {"x": [15.0], "y": [-15.0], "height": [12.0], "crown_base_height": [12.0]}
+        )
+
+    def test_its_crown_length_is_zero(self):
+        out = mean_crown_length(self.no_crown(), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE)
+        np.testing.assert_array_equal(out, [[0.0]])
+
+    def test_its_crown_base_is_its_height(self):
+        out = crown_base_statistic(
+            self.no_crown(), np.ones(1), ONE_CELL_TRANSFORM, ONE_CELL_SHAPE
+        )
+        np.testing.assert_array_equal(out, [[12.0]])

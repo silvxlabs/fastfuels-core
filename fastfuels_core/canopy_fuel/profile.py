@@ -262,8 +262,8 @@ def vertical_profile(
     if len(trees) == 0:
         return profile_flat.reshape(n_layers, ny, nx)
 
-    crown_length = height * trees["crown_ratio"].to_numpy(dtype=np.float64)
-    crown_base = height - crown_length
+    crown_base = trees["crown_base_height"].to_numpy(dtype=np.float64)
+    crown_length = height - crown_base
     # Zero-length crowns become a point mass at the crown base: a tiny
     # denominator turns the clipped ph into a step function there.
     safe_length = np.maximum(crown_length, 1e-9)

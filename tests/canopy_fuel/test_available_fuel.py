@@ -36,7 +36,7 @@ def two_trees(**extra):
             "fia_species_code": [122, 202],
             "dbh": [30.0, 30.0],
             "height": [18.0, 18.0],
-            "crown_ratio": [0.5, 0.5],
+            "crown_base_height": [9.0, 9.0],
             **{k: [v, v] for k, v in extra.items()},
         }
     )
@@ -49,7 +49,7 @@ def one_tree(species_code, dbh_cm, height_m, **extra):
             "fia_species_code": [species_code],
             "dbh": [dbh_cm],
             "height": [height_m],
-            "crown_ratio": [0.5],
+            "crown_base_height": [0.5 * height_m],
             **{k: [v] for k, v in extra.items()},
         }
     )
@@ -452,7 +452,7 @@ def sapling(dia_in, height_ft, spcd=202):
             "fia_species_code": [spcd],
             "dbh": [dia_in * IN_TO_CM],
             "height": [height_ft * FT_TO_M],
-            "crown_ratio": [0.9],
+            "crown_base_height": [0.1 * height_ft * FT_TO_M],
         }
     )
 

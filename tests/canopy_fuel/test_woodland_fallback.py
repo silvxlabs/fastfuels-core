@@ -37,7 +37,7 @@ def test_woodland_species_priced_without_error():
         {
             "dbh": [20.0, 15.0],
             "height": [6.0, 5.0],
-            "crown_ratio": [0.6, 0.5],
+            "crown_base_height": [2.4, 2.5],
             "fia_species_code": WOODLAND,
         }
     )
@@ -51,7 +51,7 @@ def test_woodland_fuel_matches_jenkins():
         {
             "dbh": [22.0],
             "height": [7.0],
-            "crown_ratio": [0.55],
+            "crown_base_height": [3.15],
             "fia_species_code": [65],
         }
     )
@@ -70,7 +70,7 @@ def test_mixed_stand_routes_each_species_correctly():
         {
             "dbh": [30.0, 20.0],
             "height": [18.0, 6.0],
-            "crown_ratio": [0.5, 0.6],
+            "crown_base_height": [9.0, 2.4],
             "fia_species_code": [122, 65],
         }
     )
@@ -95,7 +95,7 @@ def test_all_conifer_stand_untouched_by_fallback():
         {
             "dbh": [30.0, 25.0],
             "height": [18.0, 15.0],
-            "crown_ratio": [0.5, 0.5],
+            "crown_base_height": [9.0, 7.5],
             "fia_species_code": NSVB_DIRECT,
         }
     )

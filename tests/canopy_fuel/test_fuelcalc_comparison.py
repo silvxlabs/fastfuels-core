@@ -170,8 +170,7 @@ def stems(plot: int, expansion_factors: str = "TPA_PRE") -> pd.DataFrame:
             "x": side / 2.0,
             "y": side / 2.0,
             "height": trees["HEIGHT_FT"].to_numpy() * FT_TO_M,
-            "crown_ratio": 1.0
-            - trees["CBH_FT"].to_numpy() / trees["HEIGHT_FT"].to_numpy(),
+            "crown_base_height": trees["CBH_FT"].to_numpy() * FT_TO_M,
             "dbh": trees["DBH_IN"].to_numpy() * 2.54,
             "fia_species_code": trees["SPECIES"].map(SPECIES_CODES).to_numpy(),
             "crown_class": trees["CROWN_CLASS"].to_numpy(),

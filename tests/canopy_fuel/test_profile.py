@@ -106,8 +106,8 @@ def naive_profile(trees, fuel, n_layers, layer_depth, vertical_distribution):
     for i, tree in enumerate(trees.itertuples()):
         col = int(np.floor((tree.x - 1000.0) / 30.0))
         row = int(np.floor((5000.0 - tree.y) / 30.0))
-        length = tree.height * tree.crown_ratio
-        base = tree.height - length
+        base = tree.crown_base_height
+        length = tree.height - base
         for k in range(n_layers):
             z_lo, z_hi = k * layer_depth, (k + 1) * layer_depth
             if length > 0:
@@ -173,7 +173,7 @@ class TestVerticalPlacement:
     def test_a_zero_length_crown_is_a_point_mass_at_its_base(self):
         """Crown base = tree top = 10 m, so layer 3 (9-12 m) takes it all."""
         profile = stem_profile(
-            single_tree(x=1010.0, y=4990.0, height=10.0, crown_ratio=0.0),
+            single_tree(x=1010.0, y=4990.0, height=10.0, crown_base_height=10.0),
             np.array([5.0]),
             n_layers=4,
             layer_depth=3.0,
@@ -188,7 +188,7 @@ class TestStemAttribution:
     def test_a_stem_on_a_cell_edge_belongs_to_the_east_cell(self):
         """Cell bounds are half-open, so x = 1030 is col 1, not col 0."""
         profile = stem_profile(
-            single_tree(x=1030.0, y=4970.0, height=9.0, crown_ratio=1.0),
+            single_tree(x=1030.0, y=4970.0, height=9.0, crown_base_height=0.0),
             np.array([1.0]),
             n_layers=3,
             layer_depth=3.0,
@@ -254,7 +254,9 @@ class TestCrownProjectedAttribution:
 
     def test_a_crown_overhanging_the_boundary_loses_its_overhang(self):
         """Checked against the circular-segment formula, not our own geometry."""
-        trees = single_tree(x=1000.5, y=4940.0, height=10.0, crad=3.0)
+        trees = single_tree(
+            x=1000.5, y=4940.0, height=10.0, crown_base_height=5.0, crad=3.0
+        )
         profile = vertical_profile(
             trees,
             np.array([10.0]),
@@ -292,7 +294,9 @@ class TestCrownStraddlingACellEdge:
 
     @staticmethod
     def column_totals():
-        trees = single_tree(x=1031.0, y=4915.0, height=9.0, crown_ratio=1.0, crad=3.0)
+        trees = single_tree(
+            x=1031.0, y=4915.0, height=9.0, crown_base_height=0.0, crad=3.0
+        )
         profile = vertical_profile(
             trees,
             np.array([6.0]),
@@ -324,6 +328,21 @@ class TestCrownStraddlingACellEdge:
 
 
 class TestProfileEdgeCases:
+    @pytest.mark.parametrize("horizontal_distribution", ["stem", "crown_projected"])
+    def test_a_missing_crown_base_height_raises(self, horizontal_distribution):
+        """No fallback derives the crown base from a ``crown_ratio`` column."""
+        trees = single_tree(crad=3.0).drop(columns=["crown_base_height"])
+        trees["crown_ratio"] = 0.5
+        with pytest.raises(KeyError, match="crown_base_height"):
+            vertical_profile(
+                trees,
+                np.array([5.0]),
+                TRANSFORM,
+                SHAPE,
+                horizontal_distribution=horizontal_distribution,
+                crown_radius_column="crad",
+            )
+
     def test_an_empty_stand_gives_an_empty_profile(self):
         profile = stem_profile(random_stand(0), np.zeros(0), n_layers=2)
         assert profile.shape == (2, *SHAPE)

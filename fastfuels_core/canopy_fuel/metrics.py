@@ -12,9 +12,9 @@ chooses resolutions. All per-tree math is vectorized; trees are never
 iterated in Python.
 
 Expected tree columns follow the v2 FastFuels inventory convention:
-``x``, ``y``, ``height``, ``crown_ratio``, and, depending on options,
-``dbh``, ``fia_species_code``, and caller-named biomass / crown radius
-columns. Units: meters, centimeters (dbh), kilograms.
+``x``, ``y``, ``height``, ``crown_base_height`` (m), and, depending on
+options, ``dbh``, ``fia_species_code``, and caller-named biomass / crown
+radius columns. Units: meters, centimeters (dbh), kilograms.
 """
 
 from __future__ import annotations
