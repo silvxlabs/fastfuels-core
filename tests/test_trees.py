@@ -24,6 +24,7 @@ from tests.utils import make_random_tree
 # External imports
 import pytest
 import numpy as np
+import pandas as pd
 from pandera.errors import SchemaError
 
 TEST_PATH = Path(__file__).parent
@@ -396,9 +397,25 @@ class TestTreeCrownBaseHeight:
         with pytest.raises(ValueError, match="crown_base_height"):
             self._tree(crown_base_height=cbh)
 
+    @pytest.mark.parametrize("cbh", [None, pd.NA])
+    def test_missing_crown_base_height_value_raises(self, cbh):
+        with pytest.raises(ValueError, match="crown_base_height"):
+            self._tree(crown_base_height=cbh)
+
     def test_nan_height_raises(self):
         with pytest.raises(ValueError, match="crown_base_height"):
             self._tree(height=float("nan"), crown_base_height=7.5)
+
+    def test_float32_crown_base_height_above_height_raises(self):
+        # float32(20.1) is 20.100000381 > 20.1; a float32 comparison hid it
+        with pytest.raises(ValueError, match="crown_base_height"):
+            self._tree(height=20.1, crown_base_height=np.float32(20.1))
+
+    def test_float32_inputs_stored_as_python_floats(self):
+        tree = self._tree(height=np.float32(20.1), crown_base_height=np.float32(20.1))
+        assert type(tree.height) is float
+        assert type(tree.crown_base_height) is float
+        assert tree.crown_base_height <= tree.height
 
     def test_crown_base_height_equal_to_height_accepted(self):
         """A tree with no live crown: crown base at the top, zero crown length."""
@@ -422,7 +439,7 @@ class TestTreeCrownBaseHeight:
 
     # ── crown_ratio validation ────────────────────────────────────────────
 
-    @pytest.mark.parametrize("cr", [-0.1, 1.1, float("nan"), float("inf")])
+    @pytest.mark.parametrize("cr", [-0.1, 1.1, float("inf")])
     def test_invalid_crown_ratio_raises(self, cr):
         with pytest.raises(ValueError, match="crown_ratio"):
             self._tree(crown_base_height=7.5, crown_ratio=cr)
@@ -438,6 +455,11 @@ class TestTreeCrownBaseHeight:
 
     def test_crown_ratio_none_accepted(self):
         tree = self._tree(crown_base_height=7.5, crown_ratio=None)
+        assert tree.crown_ratio is None
+
+    @pytest.mark.parametrize("cr", [float("nan"), np.nan, np.float32("nan"), pd.NA])
+    def test_missing_crown_ratio_is_none(self, cr):
+        tree = self._tree(crown_base_height=7.5, crown_ratio=cr)
         assert tree.crown_ratio is None
 
     # ── Geometry ignores crown_ratio ──────────────────────────────────────

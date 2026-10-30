@@ -303,18 +303,25 @@ class Tree:
 
         # TODO: Diameter and height need to be greater than 0
         self.diameter = diameter
-        self.height = height
+        # Python floats, so a float32 crown base is compared at the precision
+        # it is stored at.
+        self.height = float(height)
 
-        if not (np.isfinite(crown_base_height) and 0 <= crown_base_height <= height):
+        try:
+            cbh = float(crown_base_height)
+        except (TypeError, ValueError):
+            cbh = np.nan
+        if not (np.isfinite(cbh) and 0 <= cbh <= self.height):
             raise ValueError(
                 "crown_base_height must be finite and between 0 and height "
-                f"({height}), got {crown_base_height}."
+                f"({self.height}), got {crown_base_height}."
             )
-        self.crown_base_height = float(crown_base_height)
+        self.crown_base_height = cbh
 
-        if crown_ratio is not None and not 0 <= crown_ratio <= 1:
+        # None, NaN and pd.NA all mean an unrecorded CR.
+        self.crown_ratio = None if pd.isna(crown_ratio) else float(crown_ratio)
+        if self.crown_ratio is not None and not 0 <= self.crown_ratio <= 1:
             raise ValueError(f"crown_ratio must be between 0 and 1, got {crown_ratio}.")
-        self.crown_ratio = None if crown_ratio is None else float(crown_ratio)
 
         self.x = x
         self.y = y
