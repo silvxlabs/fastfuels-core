@@ -82,6 +82,19 @@ class TestLookup:
         with pytest.raises(ValueError, match="not in the FIA reference"):
             uncompacted_crown_ratio(999999, 0.4, 25.4, 20.0)
 
+    @pytest.mark.parametrize("spcd", [np.array(["202"]), 202.0, pd.Series([202])])
+    def test_integral_species_codes_match_int(self, spcd):
+        # A string code once missed the lookup and returned the compacted ratio
+        expected = uncompacted_crown_ratio(202, 0.4, 30.0, 20.0)
+        got = uncompacted_crown_ratio(spcd, 0.4, 30.0, 20.0)
+        np.testing.assert_array_equal(got, expected)
+        assert got[0] > 0.4
+
+    @pytest.mark.parametrize("spcd", ["abc", 202.5, np.nan, None])
+    def test_non_integral_species_raises(self, spcd):
+        with pytest.raises(ValueError, match="integer FIA codes"):
+            uncompacted_crown_ratio(spcd, 0.4, 30.0, 20.0)
+
 
 class TestRules:
     def test_never_below_compacted(self):
@@ -99,6 +112,12 @@ class TestRules:
     def test_zero_crown_stays_zero(self):
         # A dead tree carries CR 0; the logistic alone would give it a crown
         assert uncompacted_crown_ratio(202, 0.0, 25.4, 20.0)[0] == 0.0
+
+    @pytest.mark.parametrize(
+        "dbh_cm, height_m", [(np.nan, 20.0), (0.0, 20.0), (25.4, np.nan), (25.4, 0.0)]
+    )
+    def test_zero_crown_is_zero_without_dbh_or_height(self, dbh_cm, height_m):
+        assert uncompacted_crown_ratio(122, 0.0, dbh_cm, height_m)[0] == 0.0
 
     @pytest.mark.parametrize(
         "ccr, dbh_cm, height_m",
@@ -138,6 +157,10 @@ class TestCrownBaseHeight:
     def test_zero_crown_is_full_height(self):
         assert crown_base_height(202, 0.0, 25.4, 20.0)[0] == 20.0
 
+    @pytest.mark.parametrize("dbh_cm", [np.nan, 0.0])
+    def test_zero_crown_without_dbh_is_full_height(self, dbh_cm):
+        assert crown_base_height(122, 0.0, dbh_cm, 20.0)[0] == 20.0
+
     @pytest.mark.parametrize(
         "ccr, dbh_cm, height_m",
         [
@@ -147,6 +170,8 @@ class TestCrownBaseHeight:
             (0.4, 25.4, -1.0),
             (0.4, 0.0, 20.0),
             (0.0, 25.4, 0.0),
+            (0.0, np.nan, np.nan),
+            (0.0, np.nan, -1.0),
         ],
     )
     def test_missing_inputs_give_nan(self, ccr, dbh_cm, height_m):

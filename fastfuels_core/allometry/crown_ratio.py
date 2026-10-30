@@ -79,6 +79,23 @@ def _species_coefficients(pacific_northwest: bool) -> pd.DataFrame:
     return table
 
 
+def _species_codes(species_code) -> np.ndarray:
+    """Species codes as int64; raises ValueError for non-integral codes."""
+    spcd = np.atleast_1d(np.asarray(species_code))
+    if np.issubdtype(spcd.dtype, np.integer):
+        return spcd.astype(np.int64)
+    try:
+        as_float = spcd.astype(np.float64)
+    except (TypeError, ValueError):
+        as_float = np.array([np.nan])
+    if not (np.isfinite(as_float).all() and (as_float % 1 == 0).all()):
+        raise ValueError(
+            f"Species codes must be integer FIA codes; got "
+            f"{np.unique(spcd.astype(str))[:5].tolist()}."
+        )
+    return as_float.astype(np.int64)
+
+
 def uncompacted_crown_ratio(
     species_code: np.ndarray,
     compacted_crown_ratio: np.ndarray,
@@ -89,12 +106,14 @@ def uncompacted_crown_ratio(
     """Per-tree uncompacted crown ratio (fraction) from the compacted ratio.
 
     ``pacific_northwest`` (scalar or per tree) selects the CA/OR/WA species
-    rows; see ``PACIFIC_NORTHWEST_STATES``. A missing compacted ratio, or a
-    missing or non-positive diameter or height, gives NaN. Raises ValueError
-    for a compacted ratio outside [0, 1] (a percentage passed by mistake) and
-    for species codes outside the FIA reference table.
+    rows; see ``PACIFIC_NORTHWEST_STATES``. A compacted ratio of zero gives
+    zero whatever the diameter and height. Otherwise a missing compacted
+    ratio, or a missing or non-positive diameter or height, gives NaN. Raises
+    ValueError for a compacted ratio outside [0, 1] (a percentage passed by
+    mistake), for species codes that are not integers, and for species codes
+    outside the FIA reference table.
     """
-    spcd = np.atleast_1d(np.asarray(species_code))
+    spcd = _species_codes(species_code)
     ccr = np.atleast_1d(np.asarray(compacted_crown_ratio, dtype=np.float64))
     dia_in = np.atleast_1d(np.asarray(dbh_cm, dtype=np.float64)) * CM_TO_IN
     ht_ft = np.atleast_1d(np.asarray(height_m, dtype=np.float64)) * M_TO_FT
@@ -124,9 +143,8 @@ def uncompacted_crown_ratio(
         z = b0 + b_ccr * ccr + b_ln_dia * np.log(dia_in) + b_ln_ht * np.log(ht_ft)
         z = z + b_hd * ht_ft / dia_in
         ucr = 1.0 / (1.0 + np.exp(-z))
-    ucr = np.fmax(ucr, ccr)
-    ucr = np.where(ccr == 0.0, 0.0, ucr)
-    return np.where(valid, np.clip(ucr, 0.0, 1.0), np.nan)
+    ucr = np.where(valid, np.clip(np.maximum(ucr, ccr), 0.0, 1.0), np.nan)
+    return np.where(ccr == 0.0, 0.0, ucr)
 
 
 def crown_base_height(
@@ -140,10 +158,11 @@ def crown_base_height(
 
     The height of the lowest live foliage, the base of the uncompacted crown
     from ``uncompacted_crown_ratio``. A compacted ratio of zero gives the
-    full height; unknown inputs give NaN, and the same ValueErrors apply.
+    full height whenever the height is valid; unknown inputs, or a missing or
+    non-positive height, give NaN, and the same ValueErrors apply.
     """
     ht_m = np.atleast_1d(np.asarray(height_m, dtype=np.float64))
     ucr = uncompacted_crown_ratio(
         species_code, compacted_crown_ratio, dbh_cm, height_m, pacific_northwest
     )
-    return ht_m * (1.0 - ucr)
+    return np.where(ht_m > 0, ht_m * (1.0 - ucr), np.nan)
