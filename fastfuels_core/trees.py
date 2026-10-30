@@ -244,7 +244,7 @@ class Tree:
         crown geometry. Units: m.
     crown_ratio : float or None
         FIA compacted crown ratio (0-1). Optional and carried as data only; it
-        is not used for crown geometry. Use
+        is not used for crown geometry. NaN or ``pd.NA`` is stored as None. Use
         :func:`fastfuels_core.allometry.crown_ratio.crown_base_height` to
         convert a compacted crown ratio to a crown base height. Units: none.
     x : float
