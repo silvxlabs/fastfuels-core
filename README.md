@@ -17,4 +17,4 @@ Documentation for the FastFuels Platform, including reference documentation for 
 `CR` / `crown_ratio` is FIA's compacted crown ratio and is carried as data only.
 To convert, `fastfuels_core.allometry.crown_ratio.crown_base_height(species_code, compacted_crown_ratio, dbh_cm, height_m, pacific_northwest=False)` applies the uncompacted crown ratio model, a national refit to FIA trees with both `CR` and `UNCRCD` recorded.
 Set `pacific_northwest=True` for trees in `PACIFIC_NORTHWEST_STATES` (CA, OR, WA).
-`crown_base_height = height * (1 - crown_ratio)` reproduces the pre-0.18 behaviour.
+`crown_base_height = height - height * crown_ratio` reproduces the pre-0.18 behaviour.

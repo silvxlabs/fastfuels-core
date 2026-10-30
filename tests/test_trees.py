@@ -437,6 +437,16 @@ class TestTreeCrownBaseHeight:
         tree = self._tree(crown_base_height=4.2)
         assert tree.crown_length == tree.height - tree.crown_base_height
 
+    @pytest.mark.parametrize("height, cr", [(12.0, 0.3), (20.1, 0.45), (30.0, 0.7)])
+    def test_migration_reproduces_pre_018_crown_base_exactly(self, height, cr):
+        # Pre-0.18 Tree: crown_length = height * crown_ratio and
+        # crown_base_height = height - crown_length. height * (1 - cr) differs
+        # from it in the last bit for these inputs.
+        old = height - height * cr
+        assert height * (1 - cr) != old
+        tree = self._tree(height=height, crown_base_height=height - height * cr)
+        assert tree.crown_base_height == old
+
     # ── crown_ratio validation ────────────────────────────────────────────
 
     @pytest.mark.parametrize("cr", [-0.1, 1.1, float("inf")])
