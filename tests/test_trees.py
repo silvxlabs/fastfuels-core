@@ -19,6 +19,7 @@ from fastfuels_core.crown_profile_models.cone import ConeCrownProfile
 from fastfuels_core.crown_profile_models.cylinder import CylinderCrownProfile
 from fastfuels_core.crown_profile_models.paraboloid import ParaboloidCrownProfile
 from fastfuels_core.crown_profile_models.ellipsoid import EllipsoidCrownProfile
+from fastfuels_core.allometry.crown_ratio import estimate_crown_base_height
 from tests.utils import make_random_tree
 
 # External imports
@@ -380,13 +381,10 @@ class TestTreeCrownBaseHeight:
         with pytest.raises(TypeError):
             Tree(122, 1, 25.0, 15.0, 0.5)
 
-    def test_missing_crown_base_height_raises(self):
-        with pytest.raises(TypeError):
-            self._tree()
-
-    def test_missing_crown_base_height_raises_with_crown_ratio(self):
-        with pytest.raises(TypeError):
-            self._tree(crown_ratio=0.5)
+    @pytest.mark.parametrize("cbh", [None, float("nan"), pd.NA])
+    def test_neither_crown_base_height_nor_crown_ratio_raises(self, cbh):
+        with pytest.raises(ValueError, match="crown_base_height, or a crown_ratio"):
+            self._tree(crown_base_height=cbh)
 
     # ── crown_base_height validation ──────────────────────────────────────
 
@@ -472,6 +470,57 @@ class TestTreeCrownBaseHeight:
         tree = self._tree(crown_base_height=7.5, crown_ratio=cr)
         assert tree.crown_ratio is None
 
+    # ── Crown base height estimated from crown_ratio ──────────────────────
+
+    @pytest.mark.parametrize("pnw", [False, True])
+    def test_estimate_matches_vectorized_exactly(self, pnw):
+        rng = np.random.default_rng(0)
+        n = 40
+        spcd = rng.choice([202, 122, 747, 131, 316, 6156, 6051], n)
+        dbh = rng.uniform(5.0, 80.0, n)
+        height = rng.uniform(4.0, 45.0, n)
+        cr = rng.uniform(0.0, 1.0, n)
+        cr[:3] = [0.0, 1.0, 0.05]
+        expected = estimate_crown_base_height(spcd, cr, dbh, height, pnw)
+        got = [
+            Tree(s, 1, d, h, crown_ratio=c, pacific_northwest=pnw).crown_base_height
+            for s, d, h, c in zip(spcd, dbh, height, cr)
+        ]
+        np.testing.assert_array_equal(got, expected)
+
+    def test_supplied_crown_base_height_takes_precedence(self):
+        tree = self._tree(crown_base_height=6.0, crown_ratio=0.4)
+        assert tree.crown_base_height == 6.0
+        assert tree.crown_ratio == 0.4
+
+    def test_pacific_northwest_ignored_when_crown_base_height_supplied(self):
+        tree = self._tree(
+            crown_base_height=6.0, crown_ratio=0.4, pacific_northwest=True
+        )
+        assert tree.crown_base_height == 6.0
+
+    @pytest.mark.parametrize("cbh", [None, float("nan"), pd.NA])
+    def test_missing_crown_base_height_is_estimated(self, cbh):
+        tree = self._tree(crown_base_height=cbh, crown_ratio=0.4)
+        expected = estimate_crown_base_height(122, 0.4, 25.0, 15.0)[0]
+        assert tree.crown_base_height == expected
+        assert type(tree.crown_base_height) is float
+
+    def test_pacific_northwest_selects_regional_estimate(self):
+        kwargs = {"species_code": 202, "diameter": 30.0, "crown_ratio": 0.4}
+        national = self._tree(**kwargs).crown_base_height
+        regional = self._tree(**kwargs, pacific_northwest=True).crown_base_height
+        assert regional == estimate_crown_base_height(202, 0.4, 30.0, 15.0, True)[0]
+        assert regional != national
+
+    def test_unestimable_crown_base_height_raises(self):
+        with pytest.raises(ValueError, match="could not be estimated"):
+            self._tree(diameter=float("nan"), crown_ratio=0.4)
+
+    def test_zero_crown_ratio_without_diameter_is_full_height(self):
+        tree = self._tree(diameter=float("nan"), crown_ratio=0.0)
+        assert tree.crown_base_height == 15.0
+
     # ── Geometry ignores crown_ratio ──────────────────────────────────────
 
     @pytest.mark.parametrize("profile_type", ["purves", "beta"])
@@ -520,6 +569,22 @@ class TestTreeCrownBaseHeight:
         assert trees[0].crown_ratio == 0.5
         assert trees[1].crown_ratio is None
         assert [t.crown_length for t in trees] == [7.5, 14.0]
+
+    def test_population_iteration_estimates_nan_cbh_from_cr(self):
+        trees = list(TreePopulation(self._frame(cr=(0.5, 0.4), cbh=(7.5, np.nan))))
+        assert trees[0].crown_base_height == 7.5
+        expected = estimate_crown_base_height(202, 0.4, 30.0, 20.0)[0]
+        assert trees[1].crown_base_height == expected
+
+    @pytest.mark.parametrize("rows", ["iterrows", "itertuples"])
+    def test_from_row_estimates_nan_cbh_from_cr(self, rows):
+        df = self._frame(cr=(0.5, 0.4), cbh=(7.5, np.nan))
+        if rows == "iterrows":
+            trees = [Tree.from_row(row) for _, row in df.iterrows()]
+        else:
+            trees = [Tree.from_row(row) for row in df.itertuples()]
+        expected = estimate_crown_base_height(202, 0.4, 30.0, 20.0)[0]
+        assert trees[1].crown_base_height == expected
 
     def test_population_iteration_raises_on_nan_cbh(self):
         population = TreePopulation(self._frame(cbh=(7.5, float("nan"))))
