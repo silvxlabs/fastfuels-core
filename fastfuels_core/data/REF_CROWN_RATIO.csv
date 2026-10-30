@@ -1,375 +1,536 @@
-REGION,KEY_TYPE,KEY,LABEL,B0,B_CCR,B_LN_DIA,B_LN_HT,B_HD,RECOMMENDED,SOURCE
-national,SPCD,11,Abies amabilis,0.06844,4.78185,0.62064,-0.67935,0.0,1,fia_refit_2026_10
-national,SPCD,12,Abies balsamea,-0.28229,4.7548,0.40654,-0.59397,0.0,1,fia_refit_2026_10
-national,SPCD,15,Abies concolor,0.08438,4.39399,0.33536,-0.53472,0.0,1,fia_refit_2026_10
-national,SPCD,17,Abies grandis,0.28609,4.77344,0.48761,-0.71142,0.0,1,fia_refit_2026_10
-national,SPCD,18,Abies lasiocarpa,0.16674,4.55224,0.1909,-0.46766,0.0,1,fia_refit_2026_10
-national,SPCD,19,Abies lasiocarpa,0.69796,4.5738,0.57162,-0.81516,0.0,1,fia_refit_2026_10
-national,SPCD,20,Abies magnifica,-0.00705,4.60249,0.48285,-0.68915,0.0,1,fia_refit_2026_10
-national,SPCD,22,Abies procera,0.00494,4.78733,0.58576,-0.73386,0.0,1,fia_refit_2026_10
-national,SPCD,41,Chamaecyparis lawsoniana,-0.15496,4.89207,0.41131,-0.56797,0.0,1,fia_refit_2026_10
-national,SPCD,43,Chamaecyparis thyoides,-0.20343,4.90271,0.4376,-0.65652,0.0,1,fia_refit_2026_10
-national,SPCD,51,Cupressus arizonica,-0.11566,4.83241,0.27661,-0.64448,0.0,1,fia_refit_2026_10
-national,SPCD,58,Juniperus pinchotii,1.08099,4.75434,0.4839,-0.80434,0.0,1,fia_refit_2026_10
-national,SPCD,59,Juniperus coahuilensis,1.43258,4.06063,0.08876,-0.52009,0.0,1,fia_refit_2026_10
-national,SPCD,61,Juniperus ashei,1.98346,4.954,0.43984,-1.25625,0.0,1,fia_refit_2026_10
-national,SPCD,62,Juniperus californica,0.80133,4.41372,0.13587,-0.66442,0.0,1,fia_refit_2026_10
-national,SPCD,63,Juniperus deppeana,0.46571,3.77516,0.19338,-0.62819,0.0,1,fia_refit_2026_10
-national,SPCD,64,Juniperus occidentalis,0.83872,4.46726,0.10388,-0.61775,0.0,1,fia_refit_2026_10
-national,SPCD,65,Juniperus osteosperma,0.13668,4.59323,0.02268,-0.36477,0.0,1,fia_refit_2026_10
-national,SPCD,66,Juniperus scopulorum,0.75694,4.79179,0.21757,-0.74693,0.0,1,fia_refit_2026_10
-national,SPCD,67,Juniperus virginiana,0.82452,4.37956,0.1103,-0.71481,0.0,1,fia_refit_2026_10
-national,SPCD,68,Juniperus virginiana,0.82687,4.49733,0.42645,-0.86624,0.0,1,fia_refit_2026_10
-national,SPCD,69,Juniperus monosperma,0.00384,4.34182,0.0205,-0.2063,0.0,1,fia_refit_2026_10
-national,SPCD,71,Larix laricina,-0.22224,4.37735,0.02769,-0.38777,0.0,1,fia_refit_2026_10
-national,SPCD,72,Larix lyallii,-0.2675,4.57424,0.28835,-0.4559,0.0,1,fia_refit_2026_10
-national,SPCD,73,Larix occidentalis,-0.45191,4.51157,0.2037,-0.39063,0.0,1,fia_refit_2026_10
-national,SPCD,81,Calocedrus decurrens,-0.17595,4.60556,0.45044,-0.57705,0.0,1,fia_refit_2026_10
-national,SPCD,91,Picea abies,-0.32961,4.95314,0.44479,-0.63092,0.0,1,fia_refit_2026_10
-national,SPCD,93,Picea engelmannii,0.23063,4.67298,0.3652,-0.60105,0.0,1,fia_refit_2026_10
-national,SPCD,94,Picea glauca,-0.28457,4.77909,0.30335,-0.53541,0.0,1,fia_refit_2026_10
-national,SPCD,95,Picea mariana,-0.3567,4.92977,0.19487,-0.44823,0.0,1,fia_refit_2026_10
-national,SPCD,96,Picea pungens,-0.44388,4.88408,0.48422,-0.51541,0.0,1,fia_refit_2026_10
-national,SPCD,97,Picea rubens,-0.23763,4.64269,0.32252,-0.5671,0.0,1,fia_refit_2026_10
-national,SPCD,98,Picea sitchensis,-0.35933,4.89546,0.5068,-0.55812,0.0,1,fia_refit_2026_10
-national,SPCD,101,Pinus albicaulis,-0.02723,4.20134,0.16462,-0.40874,0.0,1,fia_refit_2026_10
-national,SPCD,102,Pinus aristata,-0.06948,4.68031,0.06718,-0.2675,0.0,1,fia_refit_2026_10
-national,SPCD,103,Pinus attenuata,-0.01649,4.64041,0.39421,-0.58425,0.0,1,fia_refit_2026_10
-national,SPCD,105,Pinus banksiana,-0.21815,4.49832,0.3296,-0.55189,0.0,1,fia_refit_2026_10
-national,SPCD,106,Pinus edulis,0.1594,4.6059,0.25401,-0.59683,0.0,1,fia_refit_2026_10
-national,SPCD,107,Pinus clausa,-0.07935,4.64087,0.46595,-0.64499,0.0,1,fia_refit_2026_10
-national,SPCD,108,Pinus contorta,-0.29382,4.81268,0.38056,-0.56008,0.0,1,fia_refit_2026_10
-national,SPCD,110,Pinus echinata,-0.24704,4.59871,0.16444,-0.47528,0.0,1,fia_refit_2026_10
-national,SPCD,111,Pinus elliottii,-0.42775,4.39317,0.24391,-0.4871,0.0,1,fia_refit_2026_10
-national,SPCD,113,Pinus flexilis,-0.0172,4.8234,0.37735,-0.61355,0.0,1,fia_refit_2026_10
-national,SPCD,114,Pinus strobiformis,-0.05367,4.56268,0.35551,-0.60309,0.0,1,fia_refit_2026_10
-national,SPCD,115,Pinus glabra,-0.03551,4.65228,0.34084,-0.62447,0.0,1,fia_refit_2026_10
-national,SPCD,116,Pinus jeffreyi,-0.00364,4.50972,0.2631,-0.55749,0.0,1,fia_refit_2026_10
-national,SPCD,117,Pinus lambertiana,-0.06876,4.61612,0.42157,-0.61419,0.0,1,fia_refit_2026_10
-national,SPCD,118,Pinus leiophylla,-0.05215,4.66035,0.31297,-0.6688,0.0,1,fia_refit_2026_10
-national,SPCD,119,Pinus monticola,0.08047,4.42992,0.35502,-0.56046,0.0,1,fia_refit_2026_10
-national,SPCD,121,Pinus palustris,-0.13688,4.32737,0.23474,-0.52876,0.0,1,fia_refit_2026_10
-national,SPCD,122,Pinus ponderosa,-0.54143,4.29385,0.28396,-0.43014,0.0,1,fia_refit_2026_10
-national,SPCD,123,Pinus pungens,-0.00459,4.6904,0.32913,-0.63499,0.0,1,fia_refit_2026_10
-national,SPCD,125,Pinus resinosa,-0.21448,4.5318,0.49282,-0.6705,0.0,1,fia_refit_2026_10
-national,SPCD,126,Pinus rigida,-0.00189,4.5623,0.28359,-0.60083,0.0,1,fia_refit_2026_10
-national,SPCD,128,Pinus serotina,-0.09613,4.64071,0.26652,-0.59213,0.0,1,fia_refit_2026_10
-national,SPCD,129,Pinus strobus,-0.0862,4.61769,0.36181,-0.61126,0.0,1,fia_refit_2026_10
-national,SPCD,130,Pinus sylvestris,0.01149,4.73086,0.27999,-0.5988,0.0,1,fia_refit_2026_10
-national,SPCD,131,Pinus taeda,-0.69679,4.53241,0.21676,-0.40689,0.0,1,fia_refit_2026_10
-national,SPCD,132,Pinus virginiana,-0.10897,4.68065,0.2397,-0.56977,0.0,1,fia_refit_2026_10
-national,SPCD,133,Pinus monophylla,0.00838,4.49324,0.27167,-0.48832,0.0,1,fia_refit_2026_10
-national,SPCD,134,Pinus discolor,-0.08763,4.65252,0.40978,-0.69988,0.0,1,fia_refit_2026_10
-national,SPCD,136,Pinus nigra,-0.02698,4.64461,0.35129,-0.6276,0.0,1,fia_refit_2026_10
-national,SPCD,140,Pinus cembroides,-0.01296,4.55398,0.38475,-0.68102,0.0,1,fia_refit_2026_10
-national,SPCD,141,Pinus remota,0.01604,4.667,0.41305,-0.53391,0.0,1,fia_refit_2026_10
-national,SPCD,142,Pinus longaeva,0.00706,4.53775,0.44406,-0.50693,0.0,1,fia_refit_2026_10
-national,SPCD,143,Pinus monophylla,-0.02873,4.72894,0.40374,-0.67293,0.0,1,fia_refit_2026_10
-national,SPCD,202,Pseudotsuga menziesii,0.0686,4.57562,0.29439,-0.57148,0.0,1,fia_refit_2026_10
-national,SPCD,211,Sequoia sempervirens,-0.04384,4.92765,0.35897,-0.58769,0.0,1,fia_refit_2026_10
-national,SPCD,221,Taxodium distichum,-0.42613,4.77187,0.13936,-0.41701,0.0,1,fia_refit_2026_10
-national,SPCD,222,Taxodium ascendens,-0.55022,4.75239,0.20216,-0.45706,0.0,1,fia_refit_2026_10
-national,SPCD,231,Taxus brevifolia,-0.09786,4.88799,0.20594,-0.52443,0.0,1,fia_refit_2026_10
-national,SPCD,241,Thuja occidentalis,-0.32598,4.27622,0.04136,-0.32407,0.0,1,fia_refit_2026_10
-national,SPCD,242,Thuja plicata,-0.19273,4.89412,0.27273,-0.50219,0.0,1,fia_refit_2026_10
-national,SPCD,261,Tsuga canadensis,0.01445,4.51026,0.24545,-0.51237,0.0,1,fia_refit_2026_10
-national,SPCD,263,Tsuga heterophylla,0.18157,4.65757,0.40744,-0.60843,0.0,1,fia_refit_2026_10
-national,SPCD,264,Tsuga mertensiana,0.32206,4.53451,0.30355,-0.56783,0.0,1,fia_refit_2026_10
-national,SPCD,303,Acacia farnesiana,-0.0667,4.26591,-0.01495,-0.2866,0.0,1,fia_refit_2026_10
-national,SPCD,311,Acer barbatum,-0.4764,4.29075,-0.00131,-0.27155,0.0,1,fia_refit_2026_10
-national,SPCD,312,Acer macrophyllum,-0.38307,4.34671,-0.04178,-0.24424,0.0,1,fia_refit_2026_10
-national,SPCD,313,Acer negundo,-0.29553,4.16687,0.00021,-0.23159,0.0,1,fia_refit_2026_10
-national,SPCD,314,Acer nigrum,-0.33164,4.29559,-0.07804,-0.21329,0.0,1,fia_refit_2026_10
-national,SPCD,315,Acer pensylvanicum,-0.43142,4.4071,0.05144,-0.37338,0.0,1,fia_refit_2026_10
-national,SPCD,316,Acer rubrum,-0.61554,4.29023,0.00937,-0.24551,0.0,1,fia_refit_2026_10
-national,SPCD,317,Acer saccharinum,-0.30499,4.2921,0.06364,-0.30377,0.0,1,fia_refit_2026_10
-national,SPCD,318,Acer saccharum,-0.14869,4.22152,-0.18937,-0.22726,0.0,1,fia_refit_2026_10
-national,SPCD,319,Acer spicatum,-0.39264,4.11513,0.169,-0.3126,0.0,1,fia_refit_2026_10
-national,SPCD,320,Acer platanoides,-0.38375,4.31089,0.12375,-0.25803,0.0,1,fia_refit_2026_10
-national,SPCD,322,Acer grandidentatum,-0.2928,4.27296,0.13929,-0.39586,0.0,1,fia_refit_2026_10
-national,SPCD,331,Aesculus glabra,-0.07412,4.57231,0.05651,-0.41566,0.0,1,fia_refit_2026_10
-national,SPCD,332,Aesculus flava,-0.13469,4.51306,0.12373,-0.41832,0.0,1,fia_refit_2026_10
-national,SPCD,341,Ailanthus altissima,-0.31271,4.59858,0.26655,-0.50203,0.0,1,fia_refit_2026_10
-national,SPCD,345,Albizia julibrissin,-0.1655,4.45364,0.15417,-0.4879,0.0,1,fia_refit_2026_10
-national,SPCD,351,Alnus rubra,-0.1403,4.56496,0.2813,-0.51201,0.0,1,fia_refit_2026_10
-national,SPCD,356,Amelanchier spp.,-0.35896,4.35502,0.14509,-0.40242,0.0,1,fia_refit_2026_10
-national,SPCD,361,Arbutus menziesii,-0.18463,4.44774,0.15354,-0.49038,0.0,1,fia_refit_2026_10
-national,SPCD,362,Arbutus arizonica,-0.14013,4.43971,0.15766,-0.48007,0.0,1,fia_refit_2026_10
-national,SPCD,367,Asimina triloba,-0.11346,4.35464,0.26541,-0.41735,0.0,1,fia_refit_2026_10
-national,SPCD,371,Betula alleghaniensis,-0.34102,4.28196,-0.04423,-0.28855,0.0,1,fia_refit_2026_10
-national,SPCD,372,Betula lenta,-0.37001,4.38271,-0.02717,-0.30307,0.0,1,fia_refit_2026_10
-national,SPCD,373,Betula nigra,-0.28137,4.38576,0.12576,-0.38257,0.0,1,fia_refit_2026_10
-national,SPCD,374,Betula occidentalis,-0.31847,4.30782,0.07009,-0.29048,0.0,1,fia_refit_2026_10
-national,SPCD,375,Betula papyrifera,-0.44293,4.26748,0.11817,-0.37104,0.0,1,fia_refit_2026_10
-national,SPCD,379,Betula populifolia,-0.34995,4.32161,0.08105,-0.37287,0.0,1,fia_refit_2026_10
-national,SPCD,381,Sideroxylon lanuginosum,-0.12552,4.53461,0.11317,-0.42662,0.0,1,fia_refit_2026_10
-national,SPCD,391,Carpinus caroliniana,-0.31348,4.08742,-0.07203,-0.25722,0.0,1,fia_refit_2026_10
-national,SPCD,401,Carya aquatica,-0.11706,4.25006,0.08809,-0.414,0.0,1,fia_refit_2026_10
-national,SPCD,402,Carya cordiformis,-0.12852,4.21722,0.03391,-0.34767,0.0,1,fia_refit_2026_10
-national,SPCD,403,Carya glabra,-0.21388,4.25051,0.05154,-0.33897,0.0,1,fia_refit_2026_10
-national,SPCD,404,Carya illinoinensis,-0.09864,4.32524,0.22325,-0.46597,0.0,1,fia_refit_2026_10
-national,SPCD,405,Carya laciniosa,-0.07497,4.24055,0.05548,-0.33544,0.0,1,fia_refit_2026_10
-national,SPCD,407,Carya ovata,0.01035,4.2934,-0.05883,-0.31213,0.0,1,fia_refit_2026_10
-national,SPCD,408,Carya texana,-0.03374,4.03783,0.01437,-0.32345,0.0,1,fia_refit_2026_10
-national,SPCD,409,Carya alba,-0.14782,3.98199,0.07008,-0.33852,0.0,1,fia_refit_2026_10
-national,SPCD,410,Carya pallida,-0.10041,4.21626,0.00899,-0.36438,0.0,1,fia_refit_2026_10
-national,SPCD,412,Carya ovalis,-0.06775,4.22609,0.08576,-0.27627,0.0,1,fia_refit_2026_10
-national,SPCD,421,Castanea dentata,-0.11619,4.50389,0.09677,-0.47529,0.0,1,fia_refit_2026_10
-national,SPCD,452,Catalpa speciosa,-0.102,4.47744,0.21777,-0.44473,0.0,1,fia_refit_2026_10
-national,SPCD,461,Celtis laevigata,-0.01787,4.60671,0.21619,-0.53207,0.0,1,fia_refit_2026_10
-national,SPCD,462,Celtis occidentalis,0.27335,4.43581,0.03699,-0.45039,0.0,1,fia_refit_2026_10
-national,SPCD,463,Celtis laevigata,0.04064,4.43366,0.20666,-0.45923,0.0,1,fia_refit_2026_10
-national,SPCD,471,Cercis canadensis,-0.21372,4.29588,0.10595,-0.40425,0.0,1,fia_refit_2026_10
-national,SPCD,475,Cercocarpus ledifolius,-0.17647,3.96369,0.29365,-0.58957,0.0,1,fia_refit_2026_10
-national,SPCD,491,Cornus florida,-0.06853,4.19105,0.12353,-0.41518,0.0,1,fia_refit_2026_10
-national,SPCD,500,Crataegus spp.,-0.21805,4.58231,0.10158,-0.44386,0.0,1,fia_refit_2026_10
-national,SPCD,501,Crataegus crus-galli,-0.13253,4.51722,0.12233,-0.35095,0.0,1,fia_refit_2026_10
-national,SPCD,521,Diospyros virginiana,-0.40798,4.36163,0.18218,-0.40462,0.0,1,fia_refit_2026_10
-national,SPCD,522,Diospyros texana,-0.31054,4.26193,0.13442,-0.39055,0.0,1,fia_refit_2026_10
-national,SPCD,531,Fagus grandifolia,-0.50116,4.38162,-0.25077,-0.08901,0.0,1,fia_refit_2026_10
-national,SPCD,541,Fraxinus americana,-0.3087,4.345,0.09361,-0.38312,0.0,1,fia_refit_2026_10
-national,SPCD,543,Fraxinus nigra,-0.30744,4.01201,0.03269,-0.33258,0.0,1,fia_refit_2026_10
-national,SPCD,544,Fraxinus pennsylvanica,-0.31161,4.38144,0.17476,-0.43087,0.0,1,fia_refit_2026_10
-national,SPCD,545,Fraxinus profunda,-0.29365,4.31486,0.13953,-0.43098,0.0,1,fia_refit_2026_10
-national,SPCD,546,Fraxinus quadrangulata,-0.24197,4.32124,0.06687,-0.36723,0.0,1,fia_refit_2026_10
-national,SPCD,548,Fraxinus caroliniana,-0.2859,4.35238,0.04959,-0.41656,0.0,1,fia_refit_2026_10
-national,SPCD,549,Fraxinus texensis,-0.26959,4.26622,0.1946,-0.36699,0.0,1,fia_refit_2026_10
-national,SPCD,552,Gleditsia triacanthos,0.00282,4.57563,0.13229,-0.45794,0.0,1,fia_refit_2026_10
-national,SPCD,555,Gordonia lasianthus,-0.37762,4.52665,0.25447,-0.49491,0.0,1,fia_refit_2026_10
-national,SPCD,581,Halesia carolina,-0.06722,4.47807,0.16515,-0.42514,0.0,1,fia_refit_2026_10
-national,SPCD,591,Ilex opaca,-0.39496,4.25992,0.10859,-0.29691,0.0,1,fia_refit_2026_10
-national,SPCD,601,Juglans cinerea,-0.08883,4.54995,0.20789,-0.53853,0.0,1,fia_refit_2026_10
-national,SPCD,602,Juglans nigra,-0.04131,4.6317,0.28995,-0.55184,0.0,1,fia_refit_2026_10
-national,SPCD,606,Juglans major,-0.06868,4.52755,0.23139,-0.44928,0.0,1,fia_refit_2026_10
-national,SPCD,611,Liquidambar styraciflua,-0.43166,4.44685,0.05027,-0.32552,0.0,1,fia_refit_2026_10
-national,SPCD,621,Liriodendron tulipifera,-0.35053,4.2983,0.08832,-0.34836,0.0,1,fia_refit_2026_10
-national,SPCD,631,Lithocarpus densiflorus,-0.28021,4.36542,0.14872,-0.38112,0.0,1,fia_refit_2026_10
-national,SPCD,641,Maclura pomifera,-0.02236,4.60405,0.04742,-0.39014,0.0,1,fia_refit_2026_10
-national,SPCD,651,Magnolia acuminata,-0.40169,4.46492,0.07197,-0.34455,0.0,1,fia_refit_2026_10
-national,SPCD,652,Magnolia grandiflora,-0.34509,4.46636,0.06347,-0.34433,0.0,1,fia_refit_2026_10
-national,SPCD,653,Magnolia virginiana,-0.57676,4.55494,0.09474,-0.34038,0.0,1,fia_refit_2026_10
-national,SPCD,654,Magnolia macrophylla,-0.42119,4.50848,0.19669,-0.41065,0.0,1,fia_refit_2026_10
-national,SPCD,655,Magnolia fraseri,-0.41047,4.50513,0.16772,-0.39601,0.0,1,fia_refit_2026_10
-national,SPCD,660,Malus spp.,-0.10976,4.52286,-0.11852,-0.32282,0.0,1,fia_refit_2026_10
-national,SPCD,681,Morus alba,-0.09901,4.46941,0.17989,-0.42805,0.0,1,fia_refit_2026_10
-national,SPCD,682,Morus rubra,-0.11208,4.57944,0.15483,-0.4569,0.0,1,fia_refit_2026_10
-national,SPCD,691,Nyssa aquatica,-0.4336,4.49614,0.11201,-0.39774,0.0,1,fia_refit_2026_10
-national,SPCD,693,Nyssa sylvatica,-0.56638,4.35558,0.02684,-0.26111,0.0,1,fia_refit_2026_10
-national,SPCD,694,Nyssa biflora,-0.51174,4.60876,0.02617,-0.33773,0.0,1,fia_refit_2026_10
-national,SPCD,701,Ostrya virginiana,0.02187,3.82492,-0.07086,-0.2973,0.0,1,fia_refit_2026_10
-national,SPCD,711,Oxydendrum arboreum,-0.58713,4.57084,0.14344,-0.37281,0.0,1,fia_refit_2026_10
-national,SPCD,712,Paulownia tomentosa,-0.12836,4.49539,0.13448,-0.49485,0.0,1,fia_refit_2026_10
-national,SPCD,721,Persea borbonia,-0.25781,4.37348,0.25434,-0.46935,0.0,1,fia_refit_2026_10
-national,SPCD,722,Planera aquatica,-0.11871,4.52529,0.07596,-0.48879,0.0,1,fia_refit_2026_10
-national,SPCD,731,Platanus occidentalis,-0.04037,4.51895,0.06241,-0.40268,0.0,1,fia_refit_2026_10
-national,SPCD,741,Populus balsamifera,-1.05751,4.72515,0.14778,-0.27985,0.0,1,fia_refit_2026_10
-national,SPCD,742,Populus deltoides,-1.00043,4.7862,0.14159,-0.27514,0.0,1,fia_refit_2026_10
-national,SPCD,743,Populus grandidentata,-1.03578,4.84878,0.13053,-0.29994,0.0,1,fia_refit_2026_10
-national,SPCD,745,Populus deltoides,-1.02888,4.87313,0.16575,-0.22673,0.0,1,fia_refit_2026_10
-national,SPCD,746,Populus tremuloides,-1.23075,4.90444,0.10107,-0.25005,0.0,1,fia_refit_2026_10
-national,SPCD,747,Populus balsamifera,-1.11234,4.88581,0.19597,-0.25995,0.0,1,fia_refit_2026_10
-national,SPCD,748,Populus fremontii,-1.04812,4.8816,0.13268,-0.25969,0.0,1,fia_refit_2026_10
-national,SPCD,749,Populus angustifolia,-1.06326,4.6671,0.17919,-0.1799,0.0,1,fia_refit_2026_10
-national,SPCD,756,Prosopis glandulosa,0.88375,3.95449,0.31742,-0.75521,0.0,1,fia_refit_2026_10
-national,SPCD,757,Prosopis velutina,0.69949,3.67676,0.2776,-0.69089,0.0,1,fia_refit_2026_10
-national,SPCD,761,Prunus pensylvanica,-0.23064,4.5473,0.19134,-0.50442,0.0,1,fia_refit_2026_10
-national,SPCD,762,Prunus serotina,-0.1624,4.65247,0.12238,-0.46892,0.0,1,fia_refit_2026_10
-national,SPCD,763,Prunus virginiana,-0.17635,4.45381,0.12896,-0.46895,0.0,1,fia_refit_2026_10
-national,SPCD,766,Prunus americana,-0.13448,4.51973,0.02529,-0.34944,0.0,1,fia_refit_2026_10
-national,SPCD,768,Prunus emarginata,-0.16663,4.53357,0.0982,-0.41324,0.0,1,fia_refit_2026_10
-national,SPCD,771,Prunus avium,-0.17083,4.57585,0.14795,-0.47428,0.0,1,fia_refit_2026_10
-national,SPCD,801,Quercus agrifolia,-0.22334,4.20698,0.23077,-0.48453,0.0,1,fia_refit_2026_10
-national,SPCD,802,Quercus alba,0.00291,4.16448,0.0849,-0.39336,0.0,1,fia_refit_2026_10
-national,SPCD,803,Quercus arizonica,-0.01155,4.00743,0.06387,-0.3439,0.0,1,fia_refit_2026_10
-national,SPCD,804,Quercus bicolor,-0.12385,4.17219,0.00356,-0.33058,0.0,1,fia_refit_2026_10
-national,SPCD,805,Quercus chrysolepis,-0.20104,4.13203,0.3425,-0.45433,0.0,1,fia_refit_2026_10
-national,SPCD,806,Quercus coccinea,-0.29176,4.16069,0.12885,-0.37989,0.0,1,fia_refit_2026_10
-national,SPCD,807,Quercus douglasii,-0.16881,4.11445,0.26693,-0.33418,0.0,1,fia_refit_2026_10
-national,SPCD,809,Quercus ellipsoidalis,-0.18044,4.15895,0.12338,-0.38657,0.0,1,fia_refit_2026_10
-national,SPCD,810,Quercus emoryi,0.04061,3.83369,0.11973,-0.30916,0.0,1,fia_refit_2026_10
-national,SPCD,812,Quercus falcata,-0.32802,4.28139,0.1699,-0.39931,0.0,1,fia_refit_2026_10
-national,SPCD,813,Quercus pagoda,-0.31922,4.15649,0.16008,-0.37894,0.0,1,fia_refit_2026_10
-national,SPCD,814,Quercus gambelii,-0.42928,3.55389,-0.03801,-0.15657,0.0,1,fia_refit_2026_10
-national,SPCD,815,Quercus garryana,-0.12104,4.13631,0.15584,-0.40818,0.0,1,fia_refit_2026_10
-national,SPCD,817,Quercus imbricaria,-0.1401,4.17112,0.10966,-0.33339,0.0,1,fia_refit_2026_10
-national,SPCD,818,Quercus kelloggii,-0.12402,4.23138,0.25702,-0.45533,0.0,1,fia_refit_2026_10
-national,SPCD,819,Quercus laevis,-0.20605,3.99967,0.06724,-0.31957,0.0,1,fia_refit_2026_10
-national,SPCD,820,Quercus laurifolia,-0.17879,4.31264,0.12427,-0.40304,0.0,1,fia_refit_2026_10
-national,SPCD,822,Quercus lyrata,-0.20421,4.121,0.13066,-0.37648,0.0,1,fia_refit_2026_10
-national,SPCD,823,Quercus macrocarpa,-0.12826,3.94007,0.12409,-0.36661,0.0,1,fia_refit_2026_10
-national,SPCD,824,Quercus marilandica,-0.02696,4.06741,0.07945,-0.34552,0.0,1,fia_refit_2026_10
-national,SPCD,825,Quercus michauxii,-0.22019,4.12067,0.18419,-0.38854,0.0,1,fia_refit_2026_10
-national,SPCD,826,Quercus muehlenbergii,-0.07422,4.17316,0.0536,-0.37382,0.0,1,fia_refit_2026_10
-national,SPCD,827,Quercus nigra,-0.4752,4.41153,0.11456,-0.34318,0.0,1,fia_refit_2026_10
-national,SPCD,828,Quercus texana,-0.22084,4.14718,0.16946,-0.41556,0.0,1,fia_refit_2026_10
-national,SPCD,829,Quercus oblongifolia,-0.14912,4.10309,0.14722,-0.4198,0.0,1,fia_refit_2026_10
-national,SPCD,830,Quercus palustris,-0.16526,4.18789,0.15199,-0.38869,0.0,1,fia_refit_2026_10
-national,SPCD,831,Quercus phellos,-0.32663,4.20705,0.17524,-0.38126,0.0,1,fia_refit_2026_10
-national,SPCD,832,Quercus prinus,-0.39846,4.17286,0.01532,-0.30066,0.0,1,fia_refit_2026_10
-national,SPCD,833,Quercus rubra,-0.26405,4.18753,0.04503,-0.34099,0.0,1,fia_refit_2026_10
-national,SPCD,834,Quercus shumardii,-0.16931,4.13713,0.14583,-0.3887,0.0,1,fia_refit_2026_10
-national,SPCD,835,Quercus stellata,0.28757,4.19315,0.19087,-0.53682,0.0,1,fia_refit_2026_10
-national,SPCD,837,Quercus velutina,-0.14129,4.282,0.05465,-0.36986,0.0,1,fia_refit_2026_10
-national,SPCD,838,Quercus virginiana,-0.34212,4.32597,0.17305,-0.36949,0.0,1,fia_refit_2026_10
-national,SPCD,839,Quercus wislizeni,-0.2184,4.12959,0.25467,-0.42981,0.0,1,fia_refit_2026_10
-national,SPCD,840,Quercus margarettiae,-0.22182,4.15752,0.09261,-0.3772,0.0,1,fia_refit_2026_10
-national,SPCD,841,Quercus minima,-0.19889,4.13307,0.18246,-0.44537,0.0,1,fia_refit_2026_10
-national,SPCD,842,Quercus incana,-0.20995,4.12011,0.13386,-0.40972,0.0,1,fia_refit_2026_10
-national,SPCD,843,Quercus hypoleucoides,-0.11476,4.2021,0.23571,-0.40479,0.0,1,fia_refit_2026_10
-national,SPCD,846,Quercus grisea,-0.1467,4.07756,0.17615,-0.41072,0.0,1,fia_refit_2026_10
-national,SPCD,847,Quercus rugosa,-0.09763,4.20609,0.24476,-0.39365,0.0,1,fia_refit_2026_10
-national,SPCD,867,Condalia hookeri,-0.07506,4.26346,0.15381,-0.37027,0.0,1,fia_refit_2026_10
-national,SPCD,901,Robinia pseudoacacia,-0.4173,4.74425,0.11784,-0.41398,0.0,1,fia_refit_2026_10
-national,SPCD,912,Sabal palmetto,-0.49623,4.54212,-0.39118,-0.22026,0.0,1,fia_refit_2026_10
-national,SPCD,919,Sapindus saponaria,-0.13074,4.4812,0.13379,-0.43725,0.0,1,fia_refit_2026_10
-national,SPCD,921,Salix amygdaloides,-0.15821,4.53264,0.26833,-0.53085,0.0,1,fia_refit_2026_10
-national,SPCD,922,Salix nigra,-0.19078,4.62317,0.32674,-0.56546,0.0,1,fia_refit_2026_10
-national,SPCD,925,Salix caroliniana,-0.20835,4.57608,0.34066,-0.52926,0.0,1,fia_refit_2026_10
-national,SPCD,931,Sassafras albidum,-0.60339,4.4586,0.15112,-0.35059,0.0,1,fia_refit_2026_10
-national,SPCD,935,Sorbus americana,-0.10124,4.33113,-0.00207,-0.37687,0.0,1,fia_refit_2026_10
-national,SPCD,951,Tilia americana,0.05056,4.24146,0.15846,-0.47474,0.0,1,fia_refit_2026_10
-national,SPCD,953,Tilia americana,-0.0469,4.28827,0.18258,-0.45833,0.0,1,fia_refit_2026_10
-national,SPCD,971,Ulmus alata,-0.38407,4.27915,0.16193,-0.37088,0.0,1,fia_refit_2026_10
-national,SPCD,972,Ulmus americana,0.30778,4.35722,0.02828,-0.47129,0.0,1,fia_refit_2026_10
-national,SPCD,973,Ulmus crassifolia,0.31734,4.4172,0.28305,-0.55173,0.0,1,fia_refit_2026_10
-national,SPCD,974,Ulmus pumila,0.15062,4.28562,0.10718,-0.44922,0.0,1,fia_refit_2026_10
-national,SPCD,975,Ulmus rubra,0.24325,4.40943,-0.07775,-0.40715,0.0,1,fia_refit_2026_10
-national,SPCD,981,Umbellularia californica,-0.00266,4.42418,0.43851,-0.43161,0.0,1,fia_refit_2026_10
-national,SPCD,988,Laguncularia racemosa,-0.16113,4.49035,0.11895,-0.56462,0.0,1,fia_refit_2026_10
-national,SPCD,989,Rhizophora mangle,-0.14922,4.47195,0.05952,-0.56112,0.0,1,fia_refit_2026_10
-national,SPCD,992,Melaleuca quinquenervia,-0.16294,4.49645,0.1336,-0.55181,0.0,1,fia_refit_2026_10
-national,SPCD,993,Melia azedarach,-0.23313,4.50882,0.14146,-0.46159,0.0,1,fia_refit_2026_10
-national,SPCD,994,Triadica sebifera,-0.62172,4.66981,0.24837,-0.43783,0.0,1,fia_refit_2026_10
-national,SPCD,997,Elaeagnus angustifolia,-0.08863,4.49612,0.27735,-0.33328,0.0,1,fia_refit_2026_10
-national,SPCD,999,Tree unknown,-0.14116,4.39371,0.23624,-0.4972,0.0,1,fia_refit_2026_10
-national,SPCD,6748,Cornus drummondii,-0.10843,4.32264,0.12797,-0.53338,0.0,1,fia_refit_2026_10
-national,SPCD,6799,Quercus sinuata,-0.21825,4.0988,0.15393,-0.39623,0.0,1,fia_refit_2026_10
-national,SPCD,6918,Rhamnus cathartica,-0.13312,4.35556,-0.24222,-0.27179,0.0,1,fia_refit_2026_10
-national,SPCD,8421,Pyrus calleryana,-0.15105,4.42845,0.25178,-0.43094,0.0,1,fia_refit_2026_10
-national,SPCD,8441,Quercus geminata,-0.19434,4.13166,0.09241,-0.44652,0.0,1,fia_refit_2026_10
-national,SPCD,8449,Quercus hemisphaerica,-0.26992,4.13241,0.36569,-0.49901,0.0,1,fia_refit_2026_10
-national,SPCD,8487,Quercus sinuata,-0.2247,4.1351,0.11665,-0.40038,0.0,1,fia_refit_2026_10
-national,SPCD,8513,Quercus buckleyi,-0.27873,4.09455,0.06549,-0.29607,0.0,1,fia_refit_2026_10
-national,SPCD,8514,Quercus laceyi,-0.17199,4.06855,0.08593,-0.31348,0.0,1,fia_refit_2026_10
-national,GENUS,Abies,Abies spp.,-0.00178,4.77139,0.6186,-0.7133,0.0,1,fia_refit_2026_10
-national,GENUS,Acacia,Acacia spp.,-0.06611,4.36919,0.02943,-0.32849,0.0,1,fia_refit_2026_10
-national,GENUS,Acer,Acer spp.,-0.38483,4.31598,0.00607,-0.29302,0.0,1,fia_refit_2026_10
-national,GENUS,Aesculus,Aesculus spp.,-0.10416,4.5189,0.0996,-0.41962,0.0,1,fia_refit_2026_10
-national,GENUS,Ailanthus,Ailanthus spp.,-0.22833,4.54171,0.23954,-0.50671,0.0,1,fia_refit_2026_10
-national,GENUS,Albizia,Albizia spp.,-0.14007,4.46786,0.13896,-0.48861,0.0,1,fia_refit_2026_10
-national,GENUS,Alnus,Alnus spp.,-0.12647,4.52876,0.24885,-0.49271,0.0,1,fia_refit_2026_10
-national,GENUS,Amelanchier,Amelanchier spp.,-0.25019,4.40606,0.16019,-0.44568,0.0,1,fia_refit_2026_10
-national,GENUS,Arbutus,Arbutus spp.,-0.14217,4.4607,0.14217,-0.49097,0.0,1,fia_refit_2026_10
-national,GENUS,Asimina,Asimina spp.,-0.10468,4.42008,0.20701,-0.42175,0.0,1,fia_refit_2026_10
-national,GENUS,Betula,Betula spp.,-0.34199,4.33981,0.04879,-0.35334,0.0,1,fia_refit_2026_10
-national,GENUS,Calocedrus,Calocedrus spp.,-0.15318,4.72266,0.41677,-0.57535,0.0,1,fia_refit_2026_10
-national,GENUS,Carpinus,Carpinus spp.,-0.21393,4.21487,-0.04812,-0.31167,0.0,1,fia_refit_2026_10
-national,GENUS,Carya,Carya spp.,-0.09826,4.21612,0.05816,-0.36035,0.0,1,fia_refit_2026_10
-national,GENUS,Castanea,Castanea spp.,-0.12067,4.49793,0.11144,-0.48605,0.0,1,fia_refit_2026_10
-national,GENUS,Catalpa,Catalpa spp.,-0.09836,4.48475,0.18857,-0.42904,0.0,1,fia_refit_2026_10
-national,GENUS,Celtis,Celtis spp.,0.06384,4.52056,0.1558,-0.49399,0.0,1,fia_refit_2026_10
-national,GENUS,Cercis,Cercis spp.,-0.16532,4.37812,0.11525,-0.43013,0.0,1,fia_refit_2026_10
-national,GENUS,Cercocarpus,Cercocarpus spp.,-0.18449,4.02886,0.2765,-0.58345,0.0,1,fia_refit_2026_10
-national,GENUS,Chamaecyparis,Chamaecyparis spp.,-0.17529,4.8969,0.41709,-0.63994,0.0,1,fia_refit_2026_10
-national,GENUS,Condalia,Condalia spp.,-0.07895,4.36727,0.15525,-0.38507,0.0,1,fia_refit_2026_10
-national,GENUS,Cornus,Cornus spp.,-0.07968,4.31185,0.13217,-0.42804,0.0,1,fia_refit_2026_10
-national,GENUS,Crataegus,Crataegus spp.,-0.16187,4.52501,0.09666,-0.44597,0.0,1,fia_refit_2026_10
-national,GENUS,Cupressus,Cupressus spp.,-0.10759,4.83597,0.30954,-0.64081,0.0,1,fia_refit_2026_10
-national,GENUS,Diospyros,Diospyros spp.,-0.28614,4.34608,0.15783,-0.4254,0.0,1,fia_refit_2026_10
-national,GENUS,Elaeagnus,Elaeagnus spp.,-0.07703,4.4983,0.24281,-0.32932,0.0,1,fia_refit_2026_10
-national,GENUS,Fagus,Fagus spp.,-0.35686,4.3943,-0.2168,-0.14551,0.0,1,fia_refit_2026_10
-national,GENUS,Fraxinus,Fraxinus spp.,-0.27309,4.30827,0.12767,-0.40965,0.0,1,fia_refit_2026_10
-national,GENUS,Gleditsia,Gleditsia spp.,-0.04065,4.53849,0.12909,-0.4428,0.0,1,fia_refit_2026_10
-national,GENUS,Gordonia,Gordonia spp.,-0.26995,4.498,0.2394,-0.51376,0.0,1,fia_refit_2026_10
-national,GENUS,Halesia,Halesia spp.,-0.07916,4.48461,0.14286,-0.42776,0.0,1,fia_refit_2026_10
-national,GENUS,Ilex,Ilex spp.,-0.27774,4.32964,0.13719,-0.35475,0.0,1,fia_refit_2026_10
-national,GENUS,Juglans,Juglans spp.,-0.06695,4.56488,0.25312,-0.51904,0.0,1,fia_refit_2026_10
-national,GENUS,Juniperus,Juniperus spp.,0.83542,4.40111,0.1316,-0.66856,0.0,1,fia_refit_2026_10
-national,GENUS,Laguncularia,Laguncularia spp.,-0.14547,4.48399,0.10433,-0.55682,0.0,1,fia_refit_2026_10
-national,GENUS,Larix,Larix spp.,-0.33336,4.48216,0.21507,-0.42907,0.0,1,fia_refit_2026_10
-national,GENUS,Liquidambar,Liquidambar spp.,-0.3612,4.44006,0.06568,-0.35024,0.0,1,fia_refit_2026_10
-national,GENUS,Liriodendron,Liriodendron spp.,-0.26882,4.32701,0.10548,-0.3791,0.0,1,fia_refit_2026_10
-national,GENUS,Lithocarpus,Lithocarpus spp.,-0.20019,4.41738,0.1566,-0.41202,0.0,1,fia_refit_2026_10
-national,GENUS,Maclura,Maclura spp.,-0.04519,4.55967,0.0634,-0.38825,0.0,1,fia_refit_2026_10
-national,GENUS,Magnolia,Magnolia spp.,-0.38903,4.51262,0.12171,-0.38919,0.0,1,fia_refit_2026_10
-national,GENUS,Malus,Malus spp.,-0.11799,4.52157,-0.02203,-0.37543,0.0,1,fia_refit_2026_10
-national,GENUS,Melaleuca,Melaleuca spp.,-0.14413,4.48734,0.11537,-0.54299,0.0,1,fia_refit_2026_10
-national,GENUS,Melia,Melia spp.,-0.17505,4.49556,0.13637,-0.47359,0.0,1,fia_refit_2026_10
-national,GENUS,Morus,Morus spp.,-0.10698,4.52192,0.16769,-0.45055,0.0,1,fia_refit_2026_10
-national,GENUS,Nyssa,Nyssa spp.,-0.38208,4.5379,0.04857,-0.35479,0.0,1,fia_refit_2026_10
-national,GENUS,Ostrya,Ostrya spp.,-0.01485,4.01693,-0.05865,-0.31497,0.0,1,fia_refit_2026_10
-national,GENUS,Oxydendrum,Oxydendrum spp.,-0.39542,4.52476,0.1686,-0.43206,0.0,1,fia_refit_2026_10
-national,GENUS,Paulownia,Paulownia spp.,-0.11983,4.48891,0.12467,-0.49019,0.0,1,fia_refit_2026_10
-national,GENUS,Persea,Persea spp.,-0.20312,4.41147,0.2459,-0.48677,0.0,1,fia_refit_2026_10
-national,GENUS,Picea,Picea spp.,-0.30665,4.96518,0.43146,-0.56429,0.0,1,fia_refit_2026_10
-national,GENUS,Pinus,Pinus spp.,-0.03869,4.65397,0.37827,-0.64211,0.0,1,fia_refit_2026_10
-national,GENUS,Planera,Planera spp.,-0.11503,4.50508,0.08286,-0.49079,0.0,1,fia_refit_2026_10
-national,GENUS,Platanus,Platanus spp.,-0.05457,4.50971,0.07115,-0.40312,0.0,1,fia_refit_2026_10
-national,GENUS,Populus,Populus spp.,-1.0791,4.91727,0.15198,-0.31225,0.0,1,fia_refit_2026_10
-national,GENUS,Prosopis,Prosopis spp.,0.75411,3.84374,0.27706,-0.67168,0.0,1,fia_refit_2026_10
-national,GENUS,Prunus,Prunus spp.,-0.17159,4.56719,0.12518,-0.46216,0.0,1,fia_refit_2026_10
-national,GENUS,Pseudotsuga,Pseudotsuga spp.,0.0499,4.58571,0.29136,-0.56615,0.0,1,fia_refit_2026_10
-national,GENUS,Pyrus,Pyrus spp.,-0.1247,4.45576,0.19971,-0.43097,0.0,1,fia_refit_2026_10
-national,GENUS,Quercus,Quercus spp.,-0.18055,4.12751,0.13267,-0.38908,0.0,1,fia_refit_2026_10
-national,GENUS,Rhamnus,Rhamnus spp.,-0.0974,4.42351,-0.11264,-0.32238,0.0,1,fia_refit_2026_10
-national,GENUS,Rhizophora,Rhizophora spp.,-0.1415,4.47306,0.08771,-0.55437,0.0,1,fia_refit_2026_10
-national,GENUS,Robinia,Robinia spp.,-0.2808,4.63331,0.12801,-0.44623,0.0,1,fia_refit_2026_10
-national,GENUS,Sabal,Sabal spp.,-0.36414,4.47615,-0.30949,-0.31511,0.0,1,fia_refit_2026_10
-national,GENUS,Salix,Salix spp.,-0.18083,4.55853,0.29624,-0.54424,0.0,1,fia_refit_2026_10
-national,GENUS,Sapindus,Sapindus spp.,-0.11589,4.48363,0.13348,-0.44233,0.0,1,fia_refit_2026_10
-national,GENUS,Sassafras,Sassafras spp.,-0.42026,4.45204,0.17871,-0.41284,0.0,1,fia_refit_2026_10
-national,GENUS,Sequoia,Sequoia spp.,-0.07751,4.8947,0.35543,-0.57572,0.0,1,fia_refit_2026_10
-national,GENUS,Sideroxylon,Sideroxylon spp.,-0.14805,4.51633,0.13272,-0.43261,0.0,1,fia_refit_2026_10
-national,GENUS,Sorbus,Sorbus spp.,-0.09391,4.40988,0.04061,-0.40225,0.0,1,fia_refit_2026_10
-national,GENUS,Taxodium,Taxodium spp.,-0.41086,4.80897,0.2272,-0.48829,0.0,1,fia_refit_2026_10
-national,GENUS,Taxus,Taxus spp.,-0.10617,4.8749,0.26379,-0.55375,0.0,1,fia_refit_2026_10
-national,GENUS,Thuja,Thuja spp.,-0.54746,4.62654,0.07869,-0.30428,0.0,1,fia_refit_2026_10
-national,GENUS,Tilia,Tilia spp.,-0.02429,4.31635,0.1497,-0.45846,0.0,1,fia_refit_2026_10
-national,GENUS,Tree,Tree spp.,-0.12778,4.42989,0.19218,-0.48503,0.0,1,fia_refit_2026_10
-national,GENUS,Triadica,Triadica spp.,-0.42523,4.58776,0.26766,-0.49422,0.0,1,fia_refit_2026_10
-national,GENUS,Tsuga,Tsuga spp.,-0.00228,4.65869,0.27275,-0.51738,0.0,1,fia_refit_2026_10
-national,GENUS,Ulmus,Ulmus spp.,0.1541,4.35863,0.19298,-0.51438,0.0,1,fia_refit_2026_10
-national,GENUS,Umbellularia,Umbellularia spp.,-0.03418,4.45973,0.32315,-0.37884,0.0,1,fia_refit_2026_10
-national,POOLED,hardwood,All hardwoods,-0.10231,4.48546,0.12806,-0.45397,0.0,1,fia_refit_2026_10
-national,POOLED,softwood,All softwoods,-0.11907,4.85791,0.33718,-0.59226,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,11,Abies amabilis,0.11505,4.78285,0.61633,-0.68888,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,15,Abies concolor,0.1642,4.45239,0.36798,-0.56498,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,17,Abies grandis,0.31857,4.77332,0.4793,-0.63721,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,19,Abies lasiocarpa,0.61689,4.50422,0.6856,-0.79368,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,20,Abies magnifica,0.06168,4.53944,0.38177,-0.62037,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,22,Abies procera,0.0167,4.80406,0.56968,-0.72924,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,41,Chamaecyparis lawsoniana,-0.14983,4.88303,0.38192,-0.55,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,64,Juniperus occidentalis,0.84093,4.41875,0.13917,-0.60353,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,72,Larix lyallii,-0.24217,4.57269,0.34777,-0.3678,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,73,Larix occidentalis,-0.40064,4.49779,0.16614,-0.34535,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,81,Calocedrus decurrens,-0.19368,4.5111,0.46837,-0.57568,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,93,Picea engelmannii,0.24301,4.61973,0.35373,-0.51403,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,98,Picea sitchensis,-0.40956,4.83038,0.557,-0.5689,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,101,Pinus albicaulis,-0.03397,4.1982,0.15399,-0.39875,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,103,Pinus attenuata,-0.0091,4.62059,0.38816,-0.57587,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,108,Pinus contorta,-0.13639,4.61616,0.39301,-0.53965,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,116,Pinus jeffreyi,0.04792,4.45731,0.22097,-0.52022,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,117,Pinus lambertiana,-0.09948,4.5801,0.43775,-0.61135,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,119,Pinus monticola,0.1115,4.39406,0.31768,-0.51205,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,122,Pinus ponderosa,-0.43742,4.09557,0.17239,-0.30285,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,133,Pinus monophylla,0.02269,4.52347,0.30372,-0.44201,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,202,Pseudotsuga menziesii,0.27806,4.59467,0.40508,-0.64419,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,211,Sequoia sempervirens,-0.0113,4.95906,0.36331,-0.6004,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,231,Taxus brevifolia,-0.0813,4.90277,0.2542,-0.474,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,242,Thuja plicata,-0.21788,4.83737,0.41052,-0.47659,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,263,Tsuga heterophylla,0.24073,4.66136,0.43619,-0.60403,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,264,Tsuga mertensiana,0.40391,4.50752,0.4219,-0.5867,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,312,Acer macrophyllum,-0.38995,4.37158,-0.08104,-0.22176,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,351,Alnus rubra,-0.16465,4.58579,0.2817,-0.51171,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,361,Arbutus menziesii,-0.22275,4.43641,0.1608,-0.48361,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,375,Betula papyrifera,-0.40838,4.27083,0.18266,-0.29018,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,475,Cercocarpus ledifolius,-0.17782,3.94025,0.17516,-0.37707,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,631,Lithocarpus densiflorus,-0.3478,4.3264,0.13524,-0.3521,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,746,Populus tremuloides,-1.23009,4.90365,0.12325,-0.22779,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,801,Quercus agrifolia,-0.25323,4.28313,0.32329,-0.54487,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,805,Quercus chrysolepis,-0.19279,4.14159,0.40087,-0.49158,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,807,Quercus douglasii,-0.17979,4.09165,0.32755,-0.36446,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,815,Quercus garryana,-0.06549,4.14336,0.17006,-0.4329,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,818,Quercus kelloggii,-0.06859,4.31902,0.31488,-0.51234,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,839,Quercus wislizeni,-0.23065,4.13911,0.30233,-0.44772,0.0,1,fia_refit_2026_10
-pacific_northwest,SPCD,981,Umbellularia californica,0.02752,4.38898,0.53869,-0.48644,0.0,1,fia_refit_2026_10
+REGION,KEY_TYPE,KEY,LABEL,B0,B_CCR,B_LN_DIA,B_LN_HT,B_HD,EXP_SIGN,DIAMETER,RECOMMENDED,SOURCE,TABLE
+national,SPCD,11,Abies amabilis,0.06844,4.78185,0.62064,-0.67935,0.0,-1,,1,fastfuels_2026,
+national,SPCD,12,Abies balsamea,-0.28229,4.7548,0.40654,-0.59397,0.0,-1,,1,fastfuels_2026,
+national,SPCD,15,Abies concolor,0.08438,4.39399,0.33536,-0.53472,0.0,-1,,1,fastfuels_2026,
+national,SPCD,17,Abies grandis,0.28609,4.77344,0.48761,-0.71142,0.0,-1,,1,fastfuels_2026,
+national,SPCD,18,Abies lasiocarpa,0.16674,4.55224,0.1909,-0.46766,0.0,-1,,1,fastfuels_2026,
+national,SPCD,19,Abies lasiocarpa,0.69796,4.5738,0.57162,-0.81516,0.0,-1,,1,fastfuels_2026,
+national,SPCD,20,Abies magnifica,-0.00705,4.60249,0.48285,-0.68915,0.0,-1,,1,fastfuels_2026,
+national,SPCD,22,Abies procera,0.00494,4.78733,0.58576,-0.73386,0.0,-1,,1,fastfuels_2026,
+national,SPCD,41,Chamaecyparis lawsoniana,-0.15496,4.89207,0.41131,-0.56797,0.0,-1,,1,fastfuels_2026,
+national,SPCD,43,Chamaecyparis thyoides,-0.20343,4.90271,0.4376,-0.65652,0.0,-1,,1,fastfuels_2026,
+national,SPCD,51,Cupressus arizonica,-0.11566,4.83241,0.27661,-0.64448,0.0,-1,,1,fastfuels_2026,
+national,SPCD,58,Juniperus pinchotii,1.08099,4.75434,0.4839,-0.80434,0.0,-1,,1,fastfuels_2026,
+national,SPCD,59,Juniperus coahuilensis,1.43258,4.06063,0.08876,-0.52009,0.0,-1,,1,fastfuels_2026,
+national,SPCD,61,Juniperus ashei,1.98346,4.954,0.43984,-1.25625,0.0,-1,,1,fastfuels_2026,
+national,SPCD,62,Juniperus californica,0.80133,4.41372,0.13587,-0.66442,0.0,-1,,1,fastfuels_2026,
+national,SPCD,63,Juniperus deppeana,0.46571,3.77516,0.19338,-0.62819,0.0,-1,,1,fastfuels_2026,
+national,SPCD,64,Juniperus occidentalis,0.83872,4.46726,0.10388,-0.61775,0.0,-1,,1,fastfuels_2026,
+national,SPCD,65,Juniperus osteosperma,0.13668,4.59323,0.02268,-0.36477,0.0,-1,,1,fastfuels_2026,
+national,SPCD,66,Juniperus scopulorum,0.75694,4.79179,0.21757,-0.74693,0.0,-1,,1,fastfuels_2026,
+national,SPCD,67,Juniperus virginiana,0.82452,4.37956,0.1103,-0.71481,0.0,-1,,1,fastfuels_2026,
+national,SPCD,68,Juniperus virginiana,0.82687,4.49733,0.42645,-0.86624,0.0,-1,,1,fastfuels_2026,
+national,SPCD,69,Juniperus monosperma,0.00384,4.34182,0.0205,-0.2063,0.0,-1,,1,fastfuels_2026,
+national,SPCD,71,Larix laricina,-0.22224,4.37735,0.02769,-0.38777,0.0,-1,,1,fastfuels_2026,
+national,SPCD,72,Larix lyallii,-0.2675,4.57424,0.28835,-0.4559,0.0,-1,,1,fastfuels_2026,
+national,SPCD,73,Larix occidentalis,-0.45191,4.51157,0.2037,-0.39063,0.0,-1,,1,fastfuels_2026,
+national,SPCD,81,Calocedrus decurrens,-0.17595,4.60556,0.45044,-0.57705,0.0,-1,,1,fastfuels_2026,
+national,SPCD,91,Picea abies,-0.32961,4.95314,0.44479,-0.63092,0.0,-1,,1,fastfuels_2026,
+national,SPCD,93,Picea engelmannii,0.23063,4.67298,0.3652,-0.60105,0.0,-1,,1,fastfuels_2026,
+national,SPCD,94,Picea glauca,-0.28457,4.77909,0.30335,-0.53541,0.0,-1,,1,fastfuels_2026,
+national,SPCD,95,Picea mariana,-0.3567,4.92977,0.19487,-0.44823,0.0,-1,,1,fastfuels_2026,
+national,SPCD,96,Picea pungens,-0.44388,4.88408,0.48422,-0.51541,0.0,-1,,1,fastfuels_2026,
+national,SPCD,97,Picea rubens,-0.23763,4.64269,0.32252,-0.5671,0.0,-1,,1,fastfuels_2026,
+national,SPCD,98,Picea sitchensis,-0.35933,4.89546,0.5068,-0.55812,0.0,-1,,1,fastfuels_2026,
+national,SPCD,101,Pinus albicaulis,-0.02723,4.20134,0.16462,-0.40874,0.0,-1,,1,fastfuels_2026,
+national,SPCD,102,Pinus aristata,-0.06948,4.68031,0.06718,-0.2675,0.0,-1,,1,fastfuels_2026,
+national,SPCD,103,Pinus attenuata,-0.01649,4.64041,0.39421,-0.58425,0.0,-1,,1,fastfuels_2026,
+national,SPCD,105,Pinus banksiana,-0.21815,4.49832,0.3296,-0.55189,0.0,-1,,1,fastfuels_2026,
+national,SPCD,106,Pinus edulis,0.1594,4.6059,0.25401,-0.59683,0.0,-1,,1,fastfuels_2026,
+national,SPCD,107,Pinus clausa,-0.07935,4.64087,0.46595,-0.64499,0.0,-1,,1,fastfuels_2026,
+national,SPCD,108,Pinus contorta,-0.29382,4.81268,0.38056,-0.56008,0.0,-1,,1,fastfuels_2026,
+national,SPCD,110,Pinus echinata,-0.24704,4.59871,0.16444,-0.47528,0.0,-1,,1,fastfuels_2026,
+national,SPCD,111,Pinus elliottii,-0.42775,4.39317,0.24391,-0.4871,0.0,-1,,1,fastfuels_2026,
+national,SPCD,113,Pinus flexilis,-0.0172,4.8234,0.37735,-0.61355,0.0,-1,,1,fastfuels_2026,
+national,SPCD,114,Pinus strobiformis,-0.05367,4.56268,0.35551,-0.60309,0.0,-1,,1,fastfuels_2026,
+national,SPCD,115,Pinus glabra,-0.03551,4.65228,0.34084,-0.62447,0.0,-1,,1,fastfuels_2026,
+national,SPCD,116,Pinus jeffreyi,-0.00364,4.50972,0.2631,-0.55749,0.0,-1,,1,fastfuels_2026,
+national,SPCD,117,Pinus lambertiana,-0.06876,4.61612,0.42157,-0.61419,0.0,-1,,1,fastfuels_2026,
+national,SPCD,118,Pinus leiophylla,-0.05215,4.66035,0.31297,-0.6688,0.0,-1,,1,fastfuels_2026,
+national,SPCD,119,Pinus monticola,0.08047,4.42992,0.35502,-0.56046,0.0,-1,,1,fastfuels_2026,
+national,SPCD,121,Pinus palustris,-0.13688,4.32737,0.23474,-0.52876,0.0,-1,,1,fastfuels_2026,
+national,SPCD,122,Pinus ponderosa,-0.54143,4.29385,0.28396,-0.43014,0.0,-1,,1,fastfuels_2026,
+national,SPCD,123,Pinus pungens,-0.00459,4.6904,0.32913,-0.63499,0.0,-1,,1,fastfuels_2026,
+national,SPCD,125,Pinus resinosa,-0.21448,4.5318,0.49282,-0.6705,0.0,-1,,1,fastfuels_2026,
+national,SPCD,126,Pinus rigida,-0.00189,4.5623,0.28359,-0.60083,0.0,-1,,1,fastfuels_2026,
+national,SPCD,128,Pinus serotina,-0.09613,4.64071,0.26652,-0.59213,0.0,-1,,1,fastfuels_2026,
+national,SPCD,129,Pinus strobus,-0.0862,4.61769,0.36181,-0.61126,0.0,-1,,1,fastfuels_2026,
+national,SPCD,130,Pinus sylvestris,0.01149,4.73086,0.27999,-0.5988,0.0,-1,,1,fastfuels_2026,
+national,SPCD,131,Pinus taeda,-0.69679,4.53241,0.21676,-0.40689,0.0,-1,,1,fastfuels_2026,
+national,SPCD,132,Pinus virginiana,-0.10897,4.68065,0.2397,-0.56977,0.0,-1,,1,fastfuels_2026,
+national,SPCD,133,Pinus monophylla,0.00838,4.49324,0.27167,-0.48832,0.0,-1,,1,fastfuels_2026,
+national,SPCD,134,Pinus discolor,-0.08763,4.65252,0.40978,-0.69988,0.0,-1,,1,fastfuels_2026,
+national,SPCD,136,Pinus nigra,-0.02698,4.64461,0.35129,-0.6276,0.0,-1,,1,fastfuels_2026,
+national,SPCD,140,Pinus cembroides,-0.01296,4.55398,0.38475,-0.68102,0.0,-1,,1,fastfuels_2026,
+national,SPCD,141,Pinus remota,0.01604,4.667,0.41305,-0.53391,0.0,-1,,1,fastfuels_2026,
+national,SPCD,142,Pinus longaeva,0.00706,4.53775,0.44406,-0.50693,0.0,-1,,1,fastfuels_2026,
+national,SPCD,143,Pinus monophylla,-0.02873,4.72894,0.40374,-0.67293,0.0,-1,,1,fastfuels_2026,
+national,SPCD,202,Pseudotsuga menziesii,0.0686,4.57562,0.29439,-0.57148,0.0,-1,,1,fastfuels_2026,
+national,SPCD,211,Sequoia sempervirens,-0.04384,4.92765,0.35897,-0.58769,0.0,-1,,1,fastfuels_2026,
+national,SPCD,221,Taxodium distichum,-0.42613,4.77187,0.13936,-0.41701,0.0,-1,,1,fastfuels_2026,
+national,SPCD,222,Taxodium ascendens,-0.55022,4.75239,0.20216,-0.45706,0.0,-1,,1,fastfuels_2026,
+national,SPCD,231,Taxus brevifolia,-0.09786,4.88799,0.20594,-0.52443,0.0,-1,,1,fastfuels_2026,
+national,SPCD,241,Thuja occidentalis,-0.32598,4.27622,0.04136,-0.32407,0.0,-1,,1,fastfuels_2026,
+national,SPCD,242,Thuja plicata,-0.19273,4.89412,0.27273,-0.50219,0.0,-1,,1,fastfuels_2026,
+national,SPCD,261,Tsuga canadensis,0.01445,4.51026,0.24545,-0.51237,0.0,-1,,1,fastfuels_2026,
+national,SPCD,263,Tsuga heterophylla,0.18157,4.65757,0.40744,-0.60843,0.0,-1,,1,fastfuels_2026,
+national,SPCD,264,Tsuga mertensiana,0.32206,4.53451,0.30355,-0.56783,0.0,-1,,1,fastfuels_2026,
+national,SPCD,303,Acacia farnesiana,-0.0667,4.26591,-0.01495,-0.2866,0.0,-1,,1,fastfuels_2026,
+national,SPCD,311,Acer barbatum,-0.4764,4.29075,-0.00131,-0.27155,0.0,-1,,1,fastfuels_2026,
+national,SPCD,312,Acer macrophyllum,-0.38307,4.34671,-0.04178,-0.24424,0.0,-1,,1,fastfuels_2026,
+national,SPCD,313,Acer negundo,-0.29553,4.16687,0.00021,-0.23159,0.0,-1,,1,fastfuels_2026,
+national,SPCD,314,Acer nigrum,-0.33164,4.29559,-0.07804,-0.21329,0.0,-1,,1,fastfuels_2026,
+national,SPCD,315,Acer pensylvanicum,-0.43142,4.4071,0.05144,-0.37338,0.0,-1,,1,fastfuels_2026,
+national,SPCD,316,Acer rubrum,-0.61554,4.29023,0.00937,-0.24551,0.0,-1,,1,fastfuels_2026,
+national,SPCD,317,Acer saccharinum,-0.30499,4.2921,0.06364,-0.30377,0.0,-1,,1,fastfuels_2026,
+national,SPCD,318,Acer saccharum,-0.14869,4.22152,-0.18937,-0.22726,0.0,-1,,1,fastfuels_2026,
+national,SPCD,319,Acer spicatum,-0.39264,4.11513,0.169,-0.3126,0.0,-1,,1,fastfuels_2026,
+national,SPCD,320,Acer platanoides,-0.38375,4.31089,0.12375,-0.25803,0.0,-1,,1,fastfuels_2026,
+national,SPCD,322,Acer grandidentatum,-0.2928,4.27296,0.13929,-0.39586,0.0,-1,,1,fastfuels_2026,
+national,SPCD,331,Aesculus glabra,-0.07412,4.57231,0.05651,-0.41566,0.0,-1,,1,fastfuels_2026,
+national,SPCD,332,Aesculus flava,-0.13469,4.51306,0.12373,-0.41832,0.0,-1,,1,fastfuels_2026,
+national,SPCD,341,Ailanthus altissima,-0.31271,4.59858,0.26655,-0.50203,0.0,-1,,1,fastfuels_2026,
+national,SPCD,345,Albizia julibrissin,-0.1655,4.45364,0.15417,-0.4879,0.0,-1,,1,fastfuels_2026,
+national,SPCD,351,Alnus rubra,-0.1403,4.56496,0.2813,-0.51201,0.0,-1,,1,fastfuels_2026,
+national,SPCD,356,Amelanchier spp.,-0.35896,4.35502,0.14509,-0.40242,0.0,-1,,1,fastfuels_2026,
+national,SPCD,361,Arbutus menziesii,-0.18463,4.44774,0.15354,-0.49038,0.0,-1,,1,fastfuels_2026,
+national,SPCD,362,Arbutus arizonica,-0.14013,4.43971,0.15766,-0.48007,0.0,-1,,1,fastfuels_2026,
+national,SPCD,367,Asimina triloba,-0.11346,4.35464,0.26541,-0.41735,0.0,-1,,1,fastfuels_2026,
+national,SPCD,371,Betula alleghaniensis,-0.34102,4.28196,-0.04423,-0.28855,0.0,-1,,1,fastfuels_2026,
+national,SPCD,372,Betula lenta,-0.37001,4.38271,-0.02717,-0.30307,0.0,-1,,1,fastfuels_2026,
+national,SPCD,373,Betula nigra,-0.28137,4.38576,0.12576,-0.38257,0.0,-1,,1,fastfuels_2026,
+national,SPCD,374,Betula occidentalis,-0.31847,4.30782,0.07009,-0.29048,0.0,-1,,1,fastfuels_2026,
+national,SPCD,375,Betula papyrifera,-0.44293,4.26748,0.11817,-0.37104,0.0,-1,,1,fastfuels_2026,
+national,SPCD,379,Betula populifolia,-0.34995,4.32161,0.08105,-0.37287,0.0,-1,,1,fastfuels_2026,
+national,SPCD,381,Sideroxylon lanuginosum,-0.12552,4.53461,0.11317,-0.42662,0.0,-1,,1,fastfuels_2026,
+national,SPCD,391,Carpinus caroliniana,-0.31348,4.08742,-0.07203,-0.25722,0.0,-1,,1,fastfuels_2026,
+national,SPCD,401,Carya aquatica,-0.11706,4.25006,0.08809,-0.414,0.0,-1,,1,fastfuels_2026,
+national,SPCD,402,Carya cordiformis,-0.12852,4.21722,0.03391,-0.34767,0.0,-1,,1,fastfuels_2026,
+national,SPCD,403,Carya glabra,-0.21388,4.25051,0.05154,-0.33897,0.0,-1,,1,fastfuels_2026,
+national,SPCD,404,Carya illinoinensis,-0.09864,4.32524,0.22325,-0.46597,0.0,-1,,1,fastfuels_2026,
+national,SPCD,405,Carya laciniosa,-0.07497,4.24055,0.05548,-0.33544,0.0,-1,,1,fastfuels_2026,
+national,SPCD,407,Carya ovata,0.01035,4.2934,-0.05883,-0.31213,0.0,-1,,1,fastfuels_2026,
+national,SPCD,408,Carya texana,-0.03374,4.03783,0.01437,-0.32345,0.0,-1,,1,fastfuels_2026,
+national,SPCD,409,Carya alba,-0.14782,3.98199,0.07008,-0.33852,0.0,-1,,1,fastfuels_2026,
+national,SPCD,410,Carya pallida,-0.10041,4.21626,0.00899,-0.36438,0.0,-1,,1,fastfuels_2026,
+national,SPCD,412,Carya ovalis,-0.06775,4.22609,0.08576,-0.27627,0.0,-1,,1,fastfuels_2026,
+national,SPCD,421,Castanea dentata,-0.11619,4.50389,0.09677,-0.47529,0.0,-1,,1,fastfuels_2026,
+national,SPCD,452,Catalpa speciosa,-0.102,4.47744,0.21777,-0.44473,0.0,-1,,1,fastfuels_2026,
+national,SPCD,461,Celtis laevigata,-0.01787,4.60671,0.21619,-0.53207,0.0,-1,,1,fastfuels_2026,
+national,SPCD,462,Celtis occidentalis,0.27335,4.43581,0.03699,-0.45039,0.0,-1,,1,fastfuels_2026,
+national,SPCD,463,Celtis laevigata,0.04064,4.43366,0.20666,-0.45923,0.0,-1,,1,fastfuels_2026,
+national,SPCD,471,Cercis canadensis,-0.21372,4.29588,0.10595,-0.40425,0.0,-1,,1,fastfuels_2026,
+national,SPCD,475,Cercocarpus ledifolius,-0.17647,3.96369,0.29365,-0.58957,0.0,-1,,1,fastfuels_2026,
+national,SPCD,491,Cornus florida,-0.06853,4.19105,0.12353,-0.41518,0.0,-1,,1,fastfuels_2026,
+national,SPCD,500,Crataegus spp.,-0.21805,4.58231,0.10158,-0.44386,0.0,-1,,1,fastfuels_2026,
+national,SPCD,501,Crataegus crus-galli,-0.13253,4.51722,0.12233,-0.35095,0.0,-1,,1,fastfuels_2026,
+national,SPCD,521,Diospyros virginiana,-0.40798,4.36163,0.18218,-0.40462,0.0,-1,,1,fastfuels_2026,
+national,SPCD,522,Diospyros texana,-0.31054,4.26193,0.13442,-0.39055,0.0,-1,,1,fastfuels_2026,
+national,SPCD,531,Fagus grandifolia,-0.50116,4.38162,-0.25077,-0.08901,0.0,-1,,1,fastfuels_2026,
+national,SPCD,541,Fraxinus americana,-0.3087,4.345,0.09361,-0.38312,0.0,-1,,1,fastfuels_2026,
+national,SPCD,543,Fraxinus nigra,-0.30744,4.01201,0.03269,-0.33258,0.0,-1,,1,fastfuels_2026,
+national,SPCD,544,Fraxinus pennsylvanica,-0.31161,4.38144,0.17476,-0.43087,0.0,-1,,1,fastfuels_2026,
+national,SPCD,545,Fraxinus profunda,-0.29365,4.31486,0.13953,-0.43098,0.0,-1,,1,fastfuels_2026,
+national,SPCD,546,Fraxinus quadrangulata,-0.24197,4.32124,0.06687,-0.36723,0.0,-1,,1,fastfuels_2026,
+national,SPCD,548,Fraxinus caroliniana,-0.2859,4.35238,0.04959,-0.41656,0.0,-1,,1,fastfuels_2026,
+national,SPCD,549,Fraxinus texensis,-0.26959,4.26622,0.1946,-0.36699,0.0,-1,,1,fastfuels_2026,
+national,SPCD,552,Gleditsia triacanthos,0.00282,4.57563,0.13229,-0.45794,0.0,-1,,1,fastfuels_2026,
+national,SPCD,555,Gordonia lasianthus,-0.37762,4.52665,0.25447,-0.49491,0.0,-1,,1,fastfuels_2026,
+national,SPCD,581,Halesia carolina,-0.06722,4.47807,0.16515,-0.42514,0.0,-1,,1,fastfuels_2026,
+national,SPCD,591,Ilex opaca,-0.39496,4.25992,0.10859,-0.29691,0.0,-1,,1,fastfuels_2026,
+national,SPCD,601,Juglans cinerea,-0.08883,4.54995,0.20789,-0.53853,0.0,-1,,1,fastfuels_2026,
+national,SPCD,602,Juglans nigra,-0.04131,4.6317,0.28995,-0.55184,0.0,-1,,1,fastfuels_2026,
+national,SPCD,606,Juglans major,-0.06868,4.52755,0.23139,-0.44928,0.0,-1,,1,fastfuels_2026,
+national,SPCD,611,Liquidambar styraciflua,-0.43166,4.44685,0.05027,-0.32552,0.0,-1,,1,fastfuels_2026,
+national,SPCD,621,Liriodendron tulipifera,-0.35053,4.2983,0.08832,-0.34836,0.0,-1,,1,fastfuels_2026,
+national,SPCD,631,Lithocarpus densiflorus,-0.28021,4.36542,0.14872,-0.38112,0.0,-1,,1,fastfuels_2026,
+national,SPCD,641,Maclura pomifera,-0.02236,4.60405,0.04742,-0.39014,0.0,-1,,1,fastfuels_2026,
+national,SPCD,651,Magnolia acuminata,-0.40169,4.46492,0.07197,-0.34455,0.0,-1,,1,fastfuels_2026,
+national,SPCD,652,Magnolia grandiflora,-0.34509,4.46636,0.06347,-0.34433,0.0,-1,,1,fastfuels_2026,
+national,SPCD,653,Magnolia virginiana,-0.57676,4.55494,0.09474,-0.34038,0.0,-1,,1,fastfuels_2026,
+national,SPCD,654,Magnolia macrophylla,-0.42119,4.50848,0.19669,-0.41065,0.0,-1,,1,fastfuels_2026,
+national,SPCD,655,Magnolia fraseri,-0.41047,4.50513,0.16772,-0.39601,0.0,-1,,1,fastfuels_2026,
+national,SPCD,660,Malus spp.,-0.10976,4.52286,-0.11852,-0.32282,0.0,-1,,1,fastfuels_2026,
+national,SPCD,681,Morus alba,-0.09901,4.46941,0.17989,-0.42805,0.0,-1,,1,fastfuels_2026,
+national,SPCD,682,Morus rubra,-0.11208,4.57944,0.15483,-0.4569,0.0,-1,,1,fastfuels_2026,
+national,SPCD,691,Nyssa aquatica,-0.4336,4.49614,0.11201,-0.39774,0.0,-1,,1,fastfuels_2026,
+national,SPCD,693,Nyssa sylvatica,-0.56638,4.35558,0.02684,-0.26111,0.0,-1,,1,fastfuels_2026,
+national,SPCD,694,Nyssa biflora,-0.51174,4.60876,0.02617,-0.33773,0.0,-1,,1,fastfuels_2026,
+national,SPCD,701,Ostrya virginiana,0.02187,3.82492,-0.07086,-0.2973,0.0,-1,,1,fastfuels_2026,
+national,SPCD,711,Oxydendrum arboreum,-0.58713,4.57084,0.14344,-0.37281,0.0,-1,,1,fastfuels_2026,
+national,SPCD,712,Paulownia tomentosa,-0.12836,4.49539,0.13448,-0.49485,0.0,-1,,1,fastfuels_2026,
+national,SPCD,721,Persea borbonia,-0.25781,4.37348,0.25434,-0.46935,0.0,-1,,1,fastfuels_2026,
+national,SPCD,722,Planera aquatica,-0.11871,4.52529,0.07596,-0.48879,0.0,-1,,1,fastfuels_2026,
+national,SPCD,731,Platanus occidentalis,-0.04037,4.51895,0.06241,-0.40268,0.0,-1,,1,fastfuels_2026,
+national,SPCD,741,Populus balsamifera,-1.05751,4.72515,0.14778,-0.27985,0.0,-1,,1,fastfuels_2026,
+national,SPCD,742,Populus deltoides,-1.00043,4.7862,0.14159,-0.27514,0.0,-1,,1,fastfuels_2026,
+national,SPCD,743,Populus grandidentata,-1.03578,4.84878,0.13053,-0.29994,0.0,-1,,1,fastfuels_2026,
+national,SPCD,745,Populus deltoides,-1.02888,4.87313,0.16575,-0.22673,0.0,-1,,1,fastfuels_2026,
+national,SPCD,746,Populus tremuloides,-1.23075,4.90444,0.10107,-0.25005,0.0,-1,,1,fastfuels_2026,
+national,SPCD,747,Populus balsamifera,-1.11234,4.88581,0.19597,-0.25995,0.0,-1,,1,fastfuels_2026,
+national,SPCD,748,Populus fremontii,-1.04812,4.8816,0.13268,-0.25969,0.0,-1,,1,fastfuels_2026,
+national,SPCD,749,Populus angustifolia,-1.06326,4.6671,0.17919,-0.1799,0.0,-1,,1,fastfuels_2026,
+national,SPCD,756,Prosopis glandulosa,0.88375,3.95449,0.31742,-0.75521,0.0,-1,,1,fastfuels_2026,
+national,SPCD,757,Prosopis velutina,0.69949,3.67676,0.2776,-0.69089,0.0,-1,,1,fastfuels_2026,
+national,SPCD,761,Prunus pensylvanica,-0.23064,4.5473,0.19134,-0.50442,0.0,-1,,1,fastfuels_2026,
+national,SPCD,762,Prunus serotina,-0.1624,4.65247,0.12238,-0.46892,0.0,-1,,1,fastfuels_2026,
+national,SPCD,763,Prunus virginiana,-0.17635,4.45381,0.12896,-0.46895,0.0,-1,,1,fastfuels_2026,
+national,SPCD,766,Prunus americana,-0.13448,4.51973,0.02529,-0.34944,0.0,-1,,1,fastfuels_2026,
+national,SPCD,768,Prunus emarginata,-0.16663,4.53357,0.0982,-0.41324,0.0,-1,,1,fastfuels_2026,
+national,SPCD,771,Prunus avium,-0.17083,4.57585,0.14795,-0.47428,0.0,-1,,1,fastfuels_2026,
+national,SPCD,801,Quercus agrifolia,-0.22334,4.20698,0.23077,-0.48453,0.0,-1,,1,fastfuels_2026,
+national,SPCD,802,Quercus alba,0.00291,4.16448,0.0849,-0.39336,0.0,-1,,1,fastfuels_2026,
+national,SPCD,803,Quercus arizonica,-0.01155,4.00743,0.06387,-0.3439,0.0,-1,,1,fastfuels_2026,
+national,SPCD,804,Quercus bicolor,-0.12385,4.17219,0.00356,-0.33058,0.0,-1,,1,fastfuels_2026,
+national,SPCD,805,Quercus chrysolepis,-0.20104,4.13203,0.3425,-0.45433,0.0,-1,,1,fastfuels_2026,
+national,SPCD,806,Quercus coccinea,-0.29176,4.16069,0.12885,-0.37989,0.0,-1,,1,fastfuels_2026,
+national,SPCD,807,Quercus douglasii,-0.16881,4.11445,0.26693,-0.33418,0.0,-1,,1,fastfuels_2026,
+national,SPCD,809,Quercus ellipsoidalis,-0.18044,4.15895,0.12338,-0.38657,0.0,-1,,1,fastfuels_2026,
+national,SPCD,810,Quercus emoryi,0.04061,3.83369,0.11973,-0.30916,0.0,-1,,1,fastfuels_2026,
+national,SPCD,812,Quercus falcata,-0.32802,4.28139,0.1699,-0.39931,0.0,-1,,1,fastfuels_2026,
+national,SPCD,813,Quercus pagoda,-0.31922,4.15649,0.16008,-0.37894,0.0,-1,,1,fastfuels_2026,
+national,SPCD,814,Quercus gambelii,-0.42928,3.55389,-0.03801,-0.15657,0.0,-1,,1,fastfuels_2026,
+national,SPCD,815,Quercus garryana,-0.12104,4.13631,0.15584,-0.40818,0.0,-1,,1,fastfuels_2026,
+national,SPCD,817,Quercus imbricaria,-0.1401,4.17112,0.10966,-0.33339,0.0,-1,,1,fastfuels_2026,
+national,SPCD,818,Quercus kelloggii,-0.12402,4.23138,0.25702,-0.45533,0.0,-1,,1,fastfuels_2026,
+national,SPCD,819,Quercus laevis,-0.20605,3.99967,0.06724,-0.31957,0.0,-1,,1,fastfuels_2026,
+national,SPCD,820,Quercus laurifolia,-0.17879,4.31264,0.12427,-0.40304,0.0,-1,,1,fastfuels_2026,
+national,SPCD,822,Quercus lyrata,-0.20421,4.121,0.13066,-0.37648,0.0,-1,,1,fastfuels_2026,
+national,SPCD,823,Quercus macrocarpa,-0.12826,3.94007,0.12409,-0.36661,0.0,-1,,1,fastfuels_2026,
+national,SPCD,824,Quercus marilandica,-0.02696,4.06741,0.07945,-0.34552,0.0,-1,,1,fastfuels_2026,
+national,SPCD,825,Quercus michauxii,-0.22019,4.12067,0.18419,-0.38854,0.0,-1,,1,fastfuels_2026,
+national,SPCD,826,Quercus muehlenbergii,-0.07422,4.17316,0.0536,-0.37382,0.0,-1,,1,fastfuels_2026,
+national,SPCD,827,Quercus nigra,-0.4752,4.41153,0.11456,-0.34318,0.0,-1,,1,fastfuels_2026,
+national,SPCD,828,Quercus texana,-0.22084,4.14718,0.16946,-0.41556,0.0,-1,,1,fastfuels_2026,
+national,SPCD,829,Quercus oblongifolia,-0.14912,4.10309,0.14722,-0.4198,0.0,-1,,1,fastfuels_2026,
+national,SPCD,830,Quercus palustris,-0.16526,4.18789,0.15199,-0.38869,0.0,-1,,1,fastfuels_2026,
+national,SPCD,831,Quercus phellos,-0.32663,4.20705,0.17524,-0.38126,0.0,-1,,1,fastfuels_2026,
+national,SPCD,832,Quercus prinus,-0.39846,4.17286,0.01532,-0.30066,0.0,-1,,1,fastfuels_2026,
+national,SPCD,833,Quercus rubra,-0.26405,4.18753,0.04503,-0.34099,0.0,-1,,1,fastfuels_2026,
+national,SPCD,834,Quercus shumardii,-0.16931,4.13713,0.14583,-0.3887,0.0,-1,,1,fastfuels_2026,
+national,SPCD,835,Quercus stellata,0.28757,4.19315,0.19087,-0.53682,0.0,-1,,1,fastfuels_2026,
+national,SPCD,837,Quercus velutina,-0.14129,4.282,0.05465,-0.36986,0.0,-1,,1,fastfuels_2026,
+national,SPCD,838,Quercus virginiana,-0.34212,4.32597,0.17305,-0.36949,0.0,-1,,1,fastfuels_2026,
+national,SPCD,839,Quercus wislizeni,-0.2184,4.12959,0.25467,-0.42981,0.0,-1,,1,fastfuels_2026,
+national,SPCD,840,Quercus margarettiae,-0.22182,4.15752,0.09261,-0.3772,0.0,-1,,1,fastfuels_2026,
+national,SPCD,841,Quercus minima,-0.19889,4.13307,0.18246,-0.44537,0.0,-1,,1,fastfuels_2026,
+national,SPCD,842,Quercus incana,-0.20995,4.12011,0.13386,-0.40972,0.0,-1,,1,fastfuels_2026,
+national,SPCD,843,Quercus hypoleucoides,-0.11476,4.2021,0.23571,-0.40479,0.0,-1,,1,fastfuels_2026,
+national,SPCD,846,Quercus grisea,-0.1467,4.07756,0.17615,-0.41072,0.0,-1,,1,fastfuels_2026,
+national,SPCD,847,Quercus rugosa,-0.09763,4.20609,0.24476,-0.39365,0.0,-1,,1,fastfuels_2026,
+national,SPCD,867,Condalia hookeri,-0.07506,4.26346,0.15381,-0.37027,0.0,-1,,1,fastfuels_2026,
+national,SPCD,901,Robinia pseudoacacia,-0.4173,4.74425,0.11784,-0.41398,0.0,-1,,1,fastfuels_2026,
+national,SPCD,912,Sabal palmetto,-0.49623,4.54212,-0.39118,-0.22026,0.0,-1,,1,fastfuels_2026,
+national,SPCD,919,Sapindus saponaria,-0.13074,4.4812,0.13379,-0.43725,0.0,-1,,1,fastfuels_2026,
+national,SPCD,921,Salix amygdaloides,-0.15821,4.53264,0.26833,-0.53085,0.0,-1,,1,fastfuels_2026,
+national,SPCD,922,Salix nigra,-0.19078,4.62317,0.32674,-0.56546,0.0,-1,,1,fastfuels_2026,
+national,SPCD,925,Salix caroliniana,-0.20835,4.57608,0.34066,-0.52926,0.0,-1,,1,fastfuels_2026,
+national,SPCD,931,Sassafras albidum,-0.60339,4.4586,0.15112,-0.35059,0.0,-1,,1,fastfuels_2026,
+national,SPCD,935,Sorbus americana,-0.10124,4.33113,-0.00207,-0.37687,0.0,-1,,1,fastfuels_2026,
+national,SPCD,951,Tilia americana,0.05056,4.24146,0.15846,-0.47474,0.0,-1,,1,fastfuels_2026,
+national,SPCD,953,Tilia americana,-0.0469,4.28827,0.18258,-0.45833,0.0,-1,,1,fastfuels_2026,
+national,SPCD,971,Ulmus alata,-0.38407,4.27915,0.16193,-0.37088,0.0,-1,,1,fastfuels_2026,
+national,SPCD,972,Ulmus americana,0.30778,4.35722,0.02828,-0.47129,0.0,-1,,1,fastfuels_2026,
+national,SPCD,973,Ulmus crassifolia,0.31734,4.4172,0.28305,-0.55173,0.0,-1,,1,fastfuels_2026,
+national,SPCD,974,Ulmus pumila,0.15062,4.28562,0.10718,-0.44922,0.0,-1,,1,fastfuels_2026,
+national,SPCD,975,Ulmus rubra,0.24325,4.40943,-0.07775,-0.40715,0.0,-1,,1,fastfuels_2026,
+national,SPCD,981,Umbellularia californica,-0.00266,4.42418,0.43851,-0.43161,0.0,-1,,1,fastfuels_2026,
+national,SPCD,988,Laguncularia racemosa,-0.16113,4.49035,0.11895,-0.56462,0.0,-1,,1,fastfuels_2026,
+national,SPCD,989,Rhizophora mangle,-0.14922,4.47195,0.05952,-0.56112,0.0,-1,,1,fastfuels_2026,
+national,SPCD,992,Melaleuca quinquenervia,-0.16294,4.49645,0.1336,-0.55181,0.0,-1,,1,fastfuels_2026,
+national,SPCD,993,Melia azedarach,-0.23313,4.50882,0.14146,-0.46159,0.0,-1,,1,fastfuels_2026,
+national,SPCD,994,Triadica sebifera,-0.62172,4.66981,0.24837,-0.43783,0.0,-1,,1,fastfuels_2026,
+national,SPCD,997,Elaeagnus angustifolia,-0.08863,4.49612,0.27735,-0.33328,0.0,-1,,1,fastfuels_2026,
+national,SPCD,999,Tree unknown,-0.14116,4.39371,0.23624,-0.4972,0.0,-1,,1,fastfuels_2026,
+national,SPCD,6748,Cornus drummondii,-0.10843,4.32264,0.12797,-0.53338,0.0,-1,,1,fastfuels_2026,
+national,SPCD,6799,Quercus sinuata,-0.21825,4.0988,0.15393,-0.39623,0.0,-1,,1,fastfuels_2026,
+national,SPCD,6918,Rhamnus cathartica,-0.13312,4.35556,-0.24222,-0.27179,0.0,-1,,1,fastfuels_2026,
+national,SPCD,8421,Pyrus calleryana,-0.15105,4.42845,0.25178,-0.43094,0.0,-1,,1,fastfuels_2026,
+national,SPCD,8441,Quercus geminata,-0.19434,4.13166,0.09241,-0.44652,0.0,-1,,1,fastfuels_2026,
+national,SPCD,8449,Quercus hemisphaerica,-0.26992,4.13241,0.36569,-0.49901,0.0,-1,,1,fastfuels_2026,
+national,SPCD,8487,Quercus sinuata,-0.2247,4.1351,0.11665,-0.40038,0.0,-1,,1,fastfuels_2026,
+national,SPCD,8513,Quercus buckleyi,-0.27873,4.09455,0.06549,-0.29607,0.0,-1,,1,fastfuels_2026,
+national,SPCD,8514,Quercus laceyi,-0.17199,4.06855,0.08593,-0.31348,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Abies,Abies spp.,-0.00178,4.77139,0.6186,-0.7133,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Acacia,Acacia spp.,-0.06611,4.36919,0.02943,-0.32849,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Acer,Acer spp.,-0.38483,4.31598,0.00607,-0.29302,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Aesculus,Aesculus spp.,-0.10416,4.5189,0.0996,-0.41962,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Ailanthus,Ailanthus spp.,-0.22833,4.54171,0.23954,-0.50671,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Albizia,Albizia spp.,-0.14007,4.46786,0.13896,-0.48861,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Alnus,Alnus spp.,-0.12647,4.52876,0.24885,-0.49271,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Amelanchier,Amelanchier spp.,-0.25019,4.40606,0.16019,-0.44568,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Arbutus,Arbutus spp.,-0.14217,4.4607,0.14217,-0.49097,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Asimina,Asimina spp.,-0.10468,4.42008,0.20701,-0.42175,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Betula,Betula spp.,-0.34199,4.33981,0.04879,-0.35334,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Calocedrus,Calocedrus spp.,-0.15318,4.72266,0.41677,-0.57535,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Carpinus,Carpinus spp.,-0.21393,4.21487,-0.04812,-0.31167,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Carya,Carya spp.,-0.09826,4.21612,0.05816,-0.36035,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Castanea,Castanea spp.,-0.12067,4.49793,0.11144,-0.48605,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Catalpa,Catalpa spp.,-0.09836,4.48475,0.18857,-0.42904,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Celtis,Celtis spp.,0.06384,4.52056,0.1558,-0.49399,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Cercis,Cercis spp.,-0.16532,4.37812,0.11525,-0.43013,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Cercocarpus,Cercocarpus spp.,-0.18449,4.02886,0.2765,-0.58345,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Chamaecyparis,Chamaecyparis spp.,-0.17529,4.8969,0.41709,-0.63994,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Condalia,Condalia spp.,-0.07895,4.36727,0.15525,-0.38507,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Cornus,Cornus spp.,-0.07968,4.31185,0.13217,-0.42804,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Crataegus,Crataegus spp.,-0.16187,4.52501,0.09666,-0.44597,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Cupressus,Cupressus spp.,-0.10759,4.83597,0.30954,-0.64081,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Diospyros,Diospyros spp.,-0.28614,4.34608,0.15783,-0.4254,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Elaeagnus,Elaeagnus spp.,-0.07703,4.4983,0.24281,-0.32932,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Fagus,Fagus spp.,-0.35686,4.3943,-0.2168,-0.14551,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Fraxinus,Fraxinus spp.,-0.27309,4.30827,0.12767,-0.40965,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Gleditsia,Gleditsia spp.,-0.04065,4.53849,0.12909,-0.4428,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Gordonia,Gordonia spp.,-0.26995,4.498,0.2394,-0.51376,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Halesia,Halesia spp.,-0.07916,4.48461,0.14286,-0.42776,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Ilex,Ilex spp.,-0.27774,4.32964,0.13719,-0.35475,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Juglans,Juglans spp.,-0.06695,4.56488,0.25312,-0.51904,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Juniperus,Juniperus spp.,0.83542,4.40111,0.1316,-0.66856,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Laguncularia,Laguncularia spp.,-0.14547,4.48399,0.10433,-0.55682,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Larix,Larix spp.,-0.33336,4.48216,0.21507,-0.42907,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Liquidambar,Liquidambar spp.,-0.3612,4.44006,0.06568,-0.35024,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Liriodendron,Liriodendron spp.,-0.26882,4.32701,0.10548,-0.3791,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Lithocarpus,Lithocarpus spp.,-0.20019,4.41738,0.1566,-0.41202,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Maclura,Maclura spp.,-0.04519,4.55967,0.0634,-0.38825,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Magnolia,Magnolia spp.,-0.38903,4.51262,0.12171,-0.38919,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Malus,Malus spp.,-0.11799,4.52157,-0.02203,-0.37543,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Melaleuca,Melaleuca spp.,-0.14413,4.48734,0.11537,-0.54299,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Melia,Melia spp.,-0.17505,4.49556,0.13637,-0.47359,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Morus,Morus spp.,-0.10698,4.52192,0.16769,-0.45055,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Nyssa,Nyssa spp.,-0.38208,4.5379,0.04857,-0.35479,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Ostrya,Ostrya spp.,-0.01485,4.01693,-0.05865,-0.31497,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Oxydendrum,Oxydendrum spp.,-0.39542,4.52476,0.1686,-0.43206,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Paulownia,Paulownia spp.,-0.11983,4.48891,0.12467,-0.49019,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Persea,Persea spp.,-0.20312,4.41147,0.2459,-0.48677,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Picea,Picea spp.,-0.30665,4.96518,0.43146,-0.56429,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Pinus,Pinus spp.,-0.03869,4.65397,0.37827,-0.64211,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Planera,Planera spp.,-0.11503,4.50508,0.08286,-0.49079,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Platanus,Platanus spp.,-0.05457,4.50971,0.07115,-0.40312,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Populus,Populus spp.,-1.0791,4.91727,0.15198,-0.31225,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Prosopis,Prosopis spp.,0.75411,3.84374,0.27706,-0.67168,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Prunus,Prunus spp.,-0.17159,4.56719,0.12518,-0.46216,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Pseudotsuga,Pseudotsuga spp.,0.0499,4.58571,0.29136,-0.56615,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Pyrus,Pyrus spp.,-0.1247,4.45576,0.19971,-0.43097,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Quercus,Quercus spp.,-0.18055,4.12751,0.13267,-0.38908,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Rhamnus,Rhamnus spp.,-0.0974,4.42351,-0.11264,-0.32238,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Rhizophora,Rhizophora spp.,-0.1415,4.47306,0.08771,-0.55437,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Robinia,Robinia spp.,-0.2808,4.63331,0.12801,-0.44623,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Sabal,Sabal spp.,-0.36414,4.47615,-0.30949,-0.31511,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Salix,Salix spp.,-0.18083,4.55853,0.29624,-0.54424,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Sapindus,Sapindus spp.,-0.11589,4.48363,0.13348,-0.44233,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Sassafras,Sassafras spp.,-0.42026,4.45204,0.17871,-0.41284,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Sequoia,Sequoia spp.,-0.07751,4.8947,0.35543,-0.57572,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Sideroxylon,Sideroxylon spp.,-0.14805,4.51633,0.13272,-0.43261,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Sorbus,Sorbus spp.,-0.09391,4.40988,0.04061,-0.40225,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Taxodium,Taxodium spp.,-0.41086,4.80897,0.2272,-0.48829,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Taxus,Taxus spp.,-0.10617,4.8749,0.26379,-0.55375,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Thuja,Thuja spp.,-0.54746,4.62654,0.07869,-0.30428,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Tilia,Tilia spp.,-0.02429,4.31635,0.1497,-0.45846,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Tree,Tree spp.,-0.12778,4.42989,0.19218,-0.48503,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Triadica,Triadica spp.,-0.42523,4.58776,0.26766,-0.49422,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Tsuga,Tsuga spp.,-0.00228,4.65869,0.27275,-0.51738,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Ulmus,Ulmus spp.,0.1541,4.35863,0.19298,-0.51438,0.0,-1,,1,fastfuels_2026,
+national,GENUS,Umbellularia,Umbellularia spp.,-0.03418,4.45973,0.32315,-0.37884,0.0,-1,,1,fastfuels_2026,
+national,POOLED,hardwood,All hardwoods,-0.10231,4.48546,0.12806,-0.45397,0.0,-1,,1,fastfuels_2026,
+national,POOLED,softwood,All softwoods,-0.11907,4.85791,0.33718,-0.59226,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,11,Abies amabilis,0.11505,4.78285,0.61633,-0.68888,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,15,Abies concolor,0.1642,4.45239,0.36798,-0.56498,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,17,Abies grandis,0.31857,4.77332,0.4793,-0.63721,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,19,Abies lasiocarpa,0.61689,4.50422,0.6856,-0.79368,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,20,Abies magnifica,0.06168,4.53944,0.38177,-0.62037,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,22,Abies procera,0.0167,4.80406,0.56968,-0.72924,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,41,Chamaecyparis lawsoniana,-0.14983,4.88303,0.38192,-0.55,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,64,Juniperus occidentalis,0.84093,4.41875,0.13917,-0.60353,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,72,Larix lyallii,-0.24217,4.57269,0.34777,-0.3678,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,73,Larix occidentalis,-0.40064,4.49779,0.16614,-0.34535,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,81,Calocedrus decurrens,-0.19368,4.5111,0.46837,-0.57568,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,93,Picea engelmannii,0.24301,4.61973,0.35373,-0.51403,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,98,Picea sitchensis,-0.40956,4.83038,0.557,-0.5689,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,101,Pinus albicaulis,-0.03397,4.1982,0.15399,-0.39875,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,103,Pinus attenuata,-0.0091,4.62059,0.38816,-0.57587,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,108,Pinus contorta,-0.13639,4.61616,0.39301,-0.53965,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,116,Pinus jeffreyi,0.04792,4.45731,0.22097,-0.52022,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,117,Pinus lambertiana,-0.09948,4.5801,0.43775,-0.61135,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,119,Pinus monticola,0.1115,4.39406,0.31768,-0.51205,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,122,Pinus ponderosa,-0.43742,4.09557,0.17239,-0.30285,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,133,Pinus monophylla,0.02269,4.52347,0.30372,-0.44201,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,202,Pseudotsuga menziesii,0.27806,4.59467,0.40508,-0.64419,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,211,Sequoia sempervirens,-0.0113,4.95906,0.36331,-0.6004,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,231,Taxus brevifolia,-0.0813,4.90277,0.2542,-0.474,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,242,Thuja plicata,-0.21788,4.83737,0.41052,-0.47659,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,263,Tsuga heterophylla,0.24073,4.66136,0.43619,-0.60403,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,264,Tsuga mertensiana,0.40391,4.50752,0.4219,-0.5867,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,312,Acer macrophyllum,-0.38995,4.37158,-0.08104,-0.22176,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,351,Alnus rubra,-0.16465,4.58579,0.2817,-0.51171,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,361,Arbutus menziesii,-0.22275,4.43641,0.1608,-0.48361,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,375,Betula papyrifera,-0.40838,4.27083,0.18266,-0.29018,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,475,Cercocarpus ledifolius,-0.17782,3.94025,0.17516,-0.37707,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,631,Lithocarpus densiflorus,-0.3478,4.3264,0.13524,-0.3521,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,746,Populus tremuloides,-1.23009,4.90365,0.12325,-0.22779,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,801,Quercus agrifolia,-0.25323,4.28313,0.32329,-0.54487,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,805,Quercus chrysolepis,-0.19279,4.14159,0.40087,-0.49158,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,807,Quercus douglasii,-0.17979,4.09165,0.32755,-0.36446,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,815,Quercus garryana,-0.06549,4.14336,0.17006,-0.4329,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,818,Quercus kelloggii,-0.06859,4.31902,0.31488,-0.51234,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,839,Quercus wislizeni,-0.23065,4.13911,0.30233,-0.44772,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,981,Umbellularia californica,0.02752,4.38898,0.53869,-0.48644,0.0,-1,,1,fastfuels_2026,
+pacific_northwest,SPCD,11,Abies amabilis,-0.3826,5.8437,0.0,-0.2002,-0.13,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,15,Abies concolor,2.3632,4.627,2.5099,-2.9255,0.3706,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,17,Abies grandis,-1.7252,5.3703,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,19,Abies lasiocarpa,-2.1221,4.6659,0.4243,0.0,0.0,-1,DBH,0,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,20,Abies magnifica,0.8979,3.0106,0.0,0.0,-0.2783,-1,DBH,0,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,21,Abies magnifica,0.8979,3.0106,0.0,0.0,-0.2783,-1,DBH,0,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,22,Abies procera,-0.3174,5.1141,0.0,-0.3892,0.0,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,64,Juniperus occidentalis,-0.7538,4.7236,0.0,0.0,-0.1356,-1,DBH,0,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,73,Larix occidentalis,-0.7934,4.6197,0.0,-0.2624,0.0,-1,DBH,0,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,81,Librocedrus decurrens,-1.1817,5.0975,-0.2235,0.0,0.0,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,93,Picea engelmannii,-1.7708,5.3623,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,GENUS,Pinus,Pinus spp.,0.2071,4.1248,0.0,-0.2914,-0.0767,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,108,Pinus contorta,0.9674,4.8052,0.0,-0.5528,-0.0657,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,116,Pinus jeffreyi,-0.4129,2.676,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,117,Pinus lambertiana,-1.536,4.5971,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,119,Pinus monticola,0.0736,4.8448,0.0,0.0,-0.2554,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,122,Pinus ponderosa,0.0042,3.7274,0.0,-0.2193,-0.0599,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,202,Pseudotsuga menziesii,-0.488,4.9065,0.309,-0.4776,0.0,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,242,Thuja plicata,-2.2138,5.4231,0.0,0.0,0.0936,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,263,Tsuga heterophylla,-1.0495,5.7329,0.0,-0.2615,0.0,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,264,Tsuga mertensiana,1.3446,5.617,0.0,-0.7973,0.0,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,312,Acer macrophyllum,2.84,4.2944,0.0,-1.0567,0.0,-1,DBH,0,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,351,Alnus rubra,-2.3245,5.5445,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,361,Abutus menziesii,0.311,4.0012,0.0,-0.474,0.0,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,631,Lithocarpus densiflorus,-2.0265,5.9318,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,GENUS,Quercus,Quercus spp.,-0.1455,5.2591,0.0,-0.3223,-0.0949,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,805,Quercus chysolepsis,0.4076,5.8761,2.6528,-2.9754,0.5893,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,807,Quercus douglasii,0.769,4.5209,0.0,-0.5383,0.0,-1,DBH,0,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,815,Quercus garryana,-1.2372,5.0814,0.0,0.0,-0.125,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,818,Quercus kelloggii,0.53,5.3119,0.5424,-0.9444,0.0,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,839,Quercus wislizenii,-3.5355,5.4086,0.9413,0.0,0.0,-1,DBH,1,monleon_2004_eq1,"Table 2, p. 264"
+pacific_northwest,SPCD,11,Abies amabilis,-1.9067,5.8008,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,15,Abies concolor,-1.1015,4.9546,-0.1653,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,20,Abies magnifica,-0.2956,3.1074,0.0,0.0,0.0,-1,DBH,0,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,21,Abies magnifica,-0.2956,3.1074,0.0,0.0,0.0,-1,DBH,0,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,22,Abies procera,-1.2483,5.3161,-0.3164,0.0,0.0,-1,DBH,0,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,64,Juniperus occidentalis,-2.1474,4.6581,0.4613,0.0,0.0,-1,DBH,0,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,73,Larix occidentalis,-1.4555,4.8989,-0.2366,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,GENUS,Pinus,Pinus spp.,-1.4072,4.7545,-0.0911,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,108,Pinus contorta,-1.9751,5.5608,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,119,Pinus monticola,-1.2625,5.7554,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,122,Pinus ponderosa,-0.9894,4.0365,-0.1345,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,202,Pseudotsuga menziesii,-1.8901,5.1949,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,242,Thuja plicata,-1.2125,5.5236,-0.2416,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,263,Tsuga heterophylla,-1.781,5.8122,-0.1732,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,264,Tsuga mertensiana,-0.4421,5.4142,-0.4748,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,312,Acer macrophyllum,-0.0446,5.0942,-0.7906,0.0,0.0,-1,DBH,0,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,361,Abutus menziesii,-1.4784,4.1007,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,GENUS,Quercus,Quercus spp.,-1.9238,5.907,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,805,Quercus chysolepsis,-1.9831,6.084,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,807,Quercus douglasii,-1.0937,4.6366,0.0,0.0,0.0,-1,DBH,0,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,815,Quercus garryana,-1.7613,5.0864,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,818,Quercus kelloggii,-2.064,6.0504,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 4, p. 265"
+pacific_northwest,SPCD,17,Abies grandis,-1.7252,5.3703,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 2, p. 264"
+pacific_northwest,SPCD,19,Abies lasiocarpa,-2.1221,4.6659,0.4243,0.0,0.0,-1,DBH,0,monleon_2004_eq2,"Table 2, p. 264"
+pacific_northwest,SPCD,81,Librocedrus decurrens,-1.1817,5.0975,-0.2235,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 2, p. 264"
+pacific_northwest,SPCD,93,Picea engelmannii,-1.7708,5.3623,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 2, p. 264"
+pacific_northwest,SPCD,116,Pinus jeffreyi,-0.4129,2.676,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 2, p. 264"
+pacific_northwest,SPCD,117,Pinus lambertiana,-1.536,4.5971,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 2, p. 264"
+pacific_northwest,SPCD,351,Alnus rubra,-2.3245,5.5445,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 2, p. 264"
+pacific_northwest,SPCD,631,Lithocarpus densiflorus,-2.0265,5.9318,0.0,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 2, p. 264"
+pacific_northwest,SPCD,839,Quercus wislizenii,-3.5355,5.4086,0.9413,0.0,0.0,-1,DBH,1,monleon_2004_eq2,"Table 2, p. 264"
+interior_west,SPCD,15,Abies concolor,-1.2822,4.0171,0.0672,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,17,Abies grandis,-1.6358,5.0325,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,19,Abies lasiocarpa,-0.8519,3.8709,-0.0552,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,18,Abies lasiocarpa var. arizonica,-1.1664,4.0738,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,375,Betula papyrifera,-1.7752,4.5088,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,475,Cercocarpus ledifolius,-1.2751,4.6838,-0.1698,0.0,0.0,-1,DRC,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,63,Juniperus deppeana,-0.383,3.2962,0.0,0.0,0.0,-1,DRC,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,69,Juniperus monosperma,0.9801,1.7931,0.0,0.0,0.0,-1,DRC,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,64,Juniperus occidentalis,-0.0622,2.2242,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,65,Juniperus osteosperma,-0.1831,2.205,0.0,0.0,0.0,-1,DRC,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,66,Juniperus scopulorum,-1.297,4.0726,0.2536,0.0,0.0,-1,DRC,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,73,Larix occidentalis,-1.8661,4.9547,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,93,Picea engelmannii,-0.9834,3.9661,-0.0353,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,96,Picea pungens,-0.6458,3.2623,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,101,Pinus albicaulis,-0.9327,3.8231,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,102,Pinus aristata,0.192,2.2287,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,108,Pinus contorta,-2.1683,5.4651,0.1434,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,106,Pinus edulis,0.3196,2.5716,0.0,0.0,0.0,-1,DRC,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,113,Pinus flexilis,-1.4409,4.413,0.094,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,116,Pinus jeffreyi,-1.7532,5.0047,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,133,Pinus monophylla,-0.3956,2.0098,0.0681,0.0,0.0,-1,DRC,0,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,119,Pinus monticola,-1.1662,3.7536,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,122,Pinus ponderosa,-1.6296,4.5654,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,114,Pinus strobiformis,-1.3658,4.1807,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,749,Populus angustifolia,-0.5266,3.5578,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,745,Populus deltoides spp. monilifera,-0.6962,3.6653,-0.1797,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,746,Populus tremuloides,-1.9832,4.7645,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,747,Populus trichocarpa,-0.5066,4.3659,-0.3041,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,202,Pseudotsuga menziesii,-1.4162,5.3576,-0.1156,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,814,Quercus gambelii,-1.3748,3.0274,0.4001,0.0,0.0,-1,DRC,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,846,Quercus grisea,-0.4639,3.5862,0.0,0.0,0.0,-1,DRC,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,823,Quercus macrocarpa,-0.0178,1.9683,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,242,Thuja plicata,-1.5641,4.926,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,263,Tsuga heterophylla,-1.3381,4.716,0.0,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+interior_west,SPCD,264,Tsuga mertensiana,-0.4151,3.8778,-0.2361,0.0,0.0,-1,DBH,1,toney_reeves_2009,"Table 3, p. 80"
+south,GENUS,Acer,ACSP Acer spp.,-1.0416,3.8796,-0.0852,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,GENUS,Betula,BESP Betula spp.,-1.3334,3.8733,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,391,CACA Carpinus caroliniana,-0.9504,3.6251,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,GENUS,Carya,CASP Carya spp.,-1.4583,4.3359,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,408,CATE Carya texana,-1.3163,4.3838,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,GENUS,Celtis,CESP Celtis spp.,-1.3929,4.2135,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,491,COFL Cornus florida,-1.2229,3.8907,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,521,DIVI Diospyros virginiana,-1.5977,4.1438,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,531,FAGR Fagus grandifolia,-0.6492,4.9654,-0.3348,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,GENUS,Fraxinus,FRSP Fraxinus spp.,-1.4339,4.5463,-0.1534,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,555,GOLA Gordonia lasianthus,-1.6057,4.0348,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,602,JUNI Juglans nigra,-1.5944,4.9468,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,67,JUSP-F Juniperus spp. (forest),-1.9268,4.784,0.1571,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,68,JUSP-F Juniperus spp. (forest),-1.9268,4.784,0.1571,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,611,LIST Liquidambar styraciflua,-1.3825,4.4112,-0.0819,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,621,LITU Liriodendron tulipifera,-1.2938,3.9626,-0.0786,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,GENUS,Magnolia,MASP Magnolia spp.,-1.483,4.2181,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,691,NYAQ Nyssa aquatica,-1.7599,4.1069,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,694,NYBI Nyssa biflora,-1.6022,4.6447,-0.0968,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,693,NYSY Nyssa sylvatica,-0.8734,3.8169,-0.1611,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,711,OXAR Oxydendrum arboreum,-1.7663,4.8651,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,GENUS,Pinus,PISP Pinus spp.,-1.7131,4.4212,-0.029,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,756,PRGL Prosopis glandulosa,-0.0882,3.5076,0.0,0.0,0.0,-1,DRC,0,randolph_2010,"Table 3, p. 121"
+south,SPCD,762,PRSE Prunus serotina,-1.7761,4.654,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,GENUS,Quercus,QUSP Quercus spp.,-1.0633,4.1355,-0.1464,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,806,QUCO Quercus coccinea,-1.1931,3.919,-0.1357,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,812,QUFA Quercus falcata,-1.4926,4.3064,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,813,QUPA Quercus pagoda,-1.6941,4.7597,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,831,QUPH Quercus phellos,-1.5162,4.5362,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,901,ROPS Robinia pseudoacacia,-1.6963,4.5084,0.0,0.0,0.0,-1,DBH,0,randolph_2010,"Table 3, p. 121"
+south,SPCD,912,SAPA Sabal palmetto,-1.5312,7.4019,-0.4886,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,922,SANI Salix nigra,-1.686,4.8498,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,931,SAAL Sassafras albidum,-1.7258,4.6245,0.0,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,GENUS,Taxodium,TASP Taxodium spp.,-1.789,5.6484,-0.1324,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,GENUS,Ulmus,ULSP Ulmus spp.,-0.6927,4.1545,-0.2872,0.0,0.0,-1,DBH,1,randolph_2010,"Table 3, p. 121"
+south,SPCD,61,JUAS Juniperus ashei,5.0068,3.42,0.0,-1.7961,0.0,-1,DRC,0,randolph_2010,"Text, p. 121"
+south,WOODLAND_GENUS,Juniperus,JUSP-W Juniperus spp. (woodland),5.4445,3.5372,0.0,-1.9477,0.0,-1,DRC,1,randolph_2010,"Text, p. 121"
+north,SPGRP,2,1 Loblolly and shortleaf pines,1.5425,-4.7368,0.118,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,3,2 Other yellow pines,1.5031,-5.2376,0.1598,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPCD,129,3 Eastern white pine,1.4942,-4.9138,0.091,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,5,4 Jack pine,1.5125,-4.6564,0.0927,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,6,5 Spruce and balsam fir,1.3848,-4.9635,0.1195,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,7,6 Eastern hemlock,0.9869,-4.594,0.1291,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,9,7 Other eastern softwoods,0.9622,-4.3375,0.1404,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPCD,125,8 Red pine,1.4917,-5.2445,0.1846,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,25,9 Select white oaks,0.8512,-4.2605,0.2092,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,26,10 Select red oaks,1.1379,-4.2314,0.1596,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,27,11 Other white oaks,0.9781,-4.4068,0.2235,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,28,12 Other red oaks,1.1222,-4.5126,0.1818,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,29,13 Hickory,0.839,-4.3864,0.2558,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,30,14 Yellow birch,1.12,-4.384,0.1983,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,31,15 Hard maple,0.8211,-4.3175,0.2821,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,32,16 Soft maple,1.241,-4.4017,0.146,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,33,17 Beech,0.6889,-4.6325,0.3158,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,34,18 Sweetgum,1.2353,-4.3476,0.1618,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,35,19 Tupelo and blackgum,0.9228,-4.278,0.1915,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,36,20 Ash,1.2976,-4.3743,0.138,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,37,21 Cottonwood and aspen,1.6683,-4.4202,0.0402,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,38,22 Basswood,1.1765,-4.3006,0.1541,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,39,23 Yellow poplar,1.2729,-4.6294,0.1705,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,40,24 Black walnut,1.385,-4.8044,0.1026,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,41,25 Other eastern soft hardwoods,1.1027,-4.6201,0.2342,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,42,26 Other eastern hard hardwoods,1.0988,-4.7961,0.2523,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
+north,SPGRP,43,27 Eastern noncommercial hardwoods,1.0502,-4.2587,0.1661,0.0,0.0,1,DBH,1,westfall_2019,"Table 2, p. 597"
