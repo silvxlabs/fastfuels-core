@@ -31,16 +31,22 @@ CENTER_CELL = (2, 1)
 
 
 def random_stand(n, seed=0):
-    """A stand with plausible species, sizes and crown ratios, no CRS."""
+    """A stand with plausible species, sizes and crown base heights, no CRS."""
     rng = np.random.default_rng(seed)
+    x = rng.uniform(0, 100, n)
+    y = rng.uniform(0, 100, n)
+    species = rng.choice([202, 122, 73, 17, 351, 15, 108], n)
+    dbh = rng.uniform(2.5, 90, n)
+    height = rng.uniform(2, 40, n)
+    crown_fraction = rng.uniform(0.1, 0.9, n)
     return pd.DataFrame(
         {
-            "x": rng.uniform(0, 100, n),
-            "y": rng.uniform(0, 100, n),
-            "fia_species_code": rng.choice([202, 122, 73, 17, 351, 15, 108], n),
-            "dbh": rng.uniform(2.5, 90, n),
-            "height": rng.uniform(2, 40, n),
-            "crown_ratio": rng.uniform(0.1, 0.9, n),
+            "x": x,
+            "y": y,
+            "fia_species_code": species,
+            "dbh": dbh,
+            "height": height,
+            "crown_base_height": height - height * crown_fraction,
         }
     )
 
@@ -76,7 +82,7 @@ def single_tree(**overrides):
         "x": 1045.0,
         "y": 4915.0,
         "height": 12.0,
-        "crown_ratio": 0.5,
+        "crown_base_height": 6.0,
         "fia_species_code": 122,
     }
     tree.update(overrides)

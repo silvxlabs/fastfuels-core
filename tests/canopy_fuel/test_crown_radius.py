@@ -22,7 +22,7 @@ class TestPurvesEquations:
                     status_code=1,
                     diameter=row.dbh,
                     height=row.height,
-                    crown_ratio=row.crown_ratio,
+                    crown_base_height=row.crown_base_height,
                 ).max_crown_radius
                 for row in trees.itertuples()
             ]
@@ -40,6 +40,13 @@ class TestPurvesEquations:
 
     def test_radii_are_positive(self):
         assert (max_crown_radius(random_stand(50)) > 0).all()
+
+    def test_a_missing_crown_base_height_raises(self):
+        """No fallback derives the crown base from a ``crown_ratio`` column."""
+        trees = random_stand(5).drop(columns=["crown_base_height"])
+        trees["crown_ratio"] = 0.5
+        with pytest.raises(KeyError, match="crown_base_height"):
+            max_crown_radius(trees, equations="purves")
 
 
 class TestColumnOverride:

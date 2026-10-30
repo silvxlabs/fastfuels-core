@@ -12,9 +12,9 @@ chooses resolutions. All per-tree math is vectorized; trees are never
 iterated in Python.
 
 Expected tree columns follow the v2 FastFuels inventory convention:
-``x``, ``y``, ``height``, ``crown_ratio``, and, depending on options,
-``dbh``, ``fia_species_code``, and caller-named biomass / crown radius
-columns. Units: meters, centimeters (dbh), kilograms.
+``x``, ``y``, ``height``, ``crown_base_height`` (m), and, depending on
+options, ``dbh``, ``fia_species_code``, and caller-named biomass / crown
+radius columns. Units: meters, centimeters (dbh), kilograms.
 """
 
 from __future__ import annotations
@@ -132,7 +132,9 @@ def compute_canopy_metrics(
     lattice with CRS and transform set via rioxarray. Only the variables
     present are computed. Tree coordinates must be in the dataset's CRS;
     only live trees should be passed. Trees shorter than
-    ``min_tree_height`` (m) are excluded.
+    ``min_tree_height`` (m) are excluded. Every stage that reads
+    ``crown_base_height`` raises ValueError if one is missing, negative,
+    or above ``height``.
 
     ``exclude_hardwoods`` drops broadleaf species from the bulk-density
     profile — ``cbd``, ``cbh``, ``chm`` and ``cfl`` — while leaving

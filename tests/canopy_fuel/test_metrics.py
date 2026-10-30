@@ -126,8 +126,12 @@ class TestCrownBaseStatisticCbh:
         # (20 m tree), with 1 and 3 kg of fuel supplied directly.
         return pd.concat(
             [
-                single_tree(x=1045.0, y=4915.0, height=8.0, crown_ratio=0.5, acf=1.0),
-                single_tree(x=1045.0, y=4915.0, height=20.0, crown_ratio=0.5, acf=3.0),
+                single_tree(
+                    x=1045.0, y=4915.0, height=8.0, crown_base_height=4.0, acf=1.0
+                ),
+                single_tree(
+                    x=1045.0, y=4915.0, height=20.0, crown_base_height=10.0, acf=3.0
+                ),
             ],
             ignore_index=True,
         )
@@ -183,8 +187,12 @@ class TestHeightPercentileChm:
         # 10 m and 30 m trees in cell (2, 1).
         return pd.concat(
             [
-                single_tree(x=1045.0, y=4915.0, height=10.0, acf=1.0),
-                single_tree(x=1045.0, y=4915.0, height=30.0, acf=1.0),
+                single_tree(
+                    x=1045.0, y=4915.0, height=10.0, crown_base_height=5.0, acf=1.0
+                ),
+                single_tree(
+                    x=1045.0, y=4915.0, height=30.0, crown_base_height=15.0, acf=1.0
+                ),
             ],
             ignore_index=True,
         )
@@ -237,8 +245,12 @@ class TestLoadOverDepthCbd:
         # 10 m and 30 m ponderosa in cell (2, 1), 2 kg of fuel each.
         return pd.concat(
             [
-                single_tree(x=1045.0, y=4915.0, height=10.0, crown_ratio=0.5, acf=2.0),
-                single_tree(x=1045.0, y=4915.0, height=30.0, crown_ratio=0.5, acf=2.0),
+                single_tree(
+                    x=1045.0, y=4915.0, height=10.0, crown_base_height=5.0, acf=2.0
+                ),
+                single_tree(
+                    x=1045.0, y=4915.0, height=30.0, crown_base_height=15.0, acf=2.0
+                ),
             ],
             ignore_index=True,
         )
@@ -327,6 +339,7 @@ class TestStandFilters:
     def test_trees_below_min_tree_height_are_dropped(self, hand_stand):
         trees = pd.concat([hand_stand, hand_stand], ignore_index=True)
         trees.loc[1, "height"] = 1.0
+        trees.loc[1, "crown_base_height"] = 0.5
         ds = compute_canopy_metrics(
             trees,
             band_template(["cfl"]),
@@ -343,6 +356,7 @@ class TestStandFilters:
     def test_a_tree_exactly_at_min_tree_height_is_kept(self, hand_stand):
         trees = hand_stand.copy()
         trees["height"] = 2.0
+        trees["crown_base_height"] = 1.0
         ds = compute_canopy_metrics(
             trees,
             band_template(["cfl"]),
@@ -355,6 +369,21 @@ class TestStandFilters:
         np.testing.assert_allclose(
             ds.cfl.values[2, 1], HAND_FUEL_KG / CELL_AREA, rtol=1e-6
         )
+
+    def test_a_missing_crown_base_height_raises(self, hand_stand):
+        """No fallback derives the crown base from a ``crown_ratio`` column."""
+        trees = hand_stand.drop(columns=["crown_base_height"])
+        trees["crown_ratio"] = 0.5
+        with pytest.raises(KeyError, match="crown_base_height"):
+            compute_canopy_metrics(
+                trees,
+                band_template(["cbd", "cbh", "chm", "cc", "cfl"]),
+                fuel_column="acf",
+                crown_radius_column="crad",
+                horizontal_distribution="stem",
+                vertical_distribution="uniform",
+                crown_class_adjustment="none",
+            )
 
     def test_an_empty_inventory_leaves_zero_densities(self):
         ds = compute_canopy_metrics(
@@ -440,7 +469,7 @@ class TestExcludeHardwoods:
                     fia_species_code=202,
                     dbh=35.0,
                     height=20.0,
-                    crown_ratio=0.6,
+                    crown_base_height=8.0,
                 ),
                 single_tree(
                     x=1050.0,
@@ -448,7 +477,7 @@ class TestExcludeHardwoods:
                     fia_species_code=351,
                     dbh=30.0,
                     height=19.0,
-                    crown_ratio=0.7,
+                    crown_base_height=5.7,
                 ),
             ],
             ignore_index=True,
@@ -515,7 +544,9 @@ class TestCrownRadiusReachesEveryStage:
     @staticmethod
     def straddling_tree():
         """One ponderosa near the corner of cell (2, 1), with a dbh."""
-        return single_tree(x=1032.0, y=4912.0, dbh=30.0, height=20.0)
+        return single_tree(
+            x=1032.0, y=4912.0, dbh=30.0, height=20.0, crown_base_height=10.0
+        )
 
     def metrics(self, equations):
         return compute_canopy_metrics(

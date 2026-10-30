@@ -12,6 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from fastfuels_core.canopy_fuel.crown_base import validate_crown_base_height
 from fastfuels_core.canopy_fuel.crown_radius import max_crown_radius
 from fastfuels_core.canopy_fuel.geometry import disk_cell_overlaps
 from fastfuels_core.canopy_fuel.ref_data import fuelcalc_species, fuelcalc_vdist
@@ -221,7 +222,8 @@ def vertical_profile(
     Raises
     ------
     ValueError
-        If the transform is rotated.
+        If the transform is rotated, or a ``crown_base_height`` is missing,
+        negative, or above ``height``.
 
     Notes
     -----
@@ -248,6 +250,7 @@ def vertical_profile(
     # geometry, the species codes, the crown-projected contributions — so
     # the kept cells stay aligned with the values scattered into them.
     if len(trees):
+        validate_crown_base_height(trees)
         row, col, keep = stem_cells(trees, transform, shape)
         trees = trees[keep]
         fuel = np.asarray(fuel, dtype=np.float64)[keep]
@@ -262,8 +265,8 @@ def vertical_profile(
     if len(trees) == 0:
         return profile_flat.reshape(n_layers, ny, nx)
 
-    crown_length = height * trees["crown_ratio"].to_numpy(dtype=np.float64)
-    crown_base = height - crown_length
+    crown_base = trees["crown_base_height"].to_numpy(dtype=np.float64)
+    crown_length = height - crown_base
     # Zero-length crowns become a point mass at the crown base: a tiny
     # denominator turns the clipped ph into a step function there.
     safe_length = np.maximum(crown_length, 1e-9)

@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from fastfuels_core.allometry import fvs
+from fastfuels_core.canopy_fuel.crown_base import validate_crown_base_height
 from fastfuels_core.crown_profile_models.purves import PurvesCrownProfile
 from fastfuels_core.units import CM_TO_IN, FT_TO_M, M_TO_FT
 
@@ -37,7 +38,7 @@ def max_crown_radius(
         is the width behind FuelCalc's canopy cover.
     ``"purves"``
         Purves et al. (2007), from ``fia_species_code``, ``dbh``,
-        ``height`` and ``crown_ratio``; the allometry the rest of
+        ``height`` and ``crown_base_height``; the allometry the rest of
         fastfuels-core uses.
 
     The radius source is independent of how canopy cover treats
@@ -53,7 +54,8 @@ def max_crown_radius(
     Raises
     ------
     ValueError
-        For an unknown ``equations`` choice.
+        For an unknown ``equations`` choice, or under ``"purves"`` for a
+        ``crown_base_height`` that is missing, negative, or above ``height``.
     """
     if crown_radius_column is not None:
         return trees[crown_radius_column].to_numpy(dtype=np.float64)
@@ -69,10 +71,11 @@ def max_crown_radius(
             trees["height"].to_numpy(dtype=np.float64) * M_TO_FT,
         )
         return 0.5 * width_ft * FT_TO_M
+    validate_crown_base_height(trees)
     model = PurvesCrownProfile(
         trees["fia_species_code"],
         trees["dbh"],
         trees["height"],
-        trees["crown_ratio"],
+        trees["crown_base_height"],
     )
     return np.atleast_1d(np.asarray(model.get_max_radius(), dtype=np.float64))

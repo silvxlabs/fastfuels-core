@@ -28,7 +28,7 @@ def purves_tree_list():
             species_code=t.species_code,
             height=t.height,
             dbh=t.diameter,
-            crown_ratio=t.crown_ratio,
+            crown_base_height=t.crown_base_height,
         )
         tree_list.append(tree)
 
@@ -76,8 +76,8 @@ def height_vector(tree_list):
 
 
 @pytest.fixture(scope="module")
-def crown_ratio_vector(tree_list):
-    return np.array([t.crown_ratio for t in tree_list])
+def crown_base_height_vector(tree_list):
+    return np.array([t.crown_base_height for t in tree_list])
 
 
 @pytest.fixture(scope="module")
@@ -103,7 +103,7 @@ class TestGetMaxRadius:
             species_code=tree.species_code,
             dbh=tree.diameter,
             height=tree.height,
-            crown_ratio=tree.crown_ratio,
+            crown_base_height=tree.crown_base_height,
         )
         max_crown_radius = purves_model.get_max_radius()
 
@@ -123,7 +123,7 @@ class TestGetMaxRadius:
         tree_list,
         dbh_vector,
         height_vector,
-        crown_ratio_vector,
+        crown_base_height_vector,
         spcd_vector,
     ):
         """
@@ -136,7 +136,10 @@ class TestGetMaxRadius:
         # Initialize the PurvesCrownProfile model with numpy arrays
         if library == "numpy":
             purves_model = PurvesCrownProfile(
-                spcd_vector, dbh_vector, height_vector, crown_ratio_vector
+                spcd_vector,
+                dbh_vector,
+                height_vector,
+                crown_base_height_vector,
             )
 
         # Initialize the PurvesCrownProfile model with pandas Series from a DataFrame
@@ -145,14 +148,14 @@ class TestGetMaxRadius:
                 "species_code": spcd_vector,
                 "dbh": dbh_vector,
                 "height": height_vector,
-                "crown_ratio": crown_ratio_vector,
+                "crown_base_height": crown_base_height_vector,
             }
             tree_population_df = pd.DataFrame(tree_population_dict)
             purves_model = PurvesCrownProfile(
                 tree_population_df["species_code"],
                 tree_population_df["dbh"],
                 tree_population_df["height"],
-                tree_population_df["crown_ratio"],
+                tree_population_df["crown_base_height"],
             )
         else:
             raise ValueError(f"Unknown library: {library}")
@@ -186,7 +189,7 @@ class TestGetRadiusAtHeight:
             species_code=tree.species_code,
             dbh=tree.diameter,
             height=tree.height,
-            crown_ratio=tree.crown_ratio,
+            crown_base_height=tree.crown_base_height,
         )
         random_tree_height = np.random.uniform(
             tree.crown_base_height, tree.crown_base_height + tree.crown_length
@@ -216,7 +219,7 @@ class TestGetRadiusAtHeight:
             species_code=tree.species_code,
             dbh=tree.diameter,
             height=tree.height,
-            crown_ratio=tree.crown_ratio,
+            crown_base_height=tree.crown_base_height,
         )
         radii = purves_model.get_radius_at_height(vector_tree_heights)
         max_radius = purves_model.get_max_radius()
@@ -234,7 +237,7 @@ class TestGetRadiusAtHeight:
         tree_list,
         dbh_vector,
         height_vector,
-        crown_ratio_vector,
+        crown_base_height_vector,
         spcd_vector,
         vector_tree_heights,
     ):
@@ -251,7 +254,10 @@ class TestGetRadiusAtHeight:
         # Initialize the PurvesCrownProfile model with numpy arrays
         if library == "numpy":
             purves_model = PurvesCrownProfile(
-                spcd_vector, dbh_vector, height_vector, crown_ratio_vector
+                spcd_vector,
+                dbh_vector,
+                height_vector,
+                crown_base_height_vector,
             )
         # Initialize the PurvesCrownProfile model with pandas Series from a DataFrame
         elif library == "pandas":
@@ -260,14 +266,14 @@ class TestGetRadiusAtHeight:
                     "species_code": spcd_vector,
                     "dbh": dbh_vector,
                     "height": height_vector,
-                    "crown_ratio": crown_ratio_vector,
+                    "crown_base_height": crown_base_height_vector,
                 }
             )
             purves_model = PurvesCrownProfile(
                 tree_population_df["species_code"],
                 tree_population_df["dbh"],
                 tree_population_df["height"],
-                tree_population_df["crown_ratio"],
+                tree_population_df["crown_base_height"],
             )
         else:
             raise ValueError(f"Unknown library: {library}")
@@ -285,16 +291,34 @@ class TestGetRadiusAtHeight:
 class TestGetMaxRadiusHeight:
     def test_returns_crown_base_height(self):
         # Purves is monotonic, widest at the crown base.
-        # species 122, height=15, crown_ratio=0.5 -> crown_base_height = 7.5
+        # species 122, height=15, crown_base_height=7.5 (crown_ratio=0.5)
         model = PurvesCrownProfile(
-            species_code=122, dbh=25.0, height=15.0, crown_ratio=0.5
+            species_code=122, dbh=25.0, height=15.0, crown_base_height=7.5
         )
         assert model.get_max_radius_height() == pytest.approx(7.5)
 
     def test_coincides_with_argmax(self):
         model = PurvesCrownProfile(
-            species_code=122, dbh=25.0, height=15.0, crown_ratio=0.5
+            species_code=122, dbh=25.0, height=15.0, crown_base_height=7.5
         )
         z = np.linspace(7.5, 15.0, 10001)
         r = model.get_radius_at_height(z)
         assert z[np.argmax(r)] == pytest.approx(model.get_max_radius_height(), abs=0.01)
+
+
+class TestCrownBaseHeight:
+    def test_crown_ratio_derived_from_crown_base_height(self):
+        height = np.array([15.0, 30.0, 9.0])
+        cbh = np.array([7.5, 21.0, 1.8])
+        model = PurvesCrownProfile(np.array([122, 202, 747]), 25.0, height, cbh)
+        np.testing.assert_allclose(model.crown_ratio.ravel(), (height - cbh) / height)
+        np.testing.assert_array_equal(model.crown_base_height.ravel(), cbh)
+
+    def test_no_crown_matches_zero_crown_ratio(self):
+        # cbh == height is the old crown_ratio = 0: crown ratio 0, a zero-width
+        # crown at the tip and nothing below it.
+        model = PurvesCrownProfile(122, 25.0, 15.0, crown_base_height=15.0)
+        assert model.crown_ratio.item() == 0.0
+        assert model.get_max_radius_height() == 15.0
+        assert model.get_max_radius() == 0.0
+        assert np.all(model.get_radius_at_height(np.linspace(0.0, 20.0, 41)) == 0.0)

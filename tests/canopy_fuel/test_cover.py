@@ -133,14 +133,15 @@ def one_cell_stand(heights, x=None, y=None, dbh=None, species_code=122):
     """A stand inside the single 30 m cell, sized by Purves allometry."""
     n = len(heights)
     rng = np.random.default_rng(4)
+    height = np.asarray(heights, dtype=float)
     return pd.DataFrame(
         {
             "x": rng.uniform(4.0, 26.0, n) if x is None else x,
             "y": -rng.uniform(4.0, 26.0, n) if y is None else y,
             "fia_species_code": species_code,
             "dbh": np.linspace(5.0, 40.0, n) if dbh is None else dbh,
-            "height": np.asarray(heights, dtype=float),
-            "crown_ratio": np.full(n, 0.6),
+            "height": height,
+            "crown_base_height": height - height * 0.6,
         }
     )
 

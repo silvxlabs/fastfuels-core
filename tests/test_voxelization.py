@@ -1145,17 +1145,23 @@ class TestAlignQuadrants:
 
 class TestDiscretizeCrownProfile:
     def test_known_tree_fine_resolution(self):
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         grid = discretize_crown_profile(test_tree, 0.5, 0.5)
         assert np.sum(grid) > 1
 
     def test_known_tree_mod_resolution(self):
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         grid = discretize_crown_profile(test_tree, 1, 1)
         assert np.sum(grid) > 1
 
     def test_known_tree_coarse_resolution(self):
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         grid = discretize_crown_profile(test_tree, 2, 1)
         assert np.sum(grid) > 1
 
@@ -1170,40 +1176,52 @@ class TestDiscretizeCrownProfile:
     # Centering mode tests
     def test_default_matches_original_behavior(self):
         """Default should produce identical results to original implementation."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         grid_default = discretize_crown_profile(test_tree, 1, 1)
         grid_cell = discretize_crown_profile(test_tree, 1, 1, centering="cell")
         assert np.array_equal(grid_default, grid_cell)
 
     def test_cell_centered_odd_dimensions(self):
         """Cell-centered grids have odd x and y dimensions."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         grid = discretize_crown_profile(test_tree, 1, 1, centering="cell")
         assert grid.shape[1] % 2 == 1
         assert grid.shape[2] % 2 == 1
 
     def test_vertex_centered_even_dimensions(self):
         """Vertex-centered grids have even x and y dimensions."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         grid = discretize_crown_profile(test_tree, 1, 1, centering="vertex")
         assert grid.shape[1] % 2 == 0
         assert grid.shape[2] % 2 == 0
 
     def test_cell_centered_symmetric(self):
         """Cell-centered grid should be symmetric about center."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         grid = discretize_crown_profile(test_tree, 1, 1, centering="cell")
         assert np.allclose(grid, np.flip(np.flip(grid, axis=1), axis=2))
 
     def test_vertex_centered_symmetric(self):
         """Vertex-centered grid should be symmetric about center vertex."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         grid = discretize_crown_profile(test_tree, 1, 1, centering="vertex")
         assert np.allclose(grid, np.flip(np.flip(grid, axis=1), axis=2))
 
     def test_centering_modes_preserve_approximate_volume(self):
         """Both centering modes should produce similar total volume."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         hr, vr = 0.5, 0.5
 
         grid_cell = discretize_crown_profile(test_tree, hr, vr, centering="cell")
@@ -1216,7 +1234,9 @@ class TestDiscretizeCrownProfile:
 
     def test_vertex_centered_fine_resolution(self):
         """Vertex-centered works at fine resolution."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         grid = discretize_crown_profile(test_tree, 0.5, 0.5, centering="vertex")
         assert grid.shape[1] % 2 == 0
         assert grid.shape[2] % 2 == 0
@@ -1224,7 +1244,9 @@ class TestDiscretizeCrownProfile:
 
     def test_vertex_centered_coarse_resolution(self):
         """Vertex-centered works at coarse resolution."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         grid = discretize_crown_profile(test_tree, 2, 1, centering="vertex")
         assert grid.shape[1] % 2 == 0
         assert grid.shape[2] % 2 == 0
@@ -1254,14 +1276,14 @@ class TestDiscretizeCrownProfile:
 
     def test_very_small_tree_vertex_centered(self):
         """Very small tree (small crown) with vertex centering."""
-        test_tree = Tree(122, 1, 5, 3.0, 0.1)
+        test_tree = Tree(122, 1, 5, 3.0, crown_base_height=3.0 - 3.0 * 0.1)
         grid = discretize_crown_profile(test_tree, 1, 1, centering="vertex")
         assert grid.shape[1] % 2 == 0
         assert grid.shape[2] % 2 == 0
 
     def test_large_tree_vertex_centered(self):
         """Large tree with vertex centering."""
-        test_tree = Tree(122, 1, 100, 50.0, 0.8)
+        test_tree = Tree(122, 1, 100, 50.0, crown_base_height=50.0 - 50.0 * 0.8)
         grid = discretize_crown_profile(test_tree, 1, 1, centering="vertex")
         assert grid.shape[1] % 2 == 0
         assert grid.shape[2] % 2 == 0
@@ -1269,14 +1291,18 @@ class TestDiscretizeCrownProfile:
 
     def test_n_vertical_subgrid_default_is_ten(self):
         """The default matches n_vertical_subgrid=10 (10 sub-heights per cell)."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         grid_default = discretize_crown_profile(test_tree, 1, 1)
         grid_explicit = discretize_crown_profile(test_tree, 1, 1, n_vertical_subgrid=10)
         assert np.array_equal(grid_default, grid_explicit)
 
     def test_n_vertical_subgrid_different_values(self):
         """Different subgrid counts produce reasonable volume-fraction grids."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         for n in [1, 2, 4, 10, 20]:
             grid = discretize_crown_profile(test_tree, 1, 1, n_vertical_subgrid=n)
             assert np.all(grid >= 0)
@@ -1285,7 +1311,9 @@ class TestDiscretizeCrownProfile:
 
     def test_n_vertical_subgrid_one_means_no_subdivision(self):
         """n_vertical_subgrid=1 evaluates each z-cell once, at its center."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         grid = discretize_crown_profile(test_tree, 1, 1, n_vertical_subgrid=1)
         assert np.all(grid >= 0)
         assert np.all(grid <= 1)
@@ -1294,14 +1322,18 @@ class TestDiscretizeCrownProfile:
     def test_n_vertical_subgrid_count_with_no_clean_spacing(self):
         """A count whose implied spacing is not a clean float (3 -> 1/3 m) is
         fine now -- it was impossible under the old divide-evenly rule."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         for n in [3, 7, 9]:
             grid = discretize_crown_profile(test_tree, 1, 1, n_vertical_subgrid=n)
             assert np.sum(grid) > 0
 
     def test_n_vertical_subgrid_invalid_raises(self):
         """Counts below 1 are invalid."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         with pytest.raises(ValueError, match="n_vertical_subgrid"):
             discretize_crown_profile(test_tree, 1, 1, n_vertical_subgrid=0)
         with pytest.raises(ValueError, match="n_vertical_subgrid"):
@@ -1377,7 +1409,9 @@ class TestCenteringVisualization:
 
     def test_visualize_crown_profile_slice(self):
         """Visualize a horizontal slice of voxelized crown for both centering modes."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         hr, vr = 1.0, 1.0
 
         grid_cell = discretize_crown_profile(test_tree, hr, vr, centering="cell")
@@ -1506,7 +1540,9 @@ class TestCenteringVisualization:
 
     def test_visualize_grid_overlay(self):
         """Visualize crown profile with grid overlay showing cell boundaries."""
-        test_tree = Tree(122, 1, 24, 20.66443, 0.5)
+        test_tree = Tree(
+            122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5
+        )
         hr = 1.0
 
         cell_coords = _get_horizontal_tree_coords(
@@ -2329,33 +2365,33 @@ class TestTreeVoxelizeMethod:
 
     def test_default_centering(self):
         """Default centering is 'cell'."""
-        tree = Tree(122, 1, 24, 20.66443, 0.5)
+        tree = Tree(122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5)
         vt = tree.voxelize(1.0, 1.0)
         assert vt.centering == "cell"
 
     def test_cell_centering_explicit(self):
         """Explicit cell centering."""
-        tree = Tree(122, 1, 24, 20.66443, 0.5)
+        tree = Tree(122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5)
         vt = tree.voxelize(1.0, 1.0, centering="cell")
         assert vt.centering == "cell"
         assert vt.grid.shape[1] % 2 == 1
 
     def test_vertex_centering(self):
         """Vertex centering via Tree.voxelize()."""
-        tree = Tree(122, 1, 24, 20.66443, 0.5)
+        tree = Tree(122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5)
         vt = tree.voxelize(1.0, 1.0, centering="vertex")
         assert vt.centering == "vertex"
         assert vt.grid.shape[1] % 2 == 0
 
     def test_kwargs_pass_through(self):
         """Other kwargs pass through correctly."""
-        tree = Tree(122, 1, 24, 20.66443, 0.5)
+        tree = Tree(122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5)
         vt = tree.voxelize(1.0, 1.0, centering="vertex", alpha=0.3, seed=42)
         assert vt.centering == "vertex"
 
     def test_various_resolutions(self):
         """Tree.voxelize works at various resolutions with both modes."""
-        tree = Tree(122, 1, 24, 20.66443, 0.5)
+        tree = Tree(122, 1, 24, 20.66443, crown_base_height=20.66443 - 20.66443 * 0.5)
         for hr, vr in [(0.5, 0.5), (1.0, 1.0), (2.0, 1.0)]:
             for centering in ["cell", "vertex"]:
                 vt = tree.voxelize(hr, vr, centering=centering)

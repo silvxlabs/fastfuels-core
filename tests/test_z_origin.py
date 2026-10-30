@@ -26,7 +26,7 @@ def _paraboloid_tree(height=31.5, cbh=3.12, crown_dia=9.34, mass=375.08):
         status_code=1,
         diameter=72.6,
         height=height,
-        crown_ratio=(height - cbh) / height,
+        crown_base_height=cbh,
         crown_profile_model_type="paraboloid",
         max_crown_radius=crown_dia / 2.0,
         max_crown_diameter_height=hd,

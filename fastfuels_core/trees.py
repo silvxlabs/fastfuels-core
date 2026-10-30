@@ -5,6 +5,11 @@ from functools import cached_property
 
 # Internal imports
 from fastfuels_core.allometry import jenkins
+from fastfuels_core.allometry.crown_ratio import (
+    EQUATIONS,
+    FIA_NATIONAL_LOGIT_2026,
+    estimate_crown_base_height,
+)
 from fastfuels_core.base import ObjectIterableDataFrame
 from fastfuels_core.point_process import run_point_process
 from fastfuels_core.voxelization import VoxelizedTree, voxelize_tree, CenteringMode
@@ -67,10 +72,33 @@ TREE_SCHEMA_COLS = {
         float,
         checks=Check.in_range(min_value=0, max_value=1),
         nullable=True,
-        title="Crown Ratio",
-        description="Ratio of the crown length to the total tree height",
+        title="Compacted Crown Ratio",
+        description="FIA TREE.CR as a 0-1 fraction: the crown ratio after lower "
+        "branches are visually moved up to fill gaps. Used for crown geometry "
+        "only to estimate a missing CBH.",
+    ),
+    "CBH": Column(
+        float,
+        checks=Check.ge(0),
+        nullable=True,
+        title="Crown Base Height (m)",
+        description="Height of the lowest live foliage (the base of the "
+        "uncompacted crown). Equal to HT for a tree with no live crown.",
     ),
 }
+
+
+def _cbh_le_ht(df: pd.DataFrame) -> pd.Series | bool:
+    if "CBH" not in df or "HT" not in df:
+        return True
+    return df["CBH"].isna() | df["HT"].isna() | (df["CBH"] <= df["HT"])
+
+
+CBH_LE_HT_CHECK = Check(
+    _cbh_le_ht,
+    name="cbh_le_ht",
+    error="CBH must be less than or equal to HT",
+)
 
 
 class TreeSample(ObjectIterableDataFrame):
@@ -88,6 +116,7 @@ class TreeSample(ObjectIterableDataFrame):
                 ),
             },
         },
+        checks=[CBH_LE_HT_CHECK],
         coerce=True,
         index=Index(int, unique=True),
     )
@@ -151,6 +180,7 @@ class TreePopulation(ObjectIterableDataFrame):
                 ),
             },
         },
+        checks=[CBH_LE_HT_CHECK],
         coerce=True,
         add_missing_columns=True,
         index=Index(int, unique=True),
@@ -158,14 +188,16 @@ class TreePopulation(ObjectIterableDataFrame):
 
     def _row_to_object(self, row) -> Tree:
         """
-        Convert a row of the dataframe to an object.
+        Convert a row of the dataframe to an object. A NaN CBH is estimated
+        from CR with ``pacific_northwest=False``.
         """
         return Tree(
             species_code=row.SPCD,
             status_code=row.STATUSCD,
             diameter=row.DIA,
             height=row.HT,
-            crown_ratio=row.CR,
+            crown_base_height=row.CBH,
+            crown_ratio=float(row.CR) if pd.notna(row.CR) else None,
             x=row.X,
             y=row.Y,
         )
@@ -212,8 +244,28 @@ class Tree:
         Diameter (cm) of the tree measured at breast height (1.37 m). Units: cm.
     height : float
         Height (m) of the tree measured from the ground. Units: m.
-    crown_ratio : float
-        Ratio (-) of the crown length to the total tree height. Units: none.
+    crown_base_height : float
+        Height (m) of the lowest live foliage, the base of the uncompacted
+        crown. Equal to ``height`` for a tree with no live crown. Sets the
+        crown geometry. A supplied value is used as is; when it is omitted
+        (None or NaN) it is estimated from ``crown_ratio`` with
+        :func:`fastfuels_core.allometry.crown_ratio.estimate_crown_base_height`,
+        the same function that converts a whole inventory, so the two agree
+        exactly. ValueError if neither is given or the estimate is NaN (e.g. a
+        missing diameter). Units: m.
+    crown_ratio : float or None
+        FIA compacted crown ratio (0-1). Optional. Carried as data when
+        ``crown_base_height`` is supplied; otherwise the input to its
+        estimate. NaN or ``pd.NA`` is stored as None. Units: none.
+    pacific_northwest : bool, optional
+        Whether the tree is in CA, OR or WA, which selects the regional rows of
+        the crown base height estimate. Read only when the crown base height is
+        estimated. Defaults to False.
+    crown_ratio_equation : str, optional
+        The crown ratio equation of the estimate, one of
+        :data:`fastfuels_core.allometry.crown_ratio.EQUATIONS`, passed to
+        ``estimate_crown_base_height`` as ``equation``. Read only when the
+        crown base height is estimated. Defaults to ``"fia_national_logit_2026"``.
     x : float
         X coordinate of the tree in a projected coordinate system. Units: m.
     y : float
@@ -239,7 +291,8 @@ class Tree:
     status_code: int
     diameter: float
     height: float
-    crown_ratio: float
+    crown_base_height: float
+    crown_ratio: float | None
     x: float
     y: float
 
@@ -249,7 +302,11 @@ class Tree:
         status_code: int,
         diameter: float,
         height: float,
-        crown_ratio: float,
+        *,
+        crown_base_height: float | None = None,
+        crown_ratio: float | None = None,
+        pacific_northwest: bool = False,
+        crown_ratio_equation: str = FIA_NATIONAL_LOGIT_2026,
         jenkins_species_group: int = None,
         x=0,
         y=0,
@@ -267,10 +324,56 @@ class Tree:
 
         # TODO: Diameter and height need to be greater than 0
         self.diameter = diameter
-        self.height = height
+        # Python floats, so a float32 crown base is compared at the precision
+        # it is stored at.
+        self.height = float(height)
 
-        # TODO: Crown ratio needs to be between 0 and 1
-        self.crown_ratio = crown_ratio
+        if crown_ratio_equation not in EQUATIONS:
+            raise ValueError(
+                "The crown ratio equation must be one of the following: "
+                f"{', '.join(EQUATIONS)}"
+            )
+        self._crown_ratio_equation = crown_ratio_equation
+
+        # None, NaN and pd.NA all mean an unrecorded CR.
+        self.crown_ratio = None if pd.isna(crown_ratio) else float(crown_ratio)
+        if self.crown_ratio is not None and not 0 <= self.crown_ratio <= 1:
+            raise ValueError(f"crown_ratio must be between 0 and 1, got {crown_ratio}.")
+
+        # A missing crown base height is estimated from the compacted crown
+        # ratio, through the same vectorized model as a whole inventory.
+        if pd.isna(crown_base_height):
+            if self.crown_ratio is None:
+                raise ValueError(
+                    "Tree needs a crown_base_height, or a crown_ratio to "
+                    "estimate one from."
+                )
+            crown_base_height = estimate_crown_base_height(
+                np.array([self.species_code]),
+                np.array([self.crown_ratio]),
+                np.array([np.nan if pd.isna(diameter) else diameter], dtype=float),
+                np.array([self.height]),
+                pacific_northwest,
+                equation=crown_ratio_equation,
+            )[0]
+            if np.isnan(crown_base_height):
+                raise ValueError(
+                    "crown_base_height could not be estimated from crown_ratio "
+                    f"{self.crown_ratio} with diameter {diameter} and height "
+                    f"{self.height} by {crown_ratio_equation!r}; pass a "
+                    "crown_base_height."
+                )
+
+        try:
+            cbh = float(crown_base_height)
+        except (TypeError, ValueError):
+            cbh = np.nan
+        if not (np.isfinite(cbh) and 0 <= cbh <= self.height):
+            raise ValueError(
+                "crown_base_height must be finite and between 0 and height "
+                f"({self.height}), got {crown_base_height}."
+            )
+        self.crown_base_height = cbh
 
         self.x = x
         self.y = y
@@ -311,14 +414,7 @@ class Tree:
         """
         Returns the length of the tree's crown.
         """
-        return self.height * self.crown_ratio
-
-    @property
-    def crown_base_height(self) -> float:
-        """
-        Returns the height at which the live crown starts.
-        """
-        return self.height - self.crown_length
+        return self.height - self.crown_base_height
 
     @property
     def jenkins_species_group(self) -> int:
@@ -349,7 +445,7 @@ class Tree:
             )
         elif self._crown_profile_model_type == "purves":
             return PurvesCrownProfile(
-                self.species_code, self.diameter, self.height, self.crown_ratio
+                self.species_code, self.diameter, self.height, self.crown_base_height
             )
         elif self._crown_profile_model_type == "cone":
             return ConeCrownProfile(
@@ -522,6 +618,8 @@ class Tree:
 
     @classmethod
     def from_row(cls, row):
+        """Build a Tree from a frame row. A NaN CBH is estimated from CR with
+        ``pacific_northwest=False``."""
         max_crown_radius = None
         if hasattr(row, "MAX_CROWN_RADIUS"):
             val = row.MAX_CROWN_RADIUS
@@ -534,12 +632,19 @@ class Tree:
             if pd.notna(val):
                 crown_fuel_load = float(val)
 
+        crown_ratio = None
+        if hasattr(row, "CR"):
+            val = row.CR
+            if pd.notna(val):
+                crown_ratio = float(val)
+
         return cls(
             species_code=int(row.SPCD),
             status_code=int(row.STATUSCD),
             diameter=row.DIA,
             height=row.HT,
-            crown_ratio=row.CR,
+            crown_base_height=row.CBH,
+            crown_ratio=crown_ratio,
             x=row.X,
             y=row.Y,
             max_crown_radius=max_crown_radius,

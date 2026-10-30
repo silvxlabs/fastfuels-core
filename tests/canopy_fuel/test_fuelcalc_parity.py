@@ -196,7 +196,7 @@ class TestCrownProportionParity:
                     "fia_species_code": spcd,
                     "dbh": dia_in * IN_TO_CM,
                     "height": 20.0,
-                    "crown_ratio": 0.5,
+                    "crown_base_height": 10.0,
                 }
             )
             ours = available_canopy_fuel(
@@ -252,7 +252,7 @@ class TestCrownProportionParity:
                         "fia_species_code": spcd,
                         "dbh": dia_in * IN_TO_CM,
                         "height": 20.0,
-                        "crown_ratio": 0.5,
+                        "crown_base_height": 10.0,
                         "cc": crown_class,
                     }
                 )
@@ -339,7 +339,7 @@ class TestVerticalDistributionParity:
                 "x": [5.0, 15.0, 25.0],
                 "y": [-5.0, -5.0, -15.0],
                 "height": [12.0, 20.0, 7.3],
-                "crown_ratio": [0.4, 0.65, 0.9],
+                "crown_base_height": [7.2, 7.0, 0.73],
                 "fia_species_code": [135, 135, 135],
                 "dbh": [25.0, 40.0, 12.0],
             }
@@ -692,14 +692,19 @@ class TestCanopyCoverParity:
         for _ in range(25):
             n = int(rng.integers(1, 30))
             spcd = rng.choice(species.index.to_numpy(), n)
+            x = rng.uniform(12.0, 18.0, n)
+            y = -rng.uniform(12.0, 18.0, n)
+            dbh = rng.uniform(2.0, 25.0, n)
+            height = rng.uniform(6.0, 30.0, n)
+            crown_fraction = rng.uniform(0.3, 0.9, n)
             trees = pd.DataFrame(
                 {
-                    "x": rng.uniform(12.0, 18.0, n),
-                    "y": -rng.uniform(12.0, 18.0, n),
+                    "x": x,
+                    "y": y,
                     "fia_species_code": spcd,
-                    "dbh": rng.uniform(2.0, 25.0, n),
-                    "height": rng.uniform(6.0, 30.0, n),
-                    "crown_ratio": rng.uniform(0.3, 0.9, n),
+                    "dbh": dbh,
+                    "height": height,
+                    "crown_base_height": height - height * crown_fraction,
                 }
             )
             ours = canopy_cover(

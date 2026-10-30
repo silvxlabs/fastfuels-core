@@ -18,6 +18,7 @@ from fastfuels_core.canopy_fuel.bulk_density import (
     profile_running_mean,
     window_in_layers,
 )
+from fastfuels_core.canopy_fuel.crown_base import validate_crown_base_height
 from fastfuels_core.canopy_fuel.profile import FUELCALC_LAYER_DEPTH, stem_cells
 
 # Canopy base height and canopy height each have a profile-threshold method
@@ -72,7 +73,7 @@ def crown_base_statistic(
 
     Each tree is binned to its stem cell (see
     :func:`~fastfuels_core.canopy_fuel.profile.stem_cells`) and its crown
-    base height ``height * (1 - crown_ratio)`` is reduced over the cell by
+    base height (the ``crown_base_height`` column) is reduced over the cell by
     ``statistic``:
 
     - ``"minimum"`` — the lowest crown base, the most conservative reading
@@ -98,11 +99,10 @@ def crown_base_statistic(
     if not len(trees):
         return out.reshape(ny, nx)
 
+    validate_crown_base_height(trees)
     row, col, keep = stem_cells(trees, transform, shape)
     flat = row * nx + col
-    height = trees["height"].to_numpy(dtype=np.float64)[keep]
-    crown_ratio = trees["crown_ratio"].to_numpy(dtype=np.float64)[keep]
-    crown_base = height * (1.0 - crown_ratio)
+    crown_base = trees["crown_base_height"].to_numpy(dtype=np.float64)[keep]
 
     if statistic == "mean":
         if weight_by_available_fuel:
@@ -159,7 +159,7 @@ def mean_crown_length(
     transform: tuple[float, float, float, float, float, float],
     shape: tuple[int, int],
 ) -> np.ndarray:
-    """Per-cell mean of the per-tree crown length ``height * crown_ratio`` (m).
+    """Per-cell mean of per-tree crown length ``height - crown_base_height`` (m).
 
     A canopy depth for the load-over-depth CBD, the one Cruz et al. (2003)
     used. Each tree is binned to its stem cell and the crown lengths are
@@ -169,11 +169,12 @@ def mean_crown_length(
     ny, nx = shape
     out = np.full(ny * nx, np.nan)
     if len(trees):
+        validate_crown_base_height(trees)
         row, col, keep = stem_cells(trees, transform, shape)
         flat = row * nx + col
         height = trees["height"].to_numpy(dtype=np.float64)[keep]
-        crown_ratio = trees["crown_ratio"].to_numpy(dtype=np.float64)[keep]
-        crown_length = height * crown_ratio
+        crown_base = trees["crown_base_height"].to_numpy(dtype=np.float64)[keep]
+        crown_length = height - crown_base
         num = np.bincount(flat, weights=crown_length, minlength=ny * nx)
         count = np.bincount(flat, minlength=ny * nx)
         with np.errstate(invalid="ignore", divide="ignore"):
@@ -192,17 +193,17 @@ def height_percentile_depth(
 
     A canopy depth for the load-over-depth CBD: the ``top_percentile`` of
     tree heights in the cell (90th by default, a robust stand top) minus
-    the median per-tree crown base height ``height * (1 - crown_ratio)``.
+    the median per-tree crown base height (the ``crown_base_height`` column).
     Each tree is binned to its stem cell; cells with no trees are NaN.
     """
     ny, nx = shape
     out = np.full(ny * nx, np.nan)
     if len(trees):
+        validate_crown_base_height(trees)
         row, col, keep = stem_cells(trees, transform, shape)
         flat = row * nx + col
         height = trees["height"].to_numpy(dtype=np.float64)[keep]
-        crown_ratio = trees["crown_ratio"].to_numpy(dtype=np.float64)[keep]
-        crown_base = height * (1.0 - crown_ratio)
+        crown_base = trees["crown_base_height"].to_numpy(dtype=np.float64)[keep]
         grouped = pd.DataFrame(
             {"cell": flat, "height": height, "base": crown_base}
         ).groupby("cell")

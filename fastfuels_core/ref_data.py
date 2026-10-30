@@ -16,6 +16,7 @@ REF_SPECIES = pd.read_csv(  # type: ignore
         "SPECIES",
         "SPECIES_SYMBOL",
         "WOODLAND",
+        "E_SPGRPCD",
         "SFTWD_HRDWD",
         "JENKINS_SPGRPCD",
         "PURVES_TRAIT_SCORE",

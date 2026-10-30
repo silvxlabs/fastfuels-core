@@ -17,7 +17,7 @@ def make_random_tree(
     status_code=None,
     diameter=None,
     height=None,
-    crown_ratio=None,
+    crown_base_height=None,
     x=None,
     y=None,
     crown_profile_model=None,
@@ -32,8 +32,9 @@ def make_random_tree(
         height = random.uniform(1, 60)
     if diameter is None:
         diameter = random.uniform(1, 100.0)
-    if crown_ratio is None:
+    if crown_base_height is None:
         crown_ratio = random.uniform(0.1, 1)
+        crown_base_height = height - height * crown_ratio
     if x is None:
         x = random.uniform(-180, 180)
     if y is None:
@@ -48,7 +49,7 @@ def make_random_tree(
         status_code=status_code,
         diameter=diameter,
         height=height,
-        crown_ratio=crown_ratio,
+        crown_base_height=crown_base_height,
         x=x,
         y=y,
         crown_profile_model_type=crown_profile_model,
