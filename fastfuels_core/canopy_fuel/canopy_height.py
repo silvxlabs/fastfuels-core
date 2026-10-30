@@ -18,6 +18,7 @@ from fastfuels_core.canopy_fuel.bulk_density import (
     profile_running_mean,
     window_in_layers,
 )
+from fastfuels_core.canopy_fuel.crown_base import validate_crown_base_height
 from fastfuels_core.canopy_fuel.profile import FUELCALC_LAYER_DEPTH, stem_cells
 
 # Canopy base height and canopy height each have a profile-threshold method
@@ -98,6 +99,7 @@ def crown_base_statistic(
     if not len(trees):
         return out.reshape(ny, nx)
 
+    validate_crown_base_height(trees)
     row, col, keep = stem_cells(trees, transform, shape)
     flat = row * nx + col
     crown_base = trees["crown_base_height"].to_numpy(dtype=np.float64)[keep]
@@ -167,6 +169,7 @@ def mean_crown_length(
     ny, nx = shape
     out = np.full(ny * nx, np.nan)
     if len(trees):
+        validate_crown_base_height(trees)
         row, col, keep = stem_cells(trees, transform, shape)
         flat = row * nx + col
         height = trees["height"].to_numpy(dtype=np.float64)[keep]
@@ -196,6 +199,7 @@ def height_percentile_depth(
     ny, nx = shape
     out = np.full(ny * nx, np.nan)
     if len(trees):
+        validate_crown_base_height(trees)
         row, col, keep = stem_cells(trees, transform, shape)
         flat = row * nx + col
         height = trees["height"].to_numpy(dtype=np.float64)[keep]
