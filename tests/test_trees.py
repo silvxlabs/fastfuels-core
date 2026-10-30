@@ -518,11 +518,11 @@ class TestTreeCrownBaseHeight:
 
     def test_crown_ratio_equation_defaults_to_refit(self):
         tree = self._tree(crown_ratio=0.4)
-        assert tree._crown_ratio_equation == "fastfuels_2026"
+        assert tree._crown_ratio_equation == "fia_national_logit_2026"
         assert (
             tree.crown_base_height
             == estimate_crown_base_height(
-                122, 0.4, 25.0, 15.0, equation="fastfuels_2026"
+                122, 0.4, 25.0, 15.0, equation="fia_national_logit_2026"
             )[0]
         )
 

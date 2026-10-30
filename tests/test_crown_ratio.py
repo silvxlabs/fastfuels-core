@@ -15,7 +15,7 @@ import pytest
 
 from fastfuels_core.allometry.crown_ratio import (
     EQUATIONS,
-    FASTFUELS_2026,
+    FIA_NATIONAL_LOGIT_2026,
     estimate_crown_base_height,
     estimate_uncompacted_crown_ratio,
 )
@@ -202,7 +202,7 @@ class TestCrownBaseHeight:
             estimate_crown_base_height(202, 40.0, 25.4, 20.0)
 
 
-PUBLISHED = [e for e in EQUATIONS if e != FASTFUELS_2026]
+PUBLISHED = [e for e in EQUATIONS if e != FIA_NATIONAL_LOGIT_2026]
 
 
 def published(b, ccr, dbh_cm, height_m, sign=-1):
@@ -508,7 +508,7 @@ class TestEveryEquation:
         args = ([202, 316, 6156], 0.4, 30.0, 18.0)
         np.testing.assert_array_equal(
             estimate_uncompacted_crown_ratio(*args),
-            estimate_uncompacted_crown_ratio(*args, equation=FASTFUELS_2026),
+            estimate_uncompacted_crown_ratio(*args, equation=FIA_NATIONAL_LOGIT_2026),
         )
 
     @pytest.mark.parametrize("equation", PUBLISHED)
@@ -527,14 +527,14 @@ def test_coefficient_file_integrity():
     assert rows[coefficients].notna().all().all()
     assert set(rows.RECOMMENDED) == {0, 1}
 
-    refit = rows[rows.SOURCE == FASTFUELS_2026]
+    refit = rows[rows.SOURCE == FIA_NATIONAL_LOGIT_2026]
     assert len(refit) == 374
     assert set(refit.REGION) == {"national", "pacific_northwest"}
     assert set(refit[refit.REGION == "pacific_northwest"].KEY_TYPE) == {"SPCD"}
     assert set(refit[refit.KEY_TYPE == "POOLED"].KEY) == {"softwood", "hardwood"}
     assert (refit.EXP_SIGN == -1).all()
 
-    papers = rows[rows.SOURCE != FASTFUELS_2026]
+    papers = rows[rows.SOURCE != FIA_NATIONAL_LOGIT_2026]
     assert papers.groupby("SOURCE").size().to_dict() == {
         "monleon_2004_eq1": 31,  # 30 models, red fir on two codes
         "monleon_2004_eq2": 31,  # 21 + 9 from Table 2, red fir on two codes

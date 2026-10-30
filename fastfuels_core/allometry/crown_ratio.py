@@ -21,7 +21,7 @@ convention; the equations' own inches and feet are converted here.
 
 ``equation`` selects the coefficients:
 
-``"fastfuels_2026"`` (default)
+``"fia_national_logit_2026"`` (default)
     A national refit of the logistic form to FIA trees with both ratios
     recorded: a fractional logit per species, each shrunk toward its genus
     and each genus toward a softwood or hardwood pool, with species
@@ -133,9 +133,9 @@ from fastfuels_core.units import CM_TO_IN, M_TO_FT
 
 PACIFIC_NORTHWEST_STATES = frozenset({"CA", "OR", "WA"})
 
-FASTFUELS_2026 = "fastfuels_2026"
+FIA_NATIONAL_LOGIT_2026 = "fia_national_logit_2026"
 EQUATIONS = (
-    FASTFUELS_2026,
+    FIA_NATIONAL_LOGIT_2026,
     "monleon_2004_eq1",
     "monleon_2004_eq2",
     "toney_reeves_2009",
@@ -148,7 +148,7 @@ _IDENTITY_ABOVE_090 = frozenset(
     {"monleon_2004_eq1", "monleon_2004_eq2", "toney_reeves_2009", "randolph_2010"}
 )
 # Equations that never go below the compacted ratio
-_NOT_BELOW_CCR = frozenset({FASTFUELS_2026, "westfall_2019"})
+_NOT_BELOW_CCR = frozenset({FIA_NATIONAL_LOGIT_2026, "westfall_2019"})
 
 _COEFFICIENTS = ["B0", "B_CCR", "B_LN_DIA", "B_LN_HT", "B_HD", "EXP_SIGN"]
 
@@ -181,7 +181,7 @@ def _species_coefficients(equation: str, pacific_northwest: bool) -> pd.DataFram
     """
     rows = _coefficient_rows()
     rows = rows[rows.SOURCE == equation]
-    if equation == FASTFUELS_2026:
+    if equation == FIA_NATIONAL_LOGIT_2026:
         national = rows[rows.REGION == "national"]
         # Four reference species have no softwood/hardwood class; the fit
         # pooled them with the hardwoods.
@@ -237,9 +237,9 @@ def _check_equation(equation: str, pacific_northwest) -> None:
             f"Unknown crown ratio equation {equation!r}; expected one of "
             f"{list(EQUATIONS)}."
         )
-    if equation != FASTFUELS_2026 and np.any(pacific_northwest):
+    if equation != FIA_NATIONAL_LOGIT_2026 and np.any(pacific_northwest):
         raise ValueError(
-            f"pacific_northwest applies only to {FASTFUELS_2026!r}, not {equation!r}."
+            f"pacific_northwest applies only to {FIA_NATIONAL_LOGIT_2026!r}, not {equation!r}."
         )
 
 
@@ -249,7 +249,7 @@ def estimate_uncompacted_crown_ratio(
     dbh_cm: np.ndarray,
     height_m: np.ndarray,
     pacific_northwest: bool | np.ndarray = False,
-    equation: str = FASTFUELS_2026,
+    equation: str = FIA_NATIONAL_LOGIT_2026,
 ) -> np.ndarray:
     """Per-tree uncompacted crown ratio (fraction) from the compacted ratio.
 
@@ -265,10 +265,10 @@ def estimate_uncompacted_crown_ratio(
         Total tree height (m).
     pacific_northwest : bool or array_like, optional
         Scalar or per tree; selects the CA/OR/WA species rows of
-        ``"fastfuels_2026"`` (see ``PACIFIC_NORTHWEST_STATES``). Must be
+        ``"fia_national_logit_2026"`` (see ``PACIFIC_NORTHWEST_STATES``). Must be
         False for the published equations.
     equation : str, optional
-        One of ``EQUATIONS``: ``"fastfuels_2026"`` (default),
+        One of ``EQUATIONS``: ``"fia_national_logit_2026"`` (default),
         ``"monleon_2004_eq1"`` and ``"monleon_2004_eq2"`` (CA, OR, WA),
         ``"toney_reeves_2009"`` (Interior West), ``"randolph_2010"`` (South)
         or ``"westfall_2019"`` (North). See the module docstring for each
@@ -338,7 +338,7 @@ def estimate_crown_base_height(
     dbh_cm: np.ndarray,
     height_m: np.ndarray,
     pacific_northwest: bool | np.ndarray = False,
-    equation: str = FASTFUELS_2026,
+    equation: str = FIA_NATIONAL_LOGIT_2026,
 ) -> np.ndarray:
     """Per-tree crown base height (m) from the compacted crown ratio.
 

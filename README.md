@@ -40,7 +40,7 @@ Set `pacific_northwest=True` for trees in `PACIFIC_NORTHWEST_STATES` (CA, OR, WA
 
 | `equation` | Region | Predictors | Coverage | Source |
 |---|---|---|---|---|
-| `fastfuels_2026` (default) | National, CA/OR/WA rows via `pacific_northwest` | CCR, ln DBH, ln height | Every FIA species (genus and softwood/hardwood fallbacks) | National FIA refit of the published form |
+| `fia_national_logit_2026` (default) | National, CA/OR/WA rows via `pacific_northwest` | CCR, ln DBH, ln height | Every FIA species (genus and softwood/hardwood fallbacks) | National FIA refit of the published form |
 | `monleon_2004_eq1` | CA, OR, WA | CCR, ln DBH, ln height, height/DBH | 28 species, other *Pinus* and *Quercus* | Monleon, Azuma & Gedney 2004, *West. J. Appl. For.* 19(4):260–267, Table 2, [doi:10.1093/wjaf/19.4.260](https://doi.org/10.1093/wjaf/19.4.260) |
 | `monleon_2004_eq2` | CA, OR, WA | CCR, ln DBH | 28 species, other *Pinus* and *Quercus* | Same paper, Table 4 (and Table 2 rows without height terms) |
 | `toney_reeves_2009` | ID, MT, WY, NV, UT, CO, AZ, NM | CCR, ln diameter | 35 species, no fallback; 4 woodland species fitted on root-collar diameter give NaN | Toney & Reeves 2009, *West. J. Appl. For.* 24(2):76–82, Table 3, [doi:10.1093/wjaf/24.2.76](https://doi.org/10.1093/wjaf/24.2.76) |

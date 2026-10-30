@@ -7,7 +7,7 @@ from functools import cached_property
 from fastfuels_core.allometry import jenkins
 from fastfuels_core.allometry.crown_ratio import (
     EQUATIONS,
-    FASTFUELS_2026,
+    FIA_NATIONAL_LOGIT_2026,
     estimate_crown_base_height,
 )
 from fastfuels_core.base import ObjectIterableDataFrame
@@ -265,7 +265,7 @@ class Tree:
         The crown ratio equation of the estimate, one of
         :data:`fastfuels_core.allometry.crown_ratio.EQUATIONS`, passed to
         ``estimate_crown_base_height`` as ``equation``. Read only when the
-        crown base height is estimated. Defaults to ``"fastfuels_2026"``.
+        crown base height is estimated. Defaults to ``"fia_national_logit_2026"``.
     x : float
         X coordinate of the tree in a projected coordinate system. Units: m.
     y : float
@@ -306,7 +306,7 @@ class Tree:
         crown_base_height: float | None = None,
         crown_ratio: float | None = None,
         pacific_northwest: bool = False,
-        crown_ratio_equation: str = FASTFUELS_2026,
+        crown_ratio_equation: str = FIA_NATIONAL_LOGIT_2026,
         jenkins_species_group: int = None,
         x=0,
         y=0,
