@@ -5,7 +5,11 @@ from functools import cached_property
 
 # Internal imports
 from fastfuels_core.allometry import jenkins
-from fastfuels_core.allometry.crown_ratio import estimate_crown_base_height
+from fastfuels_core.allometry.crown_ratio import (
+    EQUATIONS,
+    FASTFUELS_2026,
+    estimate_crown_base_height,
+)
 from fastfuels_core.base import ObjectIterableDataFrame
 from fastfuels_core.point_process import run_point_process
 from fastfuels_core.voxelization import VoxelizedTree, voxelize_tree, CenteringMode
@@ -257,6 +261,11 @@ class Tree:
         Whether the tree is in CA, OR or WA, which selects the regional rows of
         the crown base height estimate. Read only when the crown base height is
         estimated. Defaults to False.
+    crown_ratio_equation : str, optional
+        The crown ratio equation of the estimate, one of
+        :data:`fastfuels_core.allometry.crown_ratio.EQUATIONS`, passed to
+        ``estimate_crown_base_height`` as ``equation``. Read only when the
+        crown base height is estimated. Defaults to ``"fastfuels_2026"``.
     x : float
         X coordinate of the tree in a projected coordinate system. Units: m.
     y : float
@@ -297,6 +306,7 @@ class Tree:
         crown_base_height: float | None = None,
         crown_ratio: float | None = None,
         pacific_northwest: bool = False,
+        crown_ratio_equation: str = FASTFUELS_2026,
         jenkins_species_group: int = None,
         x=0,
         y=0,
@@ -318,6 +328,13 @@ class Tree:
         # it is stored at.
         self.height = float(height)
 
+        if crown_ratio_equation not in EQUATIONS:
+            raise ValueError(
+                "The crown ratio equation must be one of the following: "
+                f"{', '.join(EQUATIONS)}"
+            )
+        self._crown_ratio_equation = crown_ratio_equation
+
         # None, NaN and pd.NA all mean an unrecorded CR.
         self.crown_ratio = None if pd.isna(crown_ratio) else float(crown_ratio)
         if self.crown_ratio is not None and not 0 <= self.crown_ratio <= 1:
@@ -337,12 +354,14 @@ class Tree:
                 np.array([np.nan if pd.isna(diameter) else diameter], dtype=float),
                 np.array([self.height]),
                 pacific_northwest,
+                equation=crown_ratio_equation,
             )[0]
             if np.isnan(crown_base_height):
                 raise ValueError(
                     "crown_base_height could not be estimated from crown_ratio "
                     f"{self.crown_ratio} with diameter {diameter} and height "
-                    f"{self.height}; pass a crown_base_height."
+                    f"{self.height} by {crown_ratio_equation!r}; pass a "
+                    "crown_base_height."
                 )
 
         try:

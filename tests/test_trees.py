@@ -488,6 +488,65 @@ class TestTreeCrownBaseHeight:
         ]
         np.testing.assert_array_equal(got, expected)
 
+    @pytest.mark.parametrize(
+        "equation, species",
+        [
+            ("monleon_2004_eq1", [202, 15, 122, 101, 801, 64]),
+            ("monleon_2004_eq2", [202, 263, 17, 21, 131, 805]),
+            ("toney_reeves_2009", [122, 202, 65, 746, 93, 19]),
+            ("randolph_2010", [131, 621, 61, 58, 68, 802]),
+            ("westfall_2019", [12, 125, 129, 316, 202, 833]),
+        ],
+    )
+    def test_crown_ratio_equation_matches_vectorized_exactly(self, equation, species):
+        rng = np.random.default_rng(1)
+        n = 30
+        spcd = rng.choice(species, n)
+        dbh = rng.uniform(5.0, 80.0, n)
+        height = rng.uniform(4.0, 45.0, n)
+        cr = rng.uniform(0.0, 1.0, n)
+        cr[:4] = [0.0, 1.0, 0.95, 0.05]
+        expected = estimate_crown_base_height(spcd, cr, dbh, height, equation=equation)
+        assert np.isfinite(expected).all()
+        got = [
+            Tree(
+                s, 1, d, h, crown_ratio=c, crown_ratio_equation=equation
+            ).crown_base_height
+            for s, d, h, c in zip(spcd, dbh, height, cr)
+        ]
+        np.testing.assert_array_equal(got, expected)
+
+    def test_crown_ratio_equation_defaults_to_refit(self):
+        tree = self._tree(crown_ratio=0.4)
+        assert tree._crown_ratio_equation == "fastfuels_2026"
+        assert (
+            tree.crown_base_height
+            == estimate_crown_base_height(
+                122, 0.4, 25.0, 15.0, equation="fastfuels_2026"
+            )[0]
+        )
+
+    def test_unknown_crown_ratio_equation_raises(self):
+        with pytest.raises(ValueError, match="crown ratio equation"):
+            self._tree(crown_base_height=6.0, crown_ratio=0.4, crown_ratio_equation="x")
+
+    def test_species_outside_equation_raises(self):
+        # Toney & Reeves 2009 has no loblolly pine model
+        with pytest.raises(ValueError, match="toney_reeves_2009"):
+            self._tree(
+                species_code=131,
+                crown_ratio=0.4,
+                crown_ratio_equation="toney_reeves_2009",
+            )
+
+    def test_pacific_northwest_with_published_equation_raises(self):
+        with pytest.raises(ValueError, match="pacific_northwest applies only"):
+            self._tree(
+                crown_ratio=0.4,
+                pacific_northwest=True,
+                crown_ratio_equation="monleon_2004_eq2",
+            )
+
     def test_supplied_crown_base_height_takes_precedence(self):
         tree = self._tree(crown_base_height=6.0, crown_ratio=0.4)
         assert tree.crown_base_height == 6.0
