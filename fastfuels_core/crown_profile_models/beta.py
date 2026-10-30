@@ -21,6 +21,20 @@ class BetaCrownProfile(CrownProfileModel):
         Initializes a BetaCrownProfile instance.
         All instance variables are stored as 2D arrays with shape [n_trees, 1]
         to enable natural broadcasting with 1D height inputs.
+
+        Parameters
+        ----------
+        species_code : int or NDArray[np.int64]
+            The species code(s) of the tree(s).
+        crown_base_height : float or NDArray[np.float64]
+            Height of the lowest live foliage, the base of the uncompacted
+            crown (m).
+        crown_length : float or NDArray[np.float64]
+            Distance from the crown base to the top of the tree (m).
+
+        The profile spans a continuous crown from its lowest live foliage to
+        the top, so pass the base of the uncompacted crown, not one derived
+        from FIA's compacted CR.
         """
         # Store all tree parameters as 2D arrays [n_trees, 1]
         self.species_code = np.atleast_2d(species_code).T

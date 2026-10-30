@@ -62,8 +62,8 @@ class ConeCrownProfile(CrownProfileModel):
         """
         z = np.asarray(height)
         crown_length = self.height - self.crown_base_height
-        # Guard against a zero-length crown (crown_ratio == 0); the crown mask
-        # below zeroes out every cell in that case anyway.
+        # Guard against a zero-length crown (crown_base_height == height); the
+        # crown mask below zeroes out every cell in that case anyway.
         safe_length = np.where(crown_length == 0, 1.0, crown_length)
 
         radius = self.max_crown_radius * (self.height - z) / safe_length

@@ -210,10 +210,10 @@ def plot_beta_canopy_3d_pyv(trees, n=25):
             p.add_mesh(mesh, color="#00b500", smooth_shading=True)
             p.add_mesh(
                 pv.Cylinder(
-                    center=[tree.x, tree.y, (tree.height * (1 - tree.crown_ratio)) / 2],
+                    center=[tree.x, tree.y, tree.crown_base_height / 2],
                     direction=[0, 0, 1],
                     radius=tree.dbh / 200,
-                    height=tree.height * (1 - tree.crown_ratio),
+                    height=tree.crown_base_height,
                 ),
                 color="#e5e7eb",
                 smooth_shading=True,
@@ -224,10 +224,10 @@ def plot_beta_canopy_3d_pyv(trees, n=25):
         p.add_mesh(mesh, color="#00b500", smooth_shading=True)
         p.add_mesh(
             pv.Cylinder(
-                center=[tree.x, tree.y, (tree.height * (1 - tree.crown_ratio)) / 2],
+                center=[tree.x, tree.y, tree.crown_base_height / 2],
                 direction=[0, 0, 1],
                 radius=tree.dbh / 200,
-                height=tree.height * (1 - tree.crown_ratio),
+                height=tree.crown_base_height,
             ),
             color="#66493A",  # color="#e5e7eb",
             smooth_shading=True,
