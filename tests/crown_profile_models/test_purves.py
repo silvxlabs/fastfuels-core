@@ -76,8 +76,8 @@ def height_vector(tree_list):
 
 
 @pytest.fixture(scope="module")
-def crown_ratio_vector(tree_list):
-    return np.array([t.crown_ratio for t in tree_list])
+def crown_base_height_vector(tree_list):
+    return np.array([t.crown_base_height for t in tree_list])
 
 
 @pytest.fixture(scope="module")
@@ -123,7 +123,7 @@ class TestGetMaxRadius:
         tree_list,
         dbh_vector,
         height_vector,
-        crown_ratio_vector,
+        crown_base_height_vector,
         spcd_vector,
     ):
         """
@@ -139,7 +139,7 @@ class TestGetMaxRadius:
                 spcd_vector,
                 dbh_vector,
                 height_vector,
-                height_vector - height_vector * crown_ratio_vector,
+                crown_base_height_vector,
             )
 
         # Initialize the PurvesCrownProfile model with pandas Series from a DataFrame
@@ -148,15 +148,14 @@ class TestGetMaxRadius:
                 "species_code": spcd_vector,
                 "dbh": dbh_vector,
                 "height": height_vector,
-                "crown_ratio": crown_ratio_vector,
+                "crown_base_height": crown_base_height_vector,
             }
             tree_population_df = pd.DataFrame(tree_population_dict)
             purves_model = PurvesCrownProfile(
                 tree_population_df["species_code"],
                 tree_population_df["dbh"],
                 tree_population_df["height"],
-                tree_population_df["height"]
-                - tree_population_df["height"] * tree_population_df["crown_ratio"],
+                tree_population_df["crown_base_height"],
             )
         else:
             raise ValueError(f"Unknown library: {library}")
@@ -238,7 +237,7 @@ class TestGetRadiusAtHeight:
         tree_list,
         dbh_vector,
         height_vector,
-        crown_ratio_vector,
+        crown_base_height_vector,
         spcd_vector,
         vector_tree_heights,
     ):
@@ -258,7 +257,7 @@ class TestGetRadiusAtHeight:
                 spcd_vector,
                 dbh_vector,
                 height_vector,
-                height_vector - height_vector * crown_ratio_vector,
+                crown_base_height_vector,
             )
         # Initialize the PurvesCrownProfile model with pandas Series from a DataFrame
         elif library == "pandas":
@@ -267,15 +266,14 @@ class TestGetRadiusAtHeight:
                     "species_code": spcd_vector,
                     "dbh": dbh_vector,
                     "height": height_vector,
-                    "crown_ratio": crown_ratio_vector,
+                    "crown_base_height": crown_base_height_vector,
                 }
             )
             purves_model = PurvesCrownProfile(
                 tree_population_df["species_code"],
                 tree_population_df["dbh"],
                 tree_population_df["height"],
-                tree_population_df["height"]
-                - tree_population_df["height"] * tree_population_df["crown_ratio"],
+                tree_population_df["crown_base_height"],
             )
         else:
             raise ValueError(f"Unknown library: {library}")

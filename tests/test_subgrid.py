@@ -31,7 +31,7 @@ def _paraboloid_tree(height=31.5, cbh=3.12, crown_dia=9.34, mass=375.08):
         status_code=1,
         diameter=72.6,
         height=height,
-        crown_ratio=(height - cbh) / height,
+        crown_base_height=cbh,
         crown_profile_model_type="paraboloid",
         max_crown_radius=crown_dia / 2.0,
         max_crown_diameter_height=hd,
@@ -104,7 +104,10 @@ class TestSubgridDiscretizeCrownProfile:
     def test_works_for_allometric_crowns(self):
         # Not just geometric profiles: the r <= R(z) test works for any crown.
         tree = make_random_tree(
-            species_code=122, height=20.0, crown_ratio=0.6, crown_profile_model="beta"
+            species_code=122,
+            height=20.0,
+            crown_base_height=20.0 - 20.0 * 0.6,
+            crown_profile_model="beta",
         )
         grid = subgrid.discretize_crown_profile(tree, HR, VR)
         assert grid.shape == discretize_crown_profile(tree, HR, VR).shape

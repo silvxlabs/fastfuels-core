@@ -190,7 +190,8 @@ class TreePopulation(ObjectIterableDataFrame):
             status_code=row.STATUSCD,
             diameter=row.DIA,
             height=row.HT,
-            crown_ratio=row.CR,
+            crown_base_height=row.CBH,
+            crown_ratio=float(row.CR) if pd.notna(row.CR) else None,
             x=row.X,
             y=row.Y,
         )
@@ -237,8 +238,15 @@ class Tree:
         Diameter (cm) of the tree measured at breast height (1.37 m). Units: cm.
     height : float
         Height (m) of the tree measured from the ground. Units: m.
-    crown_ratio : float
-        Ratio (-) of the crown length to the total tree height. Units: none.
+    crown_base_height : float
+        Height (m) of the lowest live foliage, the base of the uncompacted
+        crown. Equal to ``height`` for a tree with no live crown. Sets the
+        crown geometry. Units: m.
+    crown_ratio : float or None
+        FIA compacted crown ratio (0-1). Optional and carried as data only; it
+        is not used for crown geometry. Use
+        :func:`fastfuels_core.allometry.crown_ratio.crown_base_height` to
+        convert a compacted crown ratio to a crown base height. Units: none.
     x : float
         X coordinate of the tree in a projected coordinate system. Units: m.
     y : float
@@ -264,7 +272,8 @@ class Tree:
     status_code: int
     diameter: float
     height: float
-    crown_ratio: float
+    crown_base_height: float
+    crown_ratio: float | None
     x: float
     y: float
 
@@ -274,7 +283,9 @@ class Tree:
         status_code: int,
         diameter: float,
         height: float,
-        crown_ratio: float,
+        *,
+        crown_base_height: float,
+        crown_ratio: float | None = None,
         jenkins_species_group: int = None,
         x=0,
         y=0,
@@ -294,8 +305,16 @@ class Tree:
         self.diameter = diameter
         self.height = height
 
-        # TODO: Crown ratio needs to be between 0 and 1
-        self.crown_ratio = crown_ratio
+        if not (np.isfinite(crown_base_height) and 0 <= crown_base_height <= height):
+            raise ValueError(
+                "crown_base_height must be finite and between 0 and height "
+                f"({height}), got {crown_base_height}."
+            )
+        self.crown_base_height = float(crown_base_height)
+
+        if crown_ratio is not None and not 0 <= crown_ratio <= 1:
+            raise ValueError(f"crown_ratio must be between 0 and 1, got {crown_ratio}.")
+        self.crown_ratio = None if crown_ratio is None else float(crown_ratio)
 
         self.x = x
         self.y = y
@@ -336,14 +355,7 @@ class Tree:
         """
         Returns the length of the tree's crown.
         """
-        return self.height * self.crown_ratio
-
-    @property
-    def crown_base_height(self) -> float:
-        """
-        Returns the height at which the live crown starts.
-        """
-        return self.height - self.crown_length
+        return self.height - self.crown_base_height
 
     @property
     def jenkins_species_group(self) -> int:
@@ -559,12 +571,19 @@ class Tree:
             if pd.notna(val):
                 crown_fuel_load = float(val)
 
+        crown_ratio = None
+        if hasattr(row, "CR"):
+            val = row.CR
+            if pd.notna(val):
+                crown_ratio = float(val)
+
         return cls(
             species_code=int(row.SPCD),
             status_code=int(row.STATUSCD),
             diameter=row.DIA,
             height=row.HT,
-            crown_ratio=row.CR,
+            crown_base_height=row.CBH,
+            crown_ratio=crown_ratio,
             x=row.X,
             y=row.Y,
             max_crown_radius=max_crown_radius,

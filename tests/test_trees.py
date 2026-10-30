@@ -355,15 +355,178 @@ def test_mean_leaf_angle(spcd):
 
 
 def test_tree():
-    tree = Tree(species_code=122, status_code=1, diameter=5, height=20, crown_ratio=0.5)
+    tree = Tree(
+        species_code=122,
+        status_code=1,
+        diameter=5,
+        height=20,
+        crown_base_height=20 - 20 * 0.5,
+    )
     assert isinstance(tree.biomass_allometry_model, NSVBEquations)
+
+
+class TestTreeCrownBaseHeight:
+    """crown_base_height sets the crown geometry; crown_ratio is data only."""
+
+    @staticmethod
+    def _tree(**kwargs):
+        defaults = {"species_code": 122, "status_code": 1, "diameter": 25.0}
+        return Tree(**{**defaults, "height": 15.0, **kwargs})
+
+    # ── Signature ─────────────────────────────────────────────────────────
+
+    def test_positional_fifth_argument_raises(self):
+        with pytest.raises(TypeError):
+            Tree(122, 1, 25.0, 15.0, 0.5)
+
+    def test_missing_crown_base_height_raises(self):
+        with pytest.raises(TypeError):
+            self._tree()
+
+    def test_missing_crown_base_height_raises_with_crown_ratio(self):
+        with pytest.raises(TypeError):
+            self._tree(crown_ratio=0.5)
+
+    # ── crown_base_height validation ──────────────────────────────────────
+
+    @pytest.mark.parametrize(
+        "cbh", [-0.1, 15.1, float("nan"), float("inf"), float("-inf")]
+    )
+    def test_invalid_crown_base_height_raises(self, cbh):
+        with pytest.raises(ValueError, match="crown_base_height"):
+            self._tree(crown_base_height=cbh)
+
+    def test_nan_height_raises(self):
+        with pytest.raises(ValueError, match="crown_base_height"):
+            self._tree(height=float("nan"), crown_base_height=7.5)
+
+    def test_crown_base_height_equal_to_height_accepted(self):
+        """A tree with no live crown: crown base at the top, zero crown length."""
+        tree = self._tree(crown_base_height=15.0)
+        assert tree.crown_base_height == 15.0
+        assert tree.crown_length == 0.0
+
+    def test_crown_base_height_zero_accepted(self):
+        tree = self._tree(crown_base_height=0.0)
+        assert tree.crown_base_height == 0.0
+        assert tree.crown_length == 15.0
+
+    def test_crown_base_height_stored_as_float(self):
+        tree = self._tree(crown_base_height=np.float32(7.5))
+        assert type(tree.crown_base_height) is float
+        assert tree.crown_base_height == 7.5
+
+    def test_crown_length_is_height_minus_crown_base_height(self):
+        tree = self._tree(crown_base_height=4.2)
+        assert tree.crown_length == tree.height - tree.crown_base_height
+
+    # ── crown_ratio validation ────────────────────────────────────────────
+
+    @pytest.mark.parametrize("cr", [-0.1, 1.1, float("nan"), float("inf")])
+    def test_invalid_crown_ratio_raises(self, cr):
+        with pytest.raises(ValueError, match="crown_ratio"):
+            self._tree(crown_base_height=7.5, crown_ratio=cr)
+
+    @pytest.mark.parametrize("cr", [0.0, 0.5, 1.0])
+    def test_valid_crown_ratio_accepted(self, cr):
+        tree = self._tree(crown_base_height=7.5, crown_ratio=cr)
+        assert tree.crown_ratio == cr
+
+    def test_crown_ratio_defaults_to_none(self):
+        tree = self._tree(crown_base_height=7.5)
+        assert tree.crown_ratio is None
+
+    def test_crown_ratio_none_accepted(self):
+        tree = self._tree(crown_base_height=7.5, crown_ratio=None)
+        assert tree.crown_ratio is None
+
+    # ── Geometry ignores crown_ratio ──────────────────────────────────────
+
+    @pytest.mark.parametrize("profile_type", ["purves", "beta"])
+    def test_crown_ratio_does_not_change_geometry(self, profile_type):
+        trees = [
+            self._tree(
+                crown_base_height=6.0,
+                crown_ratio=cr,
+                crown_profile_model_type=profile_type,
+            )
+            for cr in (None, 0.0, 0.3, 1.0)
+        ]
+        z = np.linspace(0.0, 16.0, 33)
+        for tree in trees[1:]:
+            assert tree.crown_base_height == trees[0].crown_base_height
+            assert tree.crown_length == trees[0].crown_length
+            assert tree.max_crown_radius == trees[0].max_crown_radius
+            np.testing.assert_array_equal(
+                tree.get_crown_radius_at_height(z),
+                trees[0].get_crown_radius_at_height(z),
+            )
+
+    # ── Row readers ───────────────────────────────────────────────────────
+
+    @staticmethod
+    def _frame(cr=(0.5, float("nan")), cbh=(7.5, 6.0)):
+        import pandas as pd
+
+        return pd.DataFrame(
+            {
+                "TREE_ID": [1, 2],
+                "SPCD": [122, 202],
+                "STATUSCD": [1, 1],
+                "DIA": [25.0, 30.0],
+                "HT": [15.0, 20.0],
+                "CR": list(cr),
+                "CBH": list(cbh),
+                "X": [100.0, 200.0],
+                "Y": [100.0, 200.0],
+            }
+        )
+
+    def test_population_iteration_reads_cbh_and_maps_nan_cr_to_none(self):
+        trees = list(TreePopulation(self._frame()))
+        assert [t.crown_base_height for t in trees] == [7.5, 6.0]
+        assert trees[0].crown_ratio == 0.5
+        assert trees[1].crown_ratio is None
+        assert [t.crown_length for t in trees] == [7.5, 14.0]
+
+    def test_population_iteration_raises_on_nan_cbh(self):
+        population = TreePopulation(self._frame(cbh=(7.5, float("nan"))))
+        with pytest.raises(ValueError, match="crown_base_height"):
+            list(population)
+
+    @pytest.mark.parametrize("rows", ["iterrows", "itertuples"])
+    def test_from_row_reads_cbh_and_maps_nan_cr_to_none(self, rows):
+        df = self._frame()
+        if rows == "iterrows":
+            trees = [Tree.from_row(row) for _, row in df.iterrows()]
+        else:
+            trees = [Tree.from_row(row) for row in df.itertuples()]
+        assert [t.crown_base_height for t in trees] == [7.5, 6.0]
+        assert trees[0].crown_ratio == 0.5
+        assert trees[1].crown_ratio is None
+
+    def test_from_row_raises_on_nan_cbh(self):
+        df = self._frame(cbh=(7.5, float("nan")))
+        with pytest.raises(ValueError, match="crown_base_height"):
+            [Tree.from_row(row) for _, row in df.iterrows()]
+
+    @pytest.mark.parametrize("rows", ["iterrows", "itertuples"])
+    def test_from_row_without_cbh_raises(self, rows):
+        df = self._frame().drop(columns="CBH")
+        row = next(df.iterrows())[1] if rows == "iterrows" else next(df.itertuples())
+        with pytest.raises(AttributeError, match="CBH"):
+            Tree.from_row(row)
 
 
 class TestMaxCrownRadiusOverride:
     """Tests for the optional max_crown_radius parameter on Tree."""
 
     TREE_KWARGS = dict(
-        species_code=122, status_code=1, diameter=25.0, height=15.0, crown_ratio=0.5
+        species_code=122,
+        status_code=1,
+        diameter=25.0,
+        height=15.0,
+        crown_base_height=15.0 - 15.0 * 0.5,
     )
 
     # ── Backward compatibility ────────────────────────────────────────────
@@ -505,6 +668,7 @@ class TestMaxCrownRadiusOverride:
                 "DIA": 25.0,
                 "HT": 15.0,
                 "CR": 0.5,
+                "CBH": 15.0 - 15.0 * 0.5,
                 "X": 100.0,
                 "Y": 200.0,
                 "MAX_CROWN_RADIUS": 4.0,
@@ -525,6 +689,7 @@ class TestMaxCrownRadiusOverride:
                 "DIA": 25.0,
                 "HT": 15.0,
                 "CR": 0.5,
+                "CBH": 15.0 - 15.0 * 0.5,
                 "X": 100.0,
                 "Y": 200.0,
             }
@@ -544,6 +709,7 @@ class TestMaxCrownRadiusOverride:
                 "DIA": 25.0,
                 "HT": 15.0,
                 "CR": 0.5,
+                "CBH": 15.0 - 15.0 * 0.5,
                 "X": 100.0,
                 "Y": 200.0,
                 "MAX_CROWN_RADIUS": float("nan"),
@@ -583,7 +749,7 @@ class TestMaxCrownRadiusOverride:
                 status_code=1,
                 diameter=20.0,
                 height=12.0,
-                crown_ratio=0.4,
+                crown_base_height=12.0 - 12.0 * 0.4,
                 crown_profile_model_type=profile_type,
                 max_crown_radius=3.0,
             )
@@ -614,6 +780,7 @@ class TestFromRowDataFrame:
                 "MAX_CROWN_RADIUS": [3.0, 4.5, 2.0],
             }
         )
+        df["CBH"] = df["HT"] - df["HT"] * df["CR"]
 
         trees = [Tree.from_row(row) for _, row in df.iterrows()]
 
@@ -639,6 +806,7 @@ class TestFromRowDataFrame:
                 "Y": [100.0, 200.0],
             }
         )
+        df["CBH"] = df["HT"] - df["HT"] * df["CR"]
 
         trees = [Tree.from_row(row) for _, row in df.iterrows()]
 
@@ -669,6 +837,7 @@ class TestFromRowDataFrame:
                 "MAX_CROWN_RADIUS": [float("nan"), 3.0],
             }
         )
+        df["CBH"] = df["HT"] - df["HT"] * df["CR"]
 
         trees = [Tree.from_row(row) for _, row in df.iterrows()]
 
@@ -704,6 +873,7 @@ class TestFromRowDataFrame:
                 "MAX_CROWN_RADIUS": [3.5],
             }
         )
+        df["CBH"] = df["HT"] - df["HT"] * df["CR"]
 
         for row in df.itertuples():
             tree = Tree.from_row(row)
@@ -800,7 +970,11 @@ class TestGeometricCrownProfiles:
     """Tests for the geometric crown profile types on Tree (issue #76)."""
 
     TREE_KWARGS = dict(
-        species_code=122, status_code=1, diameter=25.0, height=15.0, crown_ratio=0.5
+        species_code=122,
+        status_code=1,
+        diameter=25.0,
+        height=15.0,
+        crown_base_height=15.0 - 15.0 * 0.5,
     )
     # crown_base_height = 15 - 15*0.5 = 7.5; height = 15; midpoint = 11.25
     HB, HT, MID = 7.5, 15.0, 11.25

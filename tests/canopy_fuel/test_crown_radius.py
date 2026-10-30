@@ -22,7 +22,7 @@ class TestPurvesEquations:
                     status_code=1,
                     diameter=row.dbh,
                     height=row.height,
-                    crown_ratio=row.crown_ratio,
+                    crown_base_height=row.height - row.height * row.crown_ratio,
                 ).max_crown_radius
                 for row in trees.itertuples()
             ]

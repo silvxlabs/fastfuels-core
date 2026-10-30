@@ -400,7 +400,7 @@ class TestMassConservation:
             status_code=1,
             diameter=40.0,
             height=HEIGHT,
-            crown_ratio=(HEIGHT - CBH) / HEIGHT,
+            crown_base_height=CBH,
             crown_profile_model_type="ellipsoid",
             max_crown_radius=RADIUS,
             max_crown_diameter_height=HD,
