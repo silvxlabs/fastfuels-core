@@ -14,6 +14,7 @@ import numpy as np
 from scipy import stats
 from scipy.ndimage import gaussian_filter
 
+
 def band_percentiles(
     shape: tuple[int, int],
     sigmas: list[float],

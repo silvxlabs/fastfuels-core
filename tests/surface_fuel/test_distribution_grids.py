@@ -151,9 +151,7 @@ class TestCorrelations:
 
         assert rank_correlation(grids["a"], grids["b"]) == pytest.approx(0.6, abs=0.06)
         assert rank_correlation(grids["b"], grids["c"]) == pytest.approx(0.6, abs=0.06)
-        assert rank_correlation(grids["a"], grids["c"]) == pytest.approx(
-            0.36, abs=0.06
-        )
+        assert rank_correlation(grids["a"], grids["c"]) == pytest.approx(0.36, abs=0.06)
 
     def test_bands_with_no_link_have_no_built_in_correlation(self):
         bands = {"a": {"distribution": UNIFORM}, "b": {"distribution": UNIFORM}}
@@ -181,7 +179,10 @@ class TestErrors:
             ({"distribution": "uniform"}, "distribution dict"),
             ({"distribution": UNIFORM, "patch_sise": 10}, "unknown settings"),
             ({"distribution": UNIFORM, "patch_size": -1}, "patch_size must be"),
-            ({"distribution": UNIFORM, "patch_size": float("nan")}, "patch_size must be"),
+            (
+                {"distribution": UNIFORM, "patch_size": float("nan")},
+                "patch_size must be",
+            ),
             ({"distribution": UNIFORM, "patch_size": 1002}, "above the limit"),
             ({"distribution": UNIFORM, "speckle": -0.1}, "speckle must be"),
             ({"distribution": UNIFORM, "speckle": 1.5}, "speckle must be"),
