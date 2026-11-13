@@ -558,6 +558,31 @@ class TestAssignTreeLocations:
         assert "Y" in result.columns
         assert len(result) == len(sampled_trees)
 
+    def test_pairs_ties_in_input_order(self):
+        """Within a plot, the k-th sampled tree gets the k-th location, in input
+        order. An unstable sort could pair same-plot trees and locations in an
+        order that varies by platform, so the same seed would give different
+        trees at each location and a different row order in the output."""
+        n_per_plot = 500
+        plot_ids = np.tile([2, 1], n_per_plot)  # interleaved: the sort must move rows
+        sampled_trees = pd.DataFrame(
+            {"PLOT_ID": plot_ids, "TREE": np.arange(len(plot_ids))}
+        )
+        tree_locations = pd.DataFrame(
+            {
+                "X": np.arange(len(plot_ids), dtype=float),
+                "Y": np.zeros(len(plot_ids)),
+                "PLOT_ID": plot_ids,
+            }
+        )
+        result = _assign_tree_locations(sampled_trees.copy(), tree_locations.copy())
+        for pid in (1, 2):
+            in_plot = result[result["PLOT_ID"] == pid]
+            expected_trees = sampled_trees.loc[plot_ids == pid, "TREE"].to_numpy()
+            expected_x = tree_locations.loc[plot_ids == pid, "X"].to_numpy()
+            np.testing.assert_array_equal(in_plot["TREE"].to_numpy(), expected_trees)
+            np.testing.assert_array_equal(in_plot["X"].to_numpy(), expected_x)
+
     def test_preserves_plot_alignment(self):
         """Trees from plot N must get X/Y values from locations tagged plot N."""
         sampled_trees = pd.DataFrame(
