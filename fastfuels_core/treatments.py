@@ -154,10 +154,17 @@ class DirectionalThinToStandBasalArea:
         if df["BA"].sum() <= self.target:
             return df
 
+        # Stable sorts keep equal-diameter trees in input order; the default
+        # quicksort's tie order is implementation-defined, so which of them
+        # are kept could differ from one machine to another.
         if self.direction == ThinningDirection.BELOW:
-            df.sort_values(by=dia_column_name, ascending=False, inplace=True)
+            df.sort_values(
+                by=dia_column_name, ascending=False, kind="stable", inplace=True
+            )
         elif self.direction == ThinningDirection.ABOVE:
-            df.sort_values(by=dia_column_name, ascending=True, inplace=True)
+            df.sort_values(
+                by=dia_column_name, ascending=True, kind="stable", inplace=True
+            )
         else:
             raise ValueError("Invalid thinning direction. Use 'below' or 'above'.")
 

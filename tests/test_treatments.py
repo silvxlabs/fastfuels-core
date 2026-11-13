@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 from fastfuels_core.treatments import (
+    DirectionalThinToStandBasalArea,
     DirectionalThinToTreeDensity,
     ThinningDirection,
 )
@@ -205,3 +206,26 @@ class TestFrameHandling:
     def test_an_unknown_direction_raises(self):
         with pytest.raises(ValueError, match="thinning direction"):
             DirectionalThinToTreeDensity(target=1, direction="sideways")
+
+
+class TestBasalAreaTies:
+    """Among equal-diameter trees, the basal-area thin keeps them in input order,
+    so the same stand thins the same way on every machine."""
+
+    @pytest.mark.parametrize(
+        "direction", [ThinningDirection.BELOW, ThinningDirection.ABOVE]
+    )
+    def test_equal_diameters_kept_in_input_order(self, direction):
+        # Interleaved diameters so the sort must move rows; 500 trees of each.
+        trees = pd.DataFrame(
+            {"DIA": np.tile([20.0, 30.0], 500), "TREE": np.arange(1000)}
+        )
+        tree_ba = np.pi / 40_000
+        # Keep every tree of the retained diameter plus 100 of the other.
+        keep_whole = 30.0 if direction == ThinningDirection.BELOW else 20.0
+        partial = 20.0 if keep_whole == 30.0 else 30.0
+        target = tree_ba * (500 * keep_whole**2 + 100 * partial**2) + 1e-9
+        kept = DirectionalThinToStandBasalArea(target, direction).apply(trees)
+        partial_kept = kept.loc[kept["DIA"] == partial, "TREE"].to_numpy()
+        expected = trees.loc[trees["DIA"] == partial, "TREE"].to_numpy()[:100]
+        np.testing.assert_array_equal(np.sort(partial_kept), expected)

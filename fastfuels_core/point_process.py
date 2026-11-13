@@ -339,9 +339,17 @@ def _sample_trees_within_plots(trees, num_trees_per_plot, rng: np.random.Generat
 
 
 def _assign_tree_locations(sampled_trees, tree_locations):
-    """Assign tree locations to sampled trees."""
-    tree_locations = tree_locations.sort_values("PLOT_ID")
-    sampled_trees = sampled_trees.sort_values("PLOT_ID")
+    """Assign tree locations to sampled trees.
+
+    Within each plot, the k-th sampled tree gets the k-th location, both in
+    input order.
+    """
+    # Stable sorts: the default quicksort leaves same-plot rows in an
+    # implementation-defined order (it can differ with NumPy's CPU-dispatched
+    # sort kernels), so the same seed would pair trees with locations, and
+    # order the output, differently from one machine to another.
+    tree_locations = tree_locations.sort_values("PLOT_ID", kind="stable")
+    sampled_trees = sampled_trees.sort_values("PLOT_ID", kind="stable")
     sampled_trees["X"] = tree_locations["X"].values
     sampled_trees["Y"] = tree_locations["Y"].values
     return sampled_trees
