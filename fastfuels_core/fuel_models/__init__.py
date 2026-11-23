@@ -19,7 +19,7 @@ the map zones and the Master_Rulesets table to :func:`update_fuel_models`.
 The LDist attribute table, map zones and Master_Rulesets table are all
 supplied by the caller.
 
-:func:`remove_non_burnable` is separate: it fills roads, water and other
+:func:`fill_non_burnable` is separate: it fills roads, water and other
 non-burnable cells of any fuel model grid from their burnable neighbours.
 """
 
@@ -28,11 +28,11 @@ from fastfuels_core.fuel_models.fdist_builder import (
     DISTURBANCE_MODES,
     build_fdist_raster,
 )
-from fastfuels_core.fuel_models.non_burnable import remove_non_burnable
+from fastfuels_core.fuel_models.non_burnable import fill_non_burnable
 
 __all__ = [
     "build_fdist_raster",
     "DISTURBANCE_MODES",
-    "remove_non_burnable",
+    "fill_non_burnable",
     "update_fuel_models",
 ]

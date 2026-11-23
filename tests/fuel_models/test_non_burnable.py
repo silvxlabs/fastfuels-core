@@ -16,7 +16,7 @@ import pytest
 from fastfuels_core.fuel_models import non_burnable
 from fastfuels_core.fuel_models.non_burnable import (
     _most_frequent_burnable,
-    remove_non_burnable,
+    fill_non_burnable,
 )
 
 
@@ -73,13 +73,13 @@ def _reference_targeted_fill(grid, non_burnable_keys, nodata=None):
             out[r, c] = v
 
 
-class TestRemoveNonBurnable:
-    """Unit tests for remove_non_burnable."""
+class TestFillNonBurnable:
+    """Unit tests for fill_non_burnable."""
 
     def test_no_non_burnable_returns_copy(self):
         """Grid with no non-burnable codes is returned unchanged."""
         grid = np.full((10, 10), 101, dtype=np.int16)
-        result = remove_non_burnable(grid, [91, 93, 99])
+        result = fill_non_burnable(grid, [91, 93, 99])
         np.testing.assert_array_equal(result, grid)
         assert result is not grid  # Returns a copy
 
@@ -87,7 +87,7 @@ class TestRemoveNonBurnable:
         """A single non-burnable cell surrounded by burnable is replaced."""
         grid = np.full((10, 10), 102, dtype=np.int16)
         grid[5, 5] = 99  # Single bare ground cell
-        result = remove_non_burnable(grid, [99])
+        result = fill_non_burnable(grid, [99])
         assert result[5, 5] == 102
         # All other cells unchanged
         grid[5, 5] = 102
@@ -98,7 +98,7 @@ class TestRemoveNonBurnable:
         grid = np.full((10, 10), 101, dtype=np.int16)
         grid[3, 3] = 91  # Urban — targeted
         grid[7, 7] = 98  # Water — not targeted
-        result = remove_non_burnable(grid, [91])
+        result = fill_non_burnable(grid, [91])
         assert result[3, 3] == 101  # Urban replaced
         assert result[7, 7] == 98  # Water preserved
 
@@ -109,7 +109,7 @@ class TestRemoveNonBurnable:
         grid[:, 7:] = 102
         # Put a non-burnable cell in the 102 region
         grid[5, 8] = 99
-        result = remove_non_burnable(grid, [99])
+        result = fill_non_burnable(grid, [99])
         assert result[5, 8] == 102  # Replaced by dominant neighbor
 
     def test_preserves_non_targeted_non_burnable(self):
@@ -117,7 +117,7 @@ class TestRemoveNonBurnable:
         grid = np.full((10, 10), 101, dtype=np.int16)
         grid[2, 2] = 92  # Snow/ice
         grid[4, 4] = 93  # Agriculture
-        result = remove_non_burnable(grid, [93])
+        result = fill_non_burnable(grid, [93])
         assert result[2, 2] == 92  # Snow/ice preserved
         assert result[4, 4] == 101  # Agriculture replaced
 
@@ -125,7 +125,7 @@ class TestRemoveNonBurnable:
         """A large patch of non-burnable codes is fully replaced."""
         grid = np.full((20, 20), 101, dtype=np.int16)
         grid[8:12, 8:12] = 99  # 4x4 bare ground block
-        result = remove_non_burnable(grid, [99])
+        result = fill_non_burnable(grid, [99])
         assert not np.any(np.isin(result, [99]))
 
     def test_nodata_is_never_a_fill_source(self):
@@ -133,7 +133,7 @@ class TestRemoveNonBurnable:
         grid = np.full((10, 10), 101, dtype=np.int16)
         grid[:, :6] = -9999
         grid[:, 6:8] = 99
-        result = remove_non_burnable(grid, [99], nodata=-9999)
+        result = fill_non_burnable(grid, [99], nodata=-9999)
         np.testing.assert_array_equal(result[:, 6:8], 101)
         np.testing.assert_array_equal(result[:, :6], -9999)
 
@@ -151,7 +151,7 @@ class TestRemoveNonBurnable:
             return real_filter(*args, **kwargs)
 
         with patch.object(non_burnable, "_most_frequent_burnable", capped_filter):
-            result = remove_non_burnable(grid, [99], nodata=-9999)
+            result = fill_non_burnable(grid, [99], nodata=-9999)
         np.testing.assert_array_equal(result, grid)
 
     def test_burnable_cells_never_change(self):
@@ -160,7 +160,7 @@ class TestRemoveNonBurnable:
         grid = np.full((20, 20), 101, dtype=np.int16)
         grid[6:14, :] = 91  # 8-cell road: needs two passes
         grid[5, 10] = 102  # lone burnable cell beside the road
-        result = remove_non_burnable(grid, [91])
+        result = fill_non_burnable(grid, [91])
         keep = grid != 91
         np.testing.assert_array_equal(result[keep], grid[keep])
         assert not np.any(result == 91)
@@ -183,5 +183,5 @@ class TestRemoveNonBurnable:
         keys = [91, 93, 99]
 
         expected = _reference_targeted_fill(grid, keys, -9999)
-        actual = remove_non_burnable(grid, keys, -9999)
+        actual = fill_non_burnable(grid, keys, -9999)
         np.testing.assert_array_equal(actual, expected)

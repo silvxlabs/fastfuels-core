@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 
 
-def remove_non_burnable(
+def fill_non_burnable(
     grid: np.ndarray,
     non_burnable_keys: list[int],
     nodata: float | None = None,
