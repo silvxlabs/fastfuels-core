@@ -10,6 +10,7 @@ year's.
 :mod:`fdist_builder`            the FDist raster the rules use, per mode
 :mod:`disturbed_fuel_update`    last year's fuel model -> this year's
 :mod:`ruleset_lookup`           match each cell to one Master_Rulesets row
+:mod:`non_burnable`             fill non-burnable cells from burnable ones
 =============================== ============================================
 
 A caller builds the FDist raster with :func:`build_fdist_raster` (its
@@ -17,6 +18,9 @@ A caller builds the FDist raster with :func:`build_fdist_raster` (its
 the map zones and the Master_Rulesets table to :func:`update_fuel_models`.
 The LDist attribute table, map zones and Master_Rulesets table are all
 supplied by the caller.
+
+:func:`fill_non_burnable` is separate: it fills roads, water and other
+non-burnable cells of any fuel model grid from their burnable neighbours.
 """
 
 from fastfuels_core.fuel_models.disturbed_fuel_update import update_fuel_models
@@ -24,9 +28,11 @@ from fastfuels_core.fuel_models.fdist_builder import (
     DISTURBANCE_MODES,
     build_fdist_raster,
 )
+from fastfuels_core.fuel_models.non_burnable import fill_non_burnable
 
 __all__ = [
     "build_fdist_raster",
     "DISTURBANCE_MODES",
+    "fill_non_burnable",
     "update_fuel_models",
 ]
