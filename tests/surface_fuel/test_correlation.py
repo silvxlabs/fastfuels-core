@@ -2,12 +2,15 @@
 
 What is pinned: listed pairs are kept, unlisted pairs follow from the
 links, bands with no link get 0, slight contradictions are nudged with a
-warning, and bad pairs or real contradictions raise ValueError.
+warning, and bad pairs or real contradictions raise ValueError. The matrix
+is exactly symmetric whichever way it was built, and rounding error, which
+differs between CPUs, doesn't change the way.
 """
 
 from __future__ import annotations
 
 import math
+import zlib
 
 import numpy as np
 import pytest
@@ -109,6 +112,52 @@ def test_strong_links_and_loops_can_be_filled(keys, correlations):
     matrix = correlation_matrix(list(keys), correlations)
 
     assert np.linalg.eigvalsh(matrix)[0] >= 0
+    assert np.array_equal(matrix, matrix.T)
+
+
+def test_the_nudge_fallback_is_exactly_symmetric(monkeypatch):
+    fill = correlation._fill_unlisted
+    calls = []
+
+    def fail_first_fill(matrix, listed):
+        calls.append(None)
+        if len(calls) == 1:
+            raise ValueError("forced")
+        fill(matrix, listed)
+
+    monkeypatch.setattr(correlation, "_fill_unlisted", fail_first_fill)
+    correlations = [pair("a", band, 0.9) for band in "bcde"]
+
+    matrix = correlation_matrix(list("abcde"), correlations)
+
+    assert len(calls) == 2
+    assert np.array_equal(matrix, matrix.T)
+
+
+def test_rounding_error_does_not_send_consistent_coefficients_to_the_nudge(
+    monkeypatch,
+):
+    objective = correlation._fill_objective
+
+    def with_rounding_error(precision, target):
+        # Like rounding on another CPU, the error is fixed for each input.
+        value = objective(precision, target)
+        if not np.isfinite(value):
+            return value
+        error = zlib.crc32(np.ascontiguousarray(precision).tobytes()) / 2**31 - 1
+        return value + 1e-13 * (1 + abs(value)) * error
+
+    def no_nudge(requested, listed):
+        raise AssertionError("consistent coefficients were nudged")
+
+    monkeypatch.setattr(correlation, "_fill_objective", with_rounding_error)
+    monkeypatch.setattr(correlation, "_nudge_coefficients", no_nudge)
+    correlations = [pair("a", band, 0.9) for band in "bcde"]
+    listed = 2 * math.sin(math.pi * 0.9 / 6)
+
+    matrix = correlation_matrix(list("abcde"), correlations)
+
+    assert np.array_equal(matrix[0, 1:], [listed] * 4)
     assert np.array_equal(matrix, matrix.T)
 
 
