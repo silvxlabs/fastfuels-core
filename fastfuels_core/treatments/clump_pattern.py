@@ -1,6 +1,7 @@
 # Core imports
 from __future__ import annotations
 
+import importlib.util
 import warnings
 
 # External imports
@@ -46,7 +47,8 @@ class ThinToClumpPattern:
     :mod:`fastfuels_core.treatments.clump_pattern_solver`. It uses every
     numba thread (``numba.set_num_threads``), and the result does not
     depend on how many there are. The same ``seed`` gives the same
-    result.
+    result. numba is an optional dependency: install it with
+    ``pip install "fastfuels-core[numba]"``.
 
     Which trees take part:
 
@@ -169,6 +171,13 @@ class ThinToClumpPattern:
         seed: int = 0,
         min_dbh: float = 12.7,
     ) -> None:
+        # Checked without importing numba, so constructing the treatment
+        # still compiles nothing; ``apply`` imports the solver.
+        if importlib.util.find_spec("numba") is None:
+            raise ImportError(
+                "ThinToClumpPattern needs numba, an optional dependency of "
+                'fastfuels-core: pip install "fastfuels-core[numba]".'
+            )
         self.density = _number("density", density, positive=True)
 
         try:

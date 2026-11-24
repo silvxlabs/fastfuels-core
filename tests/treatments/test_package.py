@@ -48,3 +48,23 @@ def test_importing_the_package_does_not_import_numba():
         [sys.executable, "-c", code], capture_output=True, text=True
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_clump_pattern_without_numba_names_the_extra():
+    # numba is optional, so ThinToClumpPattern must say how to get it.
+    # Setting sys.modules["numba"] to None hides it from the import system
+    # in a fresh interpreter, whether or not it is installed.
+    code = (
+        "import sys\n"
+        "sys.modules['numba'] = None\n"
+        "from fastfuels_core.treatments import ThinToClumpPattern\n"
+        "try:\n"
+        "    ThinToClumpPattern(100, (0.2, 0.2, 0.2, 0.2, 0.2))\n"
+        "except ImportError as error:\n"
+        "    print(error)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr
+    assert "fastfuels-core[numba]" in result.stdout
