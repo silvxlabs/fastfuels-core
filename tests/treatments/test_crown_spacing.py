@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from fastfuels_core.treatments import ThinToCrownSpacing
+from fastfuels_core.treatments.crown_spacing import ThinToCrownSpacing
 
 
 def random_stand(n: int, side: float, seed: int = 0) -> pd.DataFrame:

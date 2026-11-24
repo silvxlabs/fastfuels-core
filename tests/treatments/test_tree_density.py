@@ -12,11 +12,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from fastfuels_core.treatments import (
-    DirectionalThinToStandBasalArea,
-    DirectionalThinToTreeDensity,
-    ThinningDirection,
-)
+from fastfuels_core.treatments.basal_area import DirectionalThinToStandBasalArea
+from fastfuels_core.treatments.base import ThinningDirection
+from fastfuels_core.treatments.tree_density import DirectionalThinToTreeDensity
 
 
 def stand(**diameters: int) -> pd.DataFrame:
