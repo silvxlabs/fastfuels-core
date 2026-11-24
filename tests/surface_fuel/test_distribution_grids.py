@@ -12,6 +12,7 @@ ValueError.
 from __future__ import annotations
 
 import math
+import warnings
 
 import numpy as np
 import pytest
@@ -79,6 +80,8 @@ class TestOutput:
             assert grid.shape == (20, 30)
             assert grid.dtype == np.float32
 
+    # The small grid holds too few patches for the correlation to hold.
+    @pytest.mark.filterwarnings("ignore:Correlations in the grids drifted")
     def test_same_seed_gives_identical_output(self):
         first = build(uniform_bands("a", "b"), [pair("a", "b", 0.5)], seed=7)
         second = build(uniform_bands("a", "b"), [pair("a", "b", 0.5)], seed=7)
@@ -166,9 +169,28 @@ class TestCorrelations:
             "b": {"distribution": UNIFORM, "patch_size": 80},
         }
 
-        grids = build(bands, [pair("a", "b", 0.8)], shape=(600, 600))
+        with pytest.warns(UserWarning, match="drifted"):
+            grids = build(bands, [pair("a", "b", 0.8)], shape=(600, 600))
 
         assert 0.2 < rank_correlation(grids["a"], grids["b"]) < 0.65
+
+    def test_different_speckle_lowers_the_correlation(self):
+        bands = {
+            "a": {"distribution": UNIFORM, "patch_size": 40},
+            "b": {"distribution": UNIFORM, "patch_size": 40, "speckle": 0.9},
+        }
+
+        with pytest.warns(UserWarning, match="'a', 'b'"):
+            grids = build(bands, [pair("a", "b", 0.8)], shape=(600, 600))
+
+        assert rank_correlation(grids["a"], grids["b"]) < 0.5
+
+    def test_matching_settings_give_no_drift_warning(self):
+        band = {"distribution": UNIFORM, "patch_size": 20, "speckle": 0.2}
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            build({"a": band, "b": band}, [pair("a", "b", 0.8)], shape=(600, 600))
 
 
 class TestErrors:

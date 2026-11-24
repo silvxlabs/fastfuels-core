@@ -8,6 +8,7 @@ which sets the spatial pattern and the correlations, and
 
 from __future__ import annotations
 
+import warnings
 from numbers import Integral
 
 import numpy as np
@@ -18,11 +19,15 @@ from fastfuels_core.surface_fuel.distributions import (
     is_number,
     percentiles_to_values,
 )
-from fastfuels_core.surface_fuel.patterns import band_percentiles
+from fastfuels_core.surface_fuel.patterns import band_percentiles, rank_correlation
 
 # Largest allowed characteristic patch size, in cells. Run time and memory
 # grow quickly with it.
 _MAX_PATCH_SIZE_CELLS = 500
+
+# A listed pair whose rank correlation in the grids misses its coefficient by
+# more than this raises a warning.
+_DRIFT_TOLERANCE = 0.2
 
 
 def build_distribution_grids(
@@ -47,7 +52,8 @@ def build_distribution_grids(
         ``distribution`` holds ``"type"`` and that type's settings:
 
         - ``uniform``: ``low``, ``high``, with ``0 <= low < high``.
-        - ``normal``: ``mean``, ``std``, both above 0.
+        - ``normal``: ``mean``, ``std``, both above 0. Negative values
+          become 0 (see Notes).
         - ``lognormal``: ``mean``, ``std``, both above 0. These are the mean
           and std of the real values, not of their logs.
         - ``triangular``: ``low``, ``mode``, ``high``, with
@@ -59,9 +65,10 @@ def build_distribution_grids(
         means independent cells with no patches. ``patch_size / resolution``
         can't exceed 500.
 
-        ``speckle`` is the share of each cell's variation that is independent
-        of its neighbors, from 0 to 1. It is optional and defaults to 0,
-        which gives fully smooth patches. 1 gives no patches at all.
+        ``speckle`` adds cell-to-cell roughness on top of the patches, from 0
+        to 1. It is optional and defaults to 0, which gives fully smooth
+        patches. Higher values give rougher patches, and 1 gives no patches at
+        all.
     correlations : list of dict, optional
         Pairs of ``{"bands": [a, b], "coefficient": x}``, where ``x`` is a
         rank (Spearman) correlation strictly between -1 and 1. See Notes for
@@ -84,24 +91,30 @@ def build_distribution_grids(
     Notes
     -----
     **Characteristic patch size** is the distance at which similarity between
-    cells falls to about 37%, or to about ``(1 - speckle)`` times 37% with
-    speckle. The fall-off is soft (Gaussian shape), so
-    patches have no hard edges. A characteristic patch size that is large
-    compared with the grid gives a smooth gradient across the full range of
-    values, not one flat patch.
+    cells falls to about 37%, with no speckle. The fall-off is soft (Gaussian
+    shape), so patches have no hard edges. A characteristic patch size that
+    is large compared with the grid gives a smooth gradient across the full
+    range of values, not one flat patch.
 
-    **Speckle** adds independent per-cell variation, so patches aren't
-    perfectly smooth. It limits similarity between neighboring cells to about
-    ``1 - speckle`` when the characteristic patch size spans many cells, and to
-    less for small ones. It has no effect on a band with no patch size, whose
-    cells are already independent.
+    **Speckle** is a visual control: it roughens patches so they aren't
+    perfectly smooth, and is meant to be tuned by eye. Higher values lower
+    similarity between neighboring cells, roughly to ``1 - speckle`` when
+    the characteristic patch size spans many cells. With patch sizes of only
+    a few cells, the speckle overlaps the patches and the effect is less
+    predictable. It has no effect on a band with no patch size, whose cells
+    are already independent.
 
     **Distributions** are matched by ranking the cells, so patches and
     correlations only decide where values land. Each band's histogram closely
     matches the request whatever the patch size. The exception is ``normal``,
-    where negative values are replaced with 0. That creates exact zeros and
-    shifts the real mean and std. Many zeros also lower rank
-    correlation slightly.
+    where negative values are replaced with 0 rather than redrawn, because
+    surface fuel data often has many zeros. Only the negative values change,
+    and they pile up at exactly 0. The smaller the mean is compared with the
+    std, the more zeros: about 2% of cells when the mean is twice the std,
+    16% when they are equal, and 31% when the mean is half the std. Because
+    of the zeros, the real mean comes out a little higher and the std a
+    little lower than requested. Many zeros also lower rank correlation
+    slightly.
 
     **Correlations** are averages, not exact values for one grid. Chance can
     move a pair's correlation away from its target, including pairs with no
@@ -113,17 +126,25 @@ def build_distribution_grids(
     keep it unrelated.
 
     Coefficients that contradict each other slightly, as correlations measured
-    from real data can, are nudged by at most 0.02 with a warning. Larger
-    contradictions raise ValueError.
+    from real data can, are nudged by at most 0.02 with a warning. Any listed
+    coefficient can move, including a 0, so a pair listed as unrelated may
+    end up slightly related. Larger contradictions raise ValueError.
 
-    Each band's patches follow its own characteristic patch size, so bands
-    with different patch sizes come out less correlated than requested. With
-    the same patch size, the correlation matches. Rough share of the requested
-    correlation with no speckle: patch sizes differing 2x, about 80%; 4x,
-    about 50%; 10x, about 20%. Speckle raises these slightly. A band with no
-    patch size keeps only about ``sqrt(speckle)`` of its correlation with a
-    patchy band, for example about 30% at a speckle of 0.1 and almost none at
-    0.
+    Patch size and speckle can both weaken correlation. Each band's patches
+    follow its own characteristic patch size, so bands with different patch
+    sizes come out less correlated than requested. Rough share of the
+    requested correlation with no speckle: patch sizes differing 2x, about
+    80%; 4x, about 50%; 10x, about 20%. Speckle raises these slightly. A band
+    with no patch size keeps only about ``sqrt(speckle)`` of its correlation
+    with a patchy band, for example about 30% at a speckle of 0.1 and almost
+    none at 0. Different speckle also weakens correlation: with large
+    patches, a band with no speckle keeps about 70% of its correlation with a
+    band at a speckle of 0.5. With the same patch size and speckle, the
+    correlation matches.
+
+    A listed pair whose rank correlation in the grids misses its coefficient
+    by more than 0.2, for any of these reasons or by chance, raises a
+    warning.
 
     **Repeatability**: the same request with the same library versions gives
     identical output, whatever order the bands are listed in. Adding or
@@ -143,11 +164,35 @@ def build_distribution_grids(
 
     rng = np.random.default_rng(seed)
     percentiles = band_percentiles(shape, sigmas, speckles, factor, rng)
+    _warn_if_correlations_drift(keys, correlations, percentiles)
 
     return {
         key: percentiles_to_values(cell_percentiles, distribution)
         for key, cell_percentiles, distribution in zip(keys, percentiles, distributions)
     }
+
+
+def _warn_if_correlations_drift(
+    keys: list, correlations: list[dict] | None, percentiles: list[np.ndarray]
+) -> None:
+    """Warn about listed pairs whose correlation in the grids missed by a lot."""
+    index = {key: i for i, key in enumerate(keys)}
+    drifted = []
+    for pair in correlations or []:
+        a, b = pair["bands"]
+        coefficient = pair["coefficient"]
+        measured = rank_correlation(percentiles[index[a]], percentiles[index[b]])
+        if abs(measured - coefficient) > _DRIFT_TOLERANCE:
+            drifted.append(f"{a!r}, {b!r}: {measured:.2f} (requested {coefficient})")
+
+    if drifted:
+        warnings.warn(
+            "Correlations in the grids drifted from the request: "
+            + "; ".join(drifted)
+            + ". Different patch sizes or speckle between bands, or patches "
+            "large compared with the grid, can cause this.",
+            stacklevel=3,
+        )
 
 
 def _validate_grid(shape: tuple[int, int], resolution: float) -> None:

@@ -16,8 +16,9 @@ import math
 
 import numpy as np
 import pytest
+from scipy import stats
 
-from fastfuels_core.surface_fuel.patterns import rank_percentiles
+from fastfuels_core.surface_fuel.patterns import rank_correlation, rank_percentiles
 from tests.surface_fuel.builders import NORMAL, build, similarity
 
 
@@ -80,3 +81,13 @@ def test_rank_percentiles_span_zero_to_one_evenly():
     percentiles = rank_percentiles(field)
 
     assert percentiles == pytest.approx(np.array([[0.625, 0.125], [0.875, 0.375]]))
+
+
+def test_rank_correlation_matches_spearman():
+    rng = np.random.default_rng(0)
+    first = rng.standard_normal((40, 50))
+    second = 0.6 * first + 0.8 * rng.standard_normal((40, 50))
+
+    measured = rank_correlation(rank_percentiles(first), rank_percentiles(second))
+
+    assert measured == pytest.approx(stats.spearmanr(first, second, axis=None)[0])

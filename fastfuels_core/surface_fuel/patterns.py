@@ -36,8 +36,8 @@ def band_percentiles(
         Smoothing sigma per band, in cells, in matrix order. 0 means no
         smoothing.
     speckles : list of float
-        Share of each band's variation that is independent per cell, from 0
-        to 1, in matrix order. Only bands with a sigma use it.
+        How much of each band's unsmoothed noise is blended back into its
+        patches, from 0 to 1, in matrix order. Only bands with a sigma use it.
     factor : numpy.ndarray
         Mixing factor from
         ``mixing_factor``.
@@ -84,3 +84,15 @@ def rank_percentiles(field: np.ndarray) -> np.ndarray:
     """Replace each cell with its percentile among all cells in the grid."""
     ranks = stats.rankdata(field).reshape(field.shape)
     return (ranks - 0.5) / field.size
+
+
+def rank_correlation(first: np.ndarray, second: np.ndarray) -> float:
+    """Return the rank correlation between two grids of percentiles.
+
+    Percentiles from ``rank_percentiles`` always have mean 0.5 and the same
+    variance, so their correlation needs only one pass over the cells.
+    """
+    size = first.size
+    mean_product = np.dot(first.ravel(), second.ravel()) / size
+    variance = (size * size - 1) / (12 * size * size)
+    return float((mean_product - 0.25) / variance)
