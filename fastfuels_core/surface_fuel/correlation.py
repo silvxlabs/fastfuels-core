@@ -17,17 +17,22 @@ import numpy as np
 from fastfuels_core.surface_fuel.distributions import is_number
 
 # Filling in unlisted correlations stops once every listed pair matches within
-# the tolerance, and gives up after this many passes over the pairs.
+# the tolerance, and gives up after this many steps.
 _FILL_TOLERANCE = 1e-9
-_MAX_FILL_PASSES = 10000
+_MAX_FILL_STEPS = 100
 
 # Eigenvalues slightly below 0 are rounding error, not a contradiction.
 _EIGENVALUE_TOLERANCE = 1e-8
 
 # Slightly contradictory coefficients are nudged until they fit together, as
-# long as none moves more than this. Eigenvalues are raised to the floor.
+# long as no listed one moves more than this. Eigenvalues are raised to the
+# floor, and the search for nearby coefficients that fit gives up after this
+# many passes.
 _MAX_NUDGE = 0.02
 _NUDGE_EIGENVALUE = 1e-4
+_MAX_NUDGE_PASSES = 1000
+
+_CANT_FILL = "Unlisted correlations can't be filled in from the listed coefficients."
 
 
 def correlation_matrix(keys: list, correlations: list[dict] | None) -> np.ndarray:
@@ -84,10 +89,16 @@ def correlation_matrix(keys: list, correlations: list[dict] | None) -> np.ndarra
         matrix[i, j] = matrix[j, i] = 2 * math.sin(math.pi * coefficient / 6)
         listed[i, j] = listed[j, i] = True
 
-    _fill_unlisted(matrix, listed)
+    requested = matrix.copy()
+    try:
+        _fill_unlisted(matrix, listed)
+    except ValueError:
+        # Listed coefficients that contradict each other keep the fill from
+        # settling.
+        return _nudge_coefficients(requested, listed)
 
     if np.linalg.eigvalsh(matrix)[0] < -_EIGENVALUE_TOLERANCE:
-        return _nudge_coefficients(matrix)
+        return _nudge_coefficients(requested, listed)
 
     return matrix
 
@@ -95,72 +106,116 @@ def correlation_matrix(keys: list, correlations: list[dict] | None) -> np.ndarra
 def _fill_unlisted(matrix: np.ndarray, listed: np.ndarray) -> None:
     """Fill unlisted pairs in place with the values the other bands imply.
 
-    This is maximum-determinant completion, found by iterative proportional
-    fitting. It adjusts the matrix's inverse until the listed pairs match,
-    which leaves every unlisted pair at the value the links imply. Listed
-    pairs never change.
+    This is maximum-determinant completion, found by Newton's method on the
+    matrix's inverse. Starting from the identity, it adjusts the inverse,
+    keeping it 0 at unlisted pairs, until the listed pairs match, which leaves
+    every unlisted pair at the value the links imply. Listed pairs never
+    change.
 
     Raises
     ------
     ValueError
-        The values never settle.
+        The values never settle, as when the listed coefficients contradict
+        each other.
     """
     if listed.all():
         return
 
-    size = len(matrix)
-    pairs = [(i, j) for i in range(size) for j in range(i + 1, size) if listed[i, j]]
-    precision = np.eye(size)
+    # Each listed pair, and each diagonal entry, is one adjustable entry of the
+    # inverse. Diagonal entries count twice in the step, matching the gradient.
+    rows, cols = np.nonzero(np.triu(listed))
+    weight = np.where(rows == cols, 2, 1)
+    target = np.where(listed, matrix, 0.0)
+    precision = np.eye(len(matrix))
+    objective = _fill_objective(precision, target)
 
+    for _ in range(_MAX_FILL_STEPS):
+        filled = np.linalg.inv(precision)
+        miss = (target - filled)[rows, cols]
+        if np.abs(miss).max() < _FILL_TOLERANCE:
+            matrix[~listed] = ((filled + filled.T) / 2)[~listed]
+            return
+
+        gradient = 2 * miss
+        hessian = 2 * (
+            filled[np.ix_(rows, rows)] * filled[np.ix_(cols, cols)]
+            + filled[np.ix_(rows, cols)] * filled[np.ix_(cols, rows)]
+        )
+        try:
+            step = -np.linalg.solve(hessian, gradient)
+        except np.linalg.LinAlgError:
+            break
+        decrease = -gradient @ step
+
+        # Shorten the step until the inverse stays valid and improves enough.
+        scale = 1.0
+        while True:
+            trial = precision.copy()
+            trial[rows, cols] += scale * step * weight
+            trial[cols, rows] = trial[rows, cols]
+            trial_objective = _fill_objective(trial, target)
+            if trial_objective <= objective - 0.25 * scale * decrease:
+                break
+            scale /= 2
+            if scale < 1e-10:
+                raise ValueError(_CANT_FILL)
+        precision, objective = trial, trial_objective
+
+    raise ValueError(_CANT_FILL)
+
+
+def _fill_objective(precision: np.ndarray, target: np.ndarray) -> float:
+    """Return what the fill minimizes, or infinity for an invalid inverse."""
     try:
-        for _ in range(_MAX_FILL_PASSES):
-            largest_miss = 0.0
-            for i, j in pairs:
-                block = np.ix_([i, j], [i, j])
-                current = np.linalg.inv(precision)
-                miss = np.abs(current[block] - matrix[block]).max()
-                largest_miss = max(largest_miss, miss)
-                precision[block] += np.linalg.inv(matrix[block]) - np.linalg.inv(
-                    current[block]
-                )
-            if largest_miss < _FILL_TOLERANCE:
-                filled = np.linalg.inv(precision)
-                matrix[~listed] = ((filled + filled.T) / 2)[~listed]
-                return
+        lower = np.linalg.cholesky(precision)
     except np.linalg.LinAlgError:
-        pass
-
-    raise ValueError(
-        "Unlisted correlations can't be filled in from the listed coefficients."
-    )
+        return np.inf
+    return -2 * np.log(np.diag(lower)).sum() + np.sum(precision * target)
 
 
-def _nudge_coefficients(matrix: np.ndarray) -> np.ndarray:
+def _nudge_coefficients(requested: np.ndarray, listed: np.ndarray) -> np.ndarray:
     """Make a slightly contradictory matrix valid, warning about the change.
 
     Correlations measured from real data can miss fitting together by a tiny
     amount, especially when they are high or the data has many tied values.
 
+    Alternates between raising the matrix's eigenvalues to a floor and putting
+    the listed coefficients back, which settles on valid coefficients close to
+    the listed ones. Unlisted pairs are then filled in from the nudged values.
+
     Raises
     ------
     ValueError
-        A coefficient would have to move more than ``_MAX_NUDGE``.
+        A listed coefficient would have to move more than ``_MAX_NUDGE``, or
+        the unlisted pairs can't be filled in.
     """
-    eigenvalues, eigenvectors = np.linalg.eigh(matrix)
-    raised = np.clip(eigenvalues, _NUDGE_EIGENVALUE, None)
-    nudged = (eigenvectors * raised) @ eigenvectors.T
-    scale = np.sqrt(np.diag(nudged))
-    nudged = nudged / np.outer(scale, scale)
+    fitted = requested
+    for _ in range(_MAX_NUDGE_PASSES):
+        eigenvalues, eigenvectors = np.linalg.eigh(fitted)
+        raised = np.clip(eigenvalues, _NUDGE_EIGENVALUE, None)
+        valid = (eigenvectors * raised) @ eigenvectors.T
+        refitted = np.where(listed, requested, valid)
+        if np.abs(refitted - fitted).max() < _FILL_TOLERANCE:
+            break
+        fitted = refitted
 
-    change = 6 / np.pi * np.abs(np.arcsin(nudged / 2) - np.arcsin(matrix / 2))
-    largest = change.max()
+    scale = np.sqrt(np.diag(valid))
+    nudged = valid / np.outer(scale, scale)
+
+    change = 6 / np.pi * np.abs(np.arcsin(nudged / 2) - np.arcsin(requested / 2))
+    largest = change[listed].max()
     if largest > _MAX_NUDGE:
         raise ValueError("The correlation coefficients contradict each other.")
 
-    warnings.warn(
-        f"Correlations were adjusted by up to {largest:.4f} so they fit together.",
-        stacklevel=3,
-    )
+    _fill_unlisted(nudged, listed)
+
+    # Rounding moves coefficients by far less than this when nothing was nudged.
+    if largest >= 5e-5:
+        warnings.warn(
+            f"Correlations were adjusted by up to {largest:.4f} so they fit "
+            "together.",
+            stacklevel=3,
+        )
     return nudged
 
 

@@ -128,6 +128,26 @@ def test_slightly_contradictory_coefficients_are_nudged():
         assert used == pytest.approx(value, abs=0.02)
 
 
+def test_slight_contradiction_is_nudged_when_a_pair_is_unlisted():
+    keys = ["a", "b", "c", "d"]
+    requested = {
+        ("a", "b"): 0.95,
+        ("b", "c"): 0.95,
+        ("a", "c"): 0.79,
+        ("a", "d"): 0.3,
+    }
+    correlations = [pair(a, b, value) for (a, b), value in requested.items()]
+
+    with pytest.warns(UserWarning, match="adjusted"):
+        matrix = correlation_matrix(keys, correlations)
+
+    measured = 6 / np.pi * np.arcsin(matrix / 2)
+    assert np.linalg.eigvalsh(matrix)[0] >= 0
+    for (a, b), value in requested.items():
+        used = measured[keys.index(a), keys.index(b)]
+        assert used == pytest.approx(value, abs=0.02)
+
+
 @pytest.mark.parametrize(
     "correlations, message",
     [
@@ -157,7 +177,7 @@ def test_contradictory_coefficients():
 
 
 def test_unlisted_pairs_that_never_settle(monkeypatch):
-    monkeypatch.setattr(correlation, "_MAX_FILL_PASSES", 0)
+    monkeypatch.setattr(correlation, "_MAX_FILL_STEPS", 0)
     correlations = [pair("a", "b", 0.6), pair("b", "c", 0.6)]
 
     with pytest.raises(ValueError, match="can't be filled"):
@@ -172,5 +192,5 @@ def test_impossible_loop_of_links():
         pair("d", "a", -0.9),
     ]
 
-    with pytest.raises(ValueError, match="can't be filled"):
+    with pytest.raises(ValueError, match="contradict"):
         correlation_matrix(["a", "b", "c", "d"], correlations)
