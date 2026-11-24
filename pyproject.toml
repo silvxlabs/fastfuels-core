@@ -26,7 +26,6 @@ dependencies = [
     "fastparquet",
     "geopandas",
     "nsvb>=0.3.0",
-    "numba>=0.61",
     "numpy",
     "pandas",
     "pandera",
@@ -38,6 +37,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+numba = [
+    "numba>=0.61",
+]
 plotting = [
     "matplotlib",
     "pyvista",
@@ -45,6 +47,7 @@ plotting = [
 test = [
     "pytest",
     "matplotlib",
+    "numba>=0.61",
 ]
 
 [project.urls]

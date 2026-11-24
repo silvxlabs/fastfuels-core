@@ -12,7 +12,6 @@ from __future__ import annotations
 import warnings
 from pathlib import Path
 
-import numba
 import numpy as np
 import pandas as pd
 import pytest
@@ -21,8 +20,11 @@ from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
-from fastfuels_core.treatments import clump_pattern_solver
 from fastfuels_core.treatments import ThinToClumpPattern
+
+# numba is optional (fastfuels-core[numba]); without it these tests skip.
+numba = pytest.importorskip("numba")
+from fastfuels_core.treatments import clump_pattern_solver  # noqa: E402
 
 TEST_DATA_PATH = Path(__file__).parent.parent / "data"
 
