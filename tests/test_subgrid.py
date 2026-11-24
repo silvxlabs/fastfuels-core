@@ -112,3 +112,96 @@ class TestSubgridDiscretizeCrownProfile:
         grid = subgrid.discretize_crown_profile(tree, HR, VR)
         assert grid.shape == discretize_crown_profile(tree, HR, VR).shape
         assert grid.sum() > 0
+
+
+class TestStemOffset:
+    def _centroid(self, grid, hr):
+        """Volume-fraction-weighted (x, y) centroid relative to the grid center."""
+        n = grid.shape[1]
+        coords = (np.arange(n) - n // 2) * hr
+        plane = grid.sum(axis=0)
+        x = (plane.sum(axis=0) * coords).sum() / plane.sum()
+        y = (plane.sum(axis=1) * coords).sum() / plane.sum()
+        return x, y
+
+    def test_zero_offset_is_the_default(self):
+        tree = _paraboloid_tree()
+        np.testing.assert_array_equal(
+            subgrid.discretize_crown_profile(tree, HR, VR, stem_offset=(0.0, 0.0)),
+            subgrid.discretize_crown_profile(tree, HR, VR),
+        )
+
+    def test_moves_the_crown_by_the_offset_along_x_and_y(self):
+        # Rows run along +y, columns along +x.
+        tree = _paraboloid_tree()
+        hr = 1.0
+        grid = subgrid.discretize_crown_profile(tree, hr, VR, stem_offset=(0.3, -0.4))
+        x, y = self._centroid(grid, hr)
+        assert x == pytest.approx(0.3, abs=0.01)
+        assert y == pytest.approx(-0.4, abs=0.01)
+
+    def test_keeps_the_grid_shape_and_volume(self):
+        tree = _paraboloid_tree()
+        centered = subgrid.discretize_crown_profile(tree, HR, VR)
+        moved = subgrid.discretize_crown_profile(tree, HR, VR, stem_offset=(0.9, 0.7))
+        assert moved.shape == centered.shape
+        assert moved.sum() == pytest.approx(centered.sum(), rel=0.02)
+
+    @pytest.mark.parametrize("radius", [0.4, 1.0, 1.99, 2.0, 4.67])
+    def test_offsets_within_half_a_cell_fit_a_cell_centered_grid(self, radius):
+        tree = make_random_tree(
+            species_code=122,
+            height=20.0,
+            crown_base_height=8.0,
+            max_crown_radius=radius,
+        )
+        subgrid.discretize_crown_profile(tree, HR, VR, stem_offset=(HR / 2, -HR / 2))
+
+    def test_offset_past_the_grid_edge_raises(self):
+        with pytest.raises(ValueError, match="stem_offset"):
+            subgrid.discretize_crown_profile(
+                _paraboloid_tree(), HR, VR, stem_offset=(2 * HR, 0.0)
+            )
+
+    def test_stem_subcell_outside_the_crown_is_empty(self):
+        # n_subgrid=1 puts a subcell exactly on the stem (r = 0), where the
+        # radius test alone would pass above the tree top.
+        tree = _paraboloid_tree()
+        grid = subgrid.discretize_crown_profile(tree, HR, VR, n_subgrid=1)
+        z_top_center = tree.crown_base_height + (grid.shape[0] - 1) * VR
+        assert z_top_center > tree.height
+        assert grid[-1].sum() == 0.0
+
+
+class TestDensityField:
+    def test_uniform_field_is_the_volume_fraction(self):
+        from fastfuels_core.voxelization import UniformDensity
+
+        tree = _paraboloid_tree()
+        np.testing.assert_array_equal(
+            subgrid.discretize_crown_profile(
+                tree, HR, VR, density_field=UniformDensity()
+            ),
+            subgrid.discretize_crown_profile(tree, HR, VR),
+        )
+
+    def test_weights_each_subcell_scaled_to_the_crown_mean(self):
+        # With one subcell per voxel, the weighted grid is the volume fraction
+        # times the weight at the voxel center, over the crown mean.
+        tree = _paraboloid_tree()
+        field = LinearHeightQuadraticRadialDensity()
+        grid = subgrid.discretize_crown_profile(
+            tree, HR, VR, n_subgrid=1, density_field=field
+        )
+        volume = subgrid.discretize_crown_profile(tree, HR, VR, n_subgrid=1)
+        vt = VoxelizedTree(tree, volume, HR, VR)
+        expected = volume * field.crown_weight(vt) / field.crown_mean(tree)
+        np.testing.assert_allclose(grid, expected, rtol=1e-12, atol=1e-15)
+
+    def test_distributing_the_weighted_grid_conserves_mass(self):
+        tree = _paraboloid_tree()
+        grid = subgrid.discretize_crown_profile(
+            tree, HR, VR, density_field=LinearHeightQuadraticRadialDensity()
+        )
+        bd = VoxelizedTree(tree, grid, HR, VR).distribute_biomass()
+        assert bd.sum() * HR * HR * VR == pytest.approx(tree.foliage_biomass)

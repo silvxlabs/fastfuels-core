@@ -1,13 +1,13 @@
 """Mass-distribution models: spread a tree's crown mass across occupied voxels.
 
-This is the step *after* voxelization. The occupancy step (marching squares or
-subgrid sampling) produces a volume-fraction grid; a ``DensityField`` then turns
-that occupancy into a bulk-density grid (kg/m^3) by deciding *how much* of the
-crown mass sits in each voxel.
+This is the step *after* voxelization. Voxelization (marching squares or
+subgrid) produces a volume-fraction grid, which occupancy sampling may thin; a
+``DensityField`` then turns that grid into a bulk-density grid (kg/m^3) by
+deciding *how much* of the crown mass sits in each voxel.
 
 A ``DensityField`` is a **crown weight function**: it supplies the relative
 weight of each occupied voxel via :meth:`DensityField.crown_weight`. The
-mass-conserving normalization -- scale the weighted occupancy so its integral
+mass-conserving normalization -- scale the weighted grid so its integral
 equals the tree's crown mass -- is shared and lives in
 :meth:`VoxelizedTree.distribute_biomass`, so subclasses only choose the *shape*
 of the distribution.
@@ -22,8 +22,13 @@ Two flavors ship here:
   :class:`UniformDensity`. Named subclasses (e.g.
   :class:`LinearHeightQuadraticRadialDensity`) pin a specific weight.
 
-The occupancy step and the mass-distribution step are deliberately independent:
-any occupancy backend composes with any ``DensityField``.
+Voxelization, occupancy sampling and mass distribution are deliberately
+independent: any voxelization backend composes with any ``DensityField``.
+
+A field can also be integrated inside voxelization:
+``subgrid.discretize_crown_profile(..., density_field=...)`` weights each
+subcell by :meth:`DensityField.weight`, scaled by :meth:`DensityField.crown_mean`
+so the weight averages 1 over the crown.
 """
 
 from __future__ import annotations
@@ -72,6 +77,27 @@ class DensityField(ABC):
         """
         raise NotImplementedError
 
+    def weight(self, r: ndarray, z: ndarray, tree: "Tree") -> ndarray | float:
+        """Return the relative weight at radial distance ``r`` and height ``z``.
+
+        ``r`` and ``z`` broadcast against each other. Used where the weight is
+        integrated over subcells rather than read at voxel centers.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not define a point weight."
+        )
+
+    def crown_mean(self, tree: "Tree") -> float:
+        """Return the mean of :meth:`weight` over the tree's continuous crown.
+
+        Dividing the weight by this mean gives a weight that averages 1 over
+        the crown, so a crown bulk density times that weight has the bulk
+        density as its crown mean.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not define a crown mean."
+        )
+
 
 class UniformDensity(DensityField):
     """Constant bulk density through the crown: ``mass / occupied volume``.
@@ -82,6 +108,12 @@ class UniformDensity(DensityField):
     """
 
     def crown_weight(self, vt):
+        return 1.0
+
+    def weight(self, r, z, tree):
+        return 1.0
+
+    def crown_mean(self, tree):
         return 1.0
 
 
@@ -98,7 +130,7 @@ class GradientDensity(DensityField):
         ``weight_fn(r, z, tree) -> ndarray`` returning non-negative relative
         weights broadcast over the voxel grid. ``r`` is the radial distance from
         the stem (``vt.radial_distance``) and ``z`` the height
-        (``vt.voxel_height``); both are broadcastable to the occupancy grid. Any
+        (``vt.voxel_height``); both are broadcastable to the voxel grid. Any
         new gradient is just a new weight function.
     """
 
@@ -106,9 +138,49 @@ class GradientDensity(DensityField):
         self.weight_fn = weight_fn
 
     def crown_weight(self, vt):
-        return np.asarray(
-            self.weight_fn(vt.radial_distance, vt.voxel_height, vt.tree), dtype=float
-        )
+        return self.weight(vt.radial_distance, vt.voxel_height, vt.tree)
+
+    def weight(self, r, z, tree):
+        return np.asarray(self.weight_fn(r, z, tree), dtype=float)
+
+    def crown_mean(self, tree):
+        return _crown_mean(self.weight, tree)
+
+
+# Gauss-Legendre nodes per crown lobe (in height) and along the radius. A weight
+# that is polynomial in r and z over a paraboloid or ellipsoid lobe -- such as
+# LANL's gradient -- integrates exactly; other profiles converge quickly.
+_CROWN_MEAN_HEIGHT_NODES = 64
+_CROWN_MEAN_RADIUS_NODES = 32
+
+
+def _crown_mean(weight: WeightFunction, tree: "Tree") -> float:
+    """Volume-weighted mean of ``weight`` over the tree's continuous crown."""
+    hb = float(tree.crown_base_height)
+    ht = float(tree.height)
+    hd = float(tree.crown_profile_model.get_max_radius_height())
+    xz, wz = np.polynomial.legendre.leggauss(_CROWN_MEAN_HEIGHT_NODES)
+    xr, wr = np.polynomial.legendre.leggauss(_CROWN_MEAN_RADIUS_NODES)
+    u, wu = (xr + 1.0) / 2.0, wr / 2.0  # nodes on [0, 1]
+
+    weighted = volume = 0.0
+    # Integrate each side of the widest height separately: the radius has a
+    # kink there.
+    for lo, hi in ((hb, hd), (hd, ht)):
+        if hi <= lo:
+            continue
+        z = lo + (xz + 1.0) / 2.0 * (hi - lo)
+        dz = wz / 2.0 * (hi - lo)
+        radius = np.asarray(tree.get_crown_radius_at_height(z), dtype=float)
+        r = radius[:, None] * u[None, :]
+        w = np.broadcast_to(weight(r, z[:, None], tree), r.shape)
+        # Integral over the disc at height z: sum of w * 2*pi*r * dr, dr = R du.
+        disc = (w * 2.0 * np.pi * r * radius[:, None] * wu[None, :]).sum(axis=1)
+        weighted += float((dz * disc).sum())
+        volume += float((dz * np.pi * radius**2).sum())
+    if volume <= 0.0:
+        raise ValueError("The crown has no volume.")
+    return weighted / volume
 
 
 def _linear_height_quadratic_radial(r: ndarray, z: ndarray, tree: "Tree") -> ndarray:
@@ -139,15 +211,13 @@ class LinearHeightQuadraticRadialDensity(GradientDensity):
     ``max_crown_radius``. The weight is zero at the crown-base center and peaks
     at the top outer rim.
 
-    This reproduces the vertical + radial fuel gradient of **LANL Trees**
-    (``treesMACA``, ``fuels_create.F90``). Pair it with a crown envelope that
-    peaks at :math:`H_d` -- i.e. ``crown_profile_model_type="paraboloid"`` -- to
-    match LANL's crown shape as well as its mass gradient.
-
-    Note that :class:`GradientDensity` renormalizes to conserve the tree's crown
-    mass, so this yields LANL's *shape* with mass conserved; LANL's own absolute
-    bulk density is ~0.75x that (its canopy bulk density is defined over an
-    ellipsoid crown volume rather than the paraboloid it fills).
+    This is the fuel gradient of **LANL Trees** (``fuels_create.F90``). Over a
+    dual-paraboloid crown it averages 2/3 for any :math:`H_d`, which is why
+    LANL scales it by 3/2. :meth:`crown_weight` reads it once at each voxel
+    center, while LANL averages it over the parts of each voxel inside the
+    crown. To reproduce LANL, integrate it over subcells with
+    ``subgrid.discretize_crown_profile(..., density_field=...)`` on a
+    ``"paraboloid"`` crown.
     """
 
     def __init__(self):
