@@ -1,10 +1,11 @@
-"""Voxelization of tree crowns into volume-fraction / occupancy grids.
+"""Voxelization of tree crowns into volume-fraction grids.
 
 Public API is re-exported here; the implementation is split across
-``_coords`` (grid coordinates), ``marching_squares`` (volume-fraction
-discretization), ``measured_crown`` (volume fraction of a crown measured from
-a CHM), ``sampling`` (stochastic occupancy realization), and
-``tree`` (the ``VoxelizedTree`` / ``voxelize_tree`` orchestration).
+``_coords`` (grid coordinates), ``marching_squares`` and ``subgrid``
+(volume-fraction discretization), ``measured_crown`` (volume fraction of a
+crown measured from a CHM), ``sampling`` (stochastic occupancy realization),
+``mass_distribution`` (density fields), and ``tree`` (the ``VoxelizedTree`` /
+``voxelize_tree`` orchestration).
 """
 
 from fastfuels_core.voxelization._coords import CenteringMode

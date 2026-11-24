@@ -171,3 +171,94 @@ class TestLinearHeightQuadraticRadialDensity:
             np.array(0.0), np.array(tree.crown_base_height), tree
         )
         assert w == pytest.approx(0.0)
+
+
+# --------------------------------------------------------------------------- #
+# Point weight and crown mean
+# --------------------------------------------------------------------------- #
+
+
+def _paraboloid_with_peak(fraction):
+    """A paraboloid crown whose widest height is ``fraction`` up the crown."""
+    hb, ht = 4.0, 20.0
+    return Tree(
+        species_code=122,
+        status_code=1,
+        diameter=40.0,
+        height=ht,
+        crown_base_height=hb,
+        crown_profile_model_type="paraboloid",
+        max_crown_radius=3.0,
+        max_crown_diameter_height=hb + fraction * (ht - hb),
+        crown_fuel_load=100.0,
+    )
+
+
+class TestPointWeightAndCrownMean:
+    def test_uniform_weight_and_crown_mean_are_one(self):
+        tree = _paraboloid_tree()
+        assert UniformDensity().weight(np.array(1.0), np.array(10.0), tree) == 1.0
+        assert UniformDensity().crown_mean(tree) == 1.0
+
+    def test_gradient_weight_is_the_weight_function(self):
+        tree = _paraboloid_tree()
+        r = np.array([0.0, 1.5, 3.0])
+        z = np.array([5.0, 15.0, 25.0])
+        np.testing.assert_array_equal(
+            LinearHeightQuadraticRadialDensity().weight(r, z, tree),
+            _linear_height_quadratic_radial(r, z, tree),
+        )
+
+    def test_crown_weight_reads_the_point_weight_at_voxel_centers(self):
+        vt = _full_occupancy(_paraboloid_tree())
+        field = LinearHeightQuadraticRadialDensity()
+        np.testing.assert_array_equal(
+            field.crown_weight(vt),
+            field.weight(vt.radial_distance, vt.voxel_height, vt.tree),
+        )
+
+    @pytest.mark.parametrize("fraction", [0.0, 0.1, 0.5, 0.9, 1.0])
+    def test_lanl_gradient_averages_two_thirds_over_a_paraboloid(self, fraction):
+        # Why LANL Trees scales its gradient by 3/2.
+        tree = _paraboloid_with_peak(fraction)
+        mean = LinearHeightQuadraticRadialDensity().crown_mean(tree)
+        assert mean == pytest.approx(2.0 / 3.0, rel=1e-12)
+
+    def test_constant_weight_has_that_crown_mean(self):
+        field = GradientDensity(
+            lambda r, z, tree: np.full(np.broadcast(r, z).shape, 2.5)
+        )
+        assert field.crown_mean(_paraboloid_tree()) == pytest.approx(2.5, rel=1e-12)
+
+    @pytest.mark.parametrize("profile", ["beta", "purves", "ellipsoid", "cone"])
+    def test_crown_mean_matches_a_fine_voxelization(self, profile):
+        from fastfuels_core.voxelization import subgrid
+
+        tree = Tree(
+            species_code=122,
+            status_code=1,
+            diameter=40.0,
+            height=20.0,
+            crown_base_height=6.0,
+            crown_profile_model_type=profile,
+            max_crown_radius=3.0,
+            crown_fuel_load=100.0,
+        )
+        field = LinearHeightQuadraticRadialDensity()
+        hr = vr = 0.25
+        volume = subgrid.discretize_crown_profile(tree, hr, vr, n_subgrid=4)
+        weighted = subgrid.discretize_crown_profile(
+            tree, hr, vr, n_subgrid=4, density_field=field
+        )
+        # The weighted grid is scaled by the crown mean, so it averages 1.
+        assert weighted.sum() / volume.sum() == pytest.approx(1.0, rel=5e-3)
+
+    def test_field_without_a_point_weight_says_so(self):
+        class CenterOnly(DensityField):
+            def crown_weight(self, vt):
+                return 1.0
+
+        with pytest.raises(NotImplementedError, match="point weight"):
+            CenterOnly().weight(np.array(0.0), np.array(0.0), _paraboloid_tree())
+        with pytest.raises(NotImplementedError, match="crown mean"):
+            CenterOnly().crown_mean(_paraboloid_tree())

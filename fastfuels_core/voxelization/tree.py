@@ -36,7 +36,7 @@ class VoxelizedTree:
         self.hr = hr
         self.vr = vr
         self.centering = centering
-        # Must match the z_origin the occupancy grid was built with so the
+        # Must match the z_origin the grid was built with so the
         # density field's per-voxel heights line up with the grid.
         self.z_origin = z_origin
 

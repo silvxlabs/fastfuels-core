@@ -20,6 +20,12 @@ Both methods expose ``discretize_crown_profile`` with the same output -- a
 ``(nz, ny, nx)`` volume-fraction grid on the same axes -- so they are
 interchangeable inputs to
 ``VoxelizedTree(tree, grid, hr, vr).distribute_biomass(density_field=...)``.
+
+Subgrid can also weight each subcell by a ``DensityField`` and place the stem
+anywhere within its cell. With both, a ``"paraboloid"`` crown,
+:class:`~fastfuels_core.voxelization.LinearHeightQuadraticRadialDensity`,
+``n_subgrid=10`` and ``z_origin=0.0`` it reproduces LANL Trees' crown fuel:
+the tree's bulk density times the grid is LANL's bulk-density grid.
 """
 
 from __future__ import annotations
@@ -38,6 +44,7 @@ from fastfuels_core.voxelization._coords import (
 
 if TYPE_CHECKING:
     from fastfuels_core.trees import Tree
+    from fastfuels_core.voxelization.mass_distribution import DensityField
 
 
 def discretize_crown_profile(
@@ -47,6 +54,8 @@ def discretize_crown_profile(
     centering: CenteringMode = "cell",
     n_subgrid: int = 10,
     z_origin: float = None,
+    stem_offset: tuple[float, float] = (0.0, 0.0),
+    density_field: "DensityField" = None,
 ) -> ndarray:
     """Voxelize a crown to a volume-fraction grid by subgrid sampling.
 
@@ -70,32 +79,75 @@ def discretize_crown_profile(
         ``_get_vertical_tree_coords``). ``None`` keeps the crown-base-centered
         grid; a float aligns cell boundaries to ``z_origin + k*vr`` (e.g. the
         ground elevation) for registration to a shared domain grid.
+    stem_offset : (float, float)
+        The stem's position minus the point the grid is centered on (the
+        middle cell's center, or the central vertex), in meters along x and y.
+        Moves the crown within the grid without changing the grid's shape.
+        Raises if the crown would cross the grid's edge, which cannot happen on
+        a cell-centered grid for offsets within half a cell.
+    density_field : DensityField, optional
+        Count each inside subcell as the field's
+        :meth:`~DensityField.weight` there, divided by its
+        :meth:`~DensityField.crown_mean`, instead of as 1. Each voxel then
+        holds the weight integrated over the part of it inside the crown, and
+        the weight averages 1 over the crown. Pass the result to
+        ``VoxelizedTree.distribute_biomass`` without a density field: passing
+        the field again applies it twice.
 
     Returns
     -------
     ndarray, shape (nz, ny, nx)
         Volume fraction in [0, 1] on the same axes as the marching-squares
-        backend.
+        backend, or the weighted volume fraction with ``density_field``. Rows
+        run along +y and columns along +x. A crown bulk density times the grid
+        is a bulk-density grid with that crown mean, holding the bulk density
+        times ``grid.sum() * hr * hr * vr`` kilograms.
     """
     if n_subgrid < 1:
         raise ValueError(f"n_subgrid must be a positive integer, got {n_subgrid}")
     n_subgrid = int(n_subgrid)
+    offset_x, offset_y = (float(v) for v in stem_offset)
 
     xy_pts = _get_horizontal_tree_coords(hr, tree.max_crown_radius, centering=centering)
     z_pts = _get_vertical_tree_coords(vr, tree.height, tree.crown_base_height, z_origin)
     nz, nxy = len(z_pts), len(xy_pts)
 
-    # Subcell centers along each axis (exact: len * n_subgrid points).
+    half_width = float(xy_pts[-1]) + hr / 2.0
+    if tree.max_crown_radius + max(abs(offset_x), abs(offset_y)) > half_width:
+        raise ValueError(
+            f"stem_offset {tuple(stem_offset)} moves the crown past the edge of "
+            "the grid; keep it within half a cell."
+        )
+
+    # Subcell centers along each axis (exact: len * n_subgrid points), relative
+    # to the stem.
     xy_sub = _resample_coords_grid_to_subgrid(xy_pts, hr, n_subgrid)
-    z_sub = _resample_coords_grid_to_subgrid(z_pts, vr, n_subgrid)
+    x_sub = xy_sub - offset_x
+    y_sub = xy_sub - offset_y
+    r_squared = x_sub[None, :] ** 2 + y_sub[:, None] ** 2  # (ny_sub, nx_sub)
+    if density_field is not None:
+        radial_distance = np.sqrt(r_squared)[None, :, :]
+        scale = 1.0 / density_field.crown_mean(tree)
 
-    # Inside-crown test per subcell: r <= R(z). get_crown_radius_at_height
-    # returns 0 outside [crown_base, height], so those subcells fall outside.
-    r_squared = xy_sub[None, :] ** 2 + xy_sub[:, None] ** 2  # (ny_sub, nx_sub)
-    radius = np.asarray(tree.get_crown_radius_at_height(z_sub))  # (nz_sub,)
-    inside = r_squared[None, :, :] <= (radius**2)[:, None, None]
-
-    # Average the subcells of each voxel -> volume fraction.
-    return inside.reshape(nz, n_subgrid, nxy, n_subgrid, nxy, n_subgrid).mean(
-        axis=(1, 3, 5)
-    )
+    # One voxel layer at a time, so memory stays bounded for large crowns.
+    grid = np.empty((nz, nxy, nxy))
+    for k in range(nz):
+        z_sub = _resample_coords_grid_to_subgrid(z_pts[k : k + 1], vr, n_subgrid)
+        radius = np.atleast_1d(np.asarray(tree.get_crown_radius_at_height(z_sub)))
+        # Inside-crown test per subcell: r <= R(z) between the crown base and
+        # the top. R(z) is 0 outside them, but a subcell on the stem (r = 0)
+        # would still pass r <= R, so bound z explicitly.
+        in_crown = (z_sub >= tree.crown_base_height) & (z_sub <= tree.height)
+        inside = (r_squared[None, :, :] <= (radius**2)[:, None, None]) & in_crown[
+            :, None, None
+        ]
+        if density_field is None:
+            layer = inside
+        else:
+            weight = density_field.weight(radial_distance, z_sub[:, None, None], tree)
+            layer = inside * (np.asarray(weight, dtype=float) * scale)
+        # Average the subcells of each voxel.
+        grid[k] = layer.reshape(n_subgrid, nxy, n_subgrid, nxy, n_subgrid).mean(
+            axis=(0, 2, 4)
+        )
+    return grid
