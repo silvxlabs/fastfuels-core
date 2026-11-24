@@ -13,7 +13,7 @@ import sys
 
 def test_public_names_import_from_the_package():
     # The names FastFuels-API-v2's standgen imports, the protocol that
-    # trees.py imports, and the tree-density thin.
+    # trees.py imports, the tree-density thin and the clump-pattern thin.
     from fastfuels_core import treatments
     from fastfuels_core.treatments import (
         DirectionalThinToDiameterLimit,
@@ -21,6 +21,7 @@ def test_public_names_import_from_the_package():
         DirectionalThinToTreeDensity,
         ProportionalThinToBasalArea,
         ThinningDirection,
+        ThinToClumpPattern,
         ThinToCrownSpacing,
         TreatmentProtocol,
     )
@@ -31,6 +32,7 @@ def test_public_names_import_from_the_package():
         DirectionalThinToTreeDensity,
         ProportionalThinToBasalArea,
         ThinningDirection,
+        ThinToClumpPattern,
         ThinToCrownSpacing,
         TreatmentProtocol,
     ]

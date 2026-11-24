@@ -26,6 +26,7 @@ dependencies = [
     "fastparquet",
     "geopandas",
     "nsvb>=0.3.0",
+    "numba>=0.61",
     "numpy",
     "pandas",
     "pandera",
