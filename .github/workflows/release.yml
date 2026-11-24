@@ -47,9 +47,19 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install package from Test PyPI with test dependencies
+        env:
+          TAG: ${{ github.event.release.tag_name }}
         run: |
           python -m pip install --upgrade pip
-          pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple fastfuels-core[test]
+          # Pin this release's version: an index can take minutes to list a
+          # new upload, and until then pip would install an older release.
+          version="${TAG#v}"
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            pip install --no-cache-dir --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple "fastfuels-core[test]==$version" && exit 0
+            echo "fastfuels-core $version isn't installable yet (attempt $attempt of 10); retrying in 30 s."
+            sleep 30
+          done
+          exit 1
       - name: Run pytest
         run: pytest
 
@@ -93,8 +103,18 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install package from PyPI with test dependencies
+        env:
+          TAG: ${{ github.event.release.tag_name }}
         run: |
           python -m pip install --upgrade pip
-          pip install fastfuels-core[test]
+          # Pin this release's version: PyPI can take minutes to list a new
+          # upload, and until then pip would install an older release.
+          version="${TAG#v}"
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            pip install --no-cache-dir "fastfuels-core[test]==$version" && exit 0
+            echo "fastfuels-core $version isn't installable yet (attempt $attempt of 10); retrying in 30 s."
+            sleep 30
+          done
+          exit 1
       - name: Run pytest
         run: pytest
