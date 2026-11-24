@@ -21,6 +21,11 @@ from fastfuels_core.surface_fuel.distributions import is_number
 _FILL_TOLERANCE = 1e-9
 _MAX_FILL_STEPS = 100
 
+# Near the solution a Newton step's predicted decrease falls below the
+# objective's rounding error, so the line search can't judge it. Below this
+# decrease, relative to the objective, the full step is taken.
+_ROUNDING_DECREASE = 1e-12
+
 # Eigenvalues slightly below 0 are rounding error, not a contradiction.
 _EIGENVALUE_TOLERANCE = 1e-8
 
@@ -158,6 +163,10 @@ def _fill_unlisted(matrix: np.ndarray, listed: np.ndarray) -> None:
         decrease = -gradient @ step
 
         # Shorten the step until the inverse stays valid and improves enough.
+        # Once the decrease is too small to measure, Newton's method has
+        # reached its quadratic phase (Boyd and Vandenberghe 2004, sec. 9.5),
+        # and any step that keeps the inverse valid is taken.
+        negligible = decrease < _ROUNDING_DECREASE * (1 + abs(objective))
         scale = 1.0
         while True:
             trial = precision.copy()
@@ -165,6 +174,8 @@ def _fill_unlisted(matrix: np.ndarray, listed: np.ndarray) -> None:
             trial[cols, rows] = trial[rows, cols]
             trial_objective = _fill_objective(trial, target)
             if trial_objective <= objective - 0.25 * scale * decrease:
+                break
+            if negligible and np.isfinite(trial_objective):
                 break
             scale /= 2
             if scale < 1e-10:
@@ -211,6 +222,8 @@ def _nudge_coefficients(requested: np.ndarray, listed: np.ndarray) -> np.ndarray
 
     scale = np.sqrt(np.diag(valid))
     nudged = valid / np.outer(scale, scale)
+    # The product above can differ across the diagonal in the last bit.
+    nudged = (nudged + nudged.T) / 2
 
     change = 6 / np.pi * np.abs(np.arcsin(nudged / 2) - np.arcsin(requested / 2))
     largest = change[listed].max()
