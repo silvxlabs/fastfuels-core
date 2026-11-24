@@ -18,7 +18,6 @@ import numpy as np
 import pytest
 from scipy import stats
 
-from fastfuels_core.surface_fuel.distribution_grids import _band_sigma
 from tests.surface_fuel.builders import (
     NORMAL,
     UNIFORM,
@@ -122,8 +121,13 @@ class TestOutput:
 
         assert np.array_equal(missing, zero)
 
-    def test_largest_allowed_patch_size_is_accepted(self):
-        assert _band_sigma("a", {"patch_size": 1000}, 2.0) == 250
+    def test_largest_allowed_patch_size_runs(self):
+        bands = {"a": {"distribution": UNIFORM, "patch_size": 1000}}
+
+        grid = build(bands, shape=(10, 10), resolution=2.0)["a"]
+
+        assert grid.shape == (10, 10)
+        assert np.isfinite(grid).all()
 
 
 class TestCorrelations:
@@ -197,6 +201,7 @@ class TestErrors:
     @pytest.mark.parametrize(
         "band, message",
         [
+            (None, "dict of settings"),
             ({}, "distribution dict"),
             ({"distribution": "uniform"}, "distribution dict"),
             ({"distribution": UNIFORM, "patch_sise": 10}, "unknown settings"),
@@ -220,6 +225,14 @@ class TestErrors:
     def test_empty_bands(self):
         with pytest.raises(ValueError, match="bands is empty"):
             build({})
+
+    def test_bands_not_a_dict(self):
+        with pytest.raises(ValueError, match="bands must be a dict"):
+            build([{"distribution": UNIFORM}])
+
+    def test_band_keys_must_be_strings(self):
+        with pytest.raises(ValueError, match="keys must be strings"):
+            build({"a": {"distribution": UNIFORM}, 1: {"distribution": UNIFORM}})
 
     @pytest.mark.parametrize(
         "shape", [(20,), (20, 30, 40), (0, 20), (-1, 20), (1.5, 20)]

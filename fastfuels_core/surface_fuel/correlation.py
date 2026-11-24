@@ -59,18 +59,28 @@ def correlation_matrix(keys: list, correlations: list[dict] | None) -> np.ndarra
         A pair is invalid or repeated, or the coefficients contradict each
         other.
     """
+    if correlations is not None and not isinstance(correlations, (list, tuple)):
+        raise ValueError(f"correlations must be a list of pairs, got {correlations!r}.")
+
     index = {key: i for i, key in enumerate(keys)}
     matrix = np.eye(len(keys))
     listed = np.eye(len(keys), dtype=bool)
 
     for pair in correlations or []:
+        if not isinstance(pair, dict):
+            raise ValueError(f"Each correlation must be a dict, got {pair!r}.")
+        unknown = set(pair) - {"bands", "coefficient"}
+        if unknown:
+            raise ValueError(f"Correlation has unknown settings: {sorted(unknown)}.")
+
+        # A string has a length too, so "ab" would otherwise pass as a, b.
         bands = pair.get("bands", ())
-        if len(bands) != 2:
+        if not isinstance(bands, (list, tuple)) or len(bands) != 2:
             raise ValueError(f"A correlation needs exactly two bands, got {bands!r}.")
 
         a, b = bands
         for band in (a, b):
-            if band not in index:
+            if not isinstance(band, str) or band not in index:
                 raise ValueError(f"Correlation names an unknown band: {band!r}")
         if a == b:
             raise ValueError(f"Band {a!r} can't be correlated with itself.")

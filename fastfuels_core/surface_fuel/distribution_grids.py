@@ -153,8 +153,13 @@ def build_distribution_grids(
     """
     _validate_grid(shape, resolution)
     _validate_seed(seed)
+    if not isinstance(bands, dict):
+        raise ValueError(f"bands must be a dict of band settings, got {bands!r}.")
     if not bands:
         raise ValueError("bands is empty.")
+    not_strings = [key for key in bands if not isinstance(key, str)]
+    if not_strings:
+        raise ValueError(f"Band keys must be strings, got {not_strings!r}.")
 
     keys = sorted(bands)
     distributions = [_band_distribution(key, bands[key]) for key in keys]
@@ -224,6 +229,9 @@ def _validate_seed(seed: int | None) -> None:
 
 def _band_distribution(key, band: dict):
     """Validate a band's settings and return its SciPy distribution."""
+    if not isinstance(band, dict):
+        raise ValueError(f"Band {key!r} must be a dict of settings, got {band!r}.")
+
     unknown = set(band) - {"distribution", "patch_size", "speckle"}
     if unknown:
         raise ValueError(f"Band {key!r} has unknown settings: {sorted(unknown)}.")

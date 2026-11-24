@@ -45,6 +45,16 @@ def test_listed_zero_is_kept():
     assert matrix[0, 2] == 0
 
 
+def test_listed_zero_can_move_under_the_nudge():
+    correlations = [pair("a", "b", 0.7), pair("b", "c", 0.7), pair("a", "c", 0)]
+
+    with pytest.warns(UserWarning, match="adjusted"):
+        matrix = correlation_matrix(["a", "b", "c"], correlations)
+
+    assert matrix[0, 2] != 0
+    assert 6 / np.pi * abs(math.asin(matrix[0, 2] / 2)) <= 0.02
+
+
 def test_bands_with_no_link_get_zero():
     correlations = [pair("a", "b", 0.6), pair("c", "d", 0.6)]
 
@@ -151,6 +161,11 @@ def test_slight_contradiction_is_nudged_when_a_pair_is_unlisted():
 @pytest.mark.parametrize(
     "correlations, message",
     [
+        ({"bands": ["a", "b"], "coefficient": 0.5}, "list of pairs"),
+        ([("a", "b", 0.5)], "must be a dict"),
+        ([{"bands": ["a", "b"], "coeficient": 0.5}], "unknown settings"),
+        ([{"bands": "ab", "coefficient": 0.5}], "exactly two"),
+        ([{"bands": [["a"], "b"], "coefficient": 0.5}], "unknown band"),
         ([{"bands": ["a"], "coefficient": 0.5}], "exactly two"),
         ([{"bands": ["a", "b", "c"], "coefficient": 0.5}], "exactly two"),
         ([pair("a", "missing", 0.5)], "unknown band"),
