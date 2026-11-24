@@ -222,11 +222,15 @@ def _nudge_coefficients(requested: np.ndarray, listed: np.ndarray) -> np.ndarray
 def mixing_factor(matrix: np.ndarray) -> np.ndarray:
     """Factor the correlation matrix, for mixing independent noise.
 
-    Cholesky fails on a singular matrix, which a coefficient near 1 can
-    produce, so that case falls back on the eigen-decomposition.
+    The factor is always lower triangular, which lets the noise be mixed in
+    place. Cholesky fails on a singular matrix, which a coefficient near 1
+    can produce, so that case falls back on the eigen-decomposition, rotated
+    to lower triangular.
     """
     try:
         return np.linalg.cholesky(matrix)
     except np.linalg.LinAlgError:
         eigenvalues, eigenvectors = np.linalg.eigh(matrix)
-        return eigenvectors * np.sqrt(np.clip(eigenvalues, 0, None))
+        root = eigenvectors * np.sqrt(np.clip(eigenvalues, 0, None))
+        # root @ root.T is the matrix, and so is R.T @ R for root.T = Q @ R.
+        return np.linalg.qr(root.T)[1].T

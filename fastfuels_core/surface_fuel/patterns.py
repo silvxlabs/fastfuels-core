@@ -9,10 +9,11 @@ The percentiles set where values land, not what they are.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterator
 
 import numpy as np
 from scipy import stats
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, gaussian_filter1d
 
 
 def band_percentiles(
@@ -21,12 +22,15 @@ def band_percentiles(
     speckles: list[float],
     factor: np.ndarray,
     rng: np.random.Generator,
-) -> list[np.ndarray]:
+) -> Iterator[np.ndarray]:
     """Give every cell of every band a percentile, setting the spatial pattern.
 
     The noise is mixed before smoothing, so each band's patch size follows
     its own sigma. Bands with different sigmas therefore come out less
     correlated than the matrix says.
+
+    Bands are yielded one at a time, so only one band's percentiles are held
+    at once. The noise is float32 to halve its memory.
 
     Parameters
     ----------
@@ -39,15 +43,15 @@ def band_percentiles(
         How much of each band's unsmoothed noise is blended back into its
         patches, from 0 to 1, in matrix order. Only bands with a sigma use it.
     factor : numpy.ndarray
-        Mixing factor from
-        ``mixing_factor``.
+        Lower-triangular mixing factor from ``mixing_factor``.
     rng : numpy.random.Generator
         Source of the noise.
 
-    Returns
-    -------
-    list of numpy.ndarray
-        One array of ``shape`` per band, with values between 0 and 1.
+    Yields
+    ------
+    numpy.ndarray
+        One float64 array of ``shape`` per band, in matrix order, with values
+        between 0 and 1.
     """
     height, width = shape
     padding = math.ceil(4 * max(sigmas))
@@ -57,33 +61,47 @@ def band_percentiles(
         slice(padding, padding + width),
     )
 
-    noise = rng.standard_normal((len(sigmas), *padded_shape))
-    mixed = np.tensordot(factor, noise, axes=1)
-    del noise
+    noise = rng.standard_normal((len(sigmas), *padded_shape), dtype=np.float32)
+    _mix_in_place(noise, factor)
 
-    percentiles = []
-    for band_noise, sigma, speckle in zip(mixed, sigmas, speckles):
+    for band_noise, sigma, speckle in zip(noise, sigmas, speckles):
         field = band_noise[window]
         if sigma > 0:
             smooth = gaussian_filter(band_noise, sigma)[window] / _kernel_std(sigma)
             field = math.sqrt(1 - speckle) * smooth + math.sqrt(speckle) * field
-        percentiles.append(rank_percentiles(field))
+        yield rank_percentiles(field)
 
-    return percentiles
+
+def _mix_in_place(noise: np.ndarray, factor: np.ndarray) -> None:
+    """Mix independent noise across bands, overwriting it.
+
+    The factor is lower triangular, so each band needs only its own and
+    earlier bands' noise. Working from the last band back leaves those
+    untouched until they are mixed themselves, so no second copy is needed.
+    """
+    for i in reversed(range(len(noise))):
+        noise[i] *= np.float32(factor[i, i])
+        for j in range(i):
+            if factor[i, j]:
+                noise[i] += np.float32(factor[i, j]) * noise[j]
 
 
 def _kernel_std(sigma: float) -> float:
     """Return the std of unit-variance noise after Gaussian smoothing."""
     radius = math.ceil(4 * sigma)
-    impulse = np.zeros((2 * radius + 1, 2 * radius + 1))
-    impulse[radius, radius] = 1
-    return math.sqrt(np.sum(gaussian_filter(impulse, sigma) ** 2))
+    impulse = np.zeros(2 * radius + 1)
+    impulse[radius] = 1
+    # The 2D kernel is the 1D kernel times itself, so its sum of squares is
+    # the 1D sum of squares, squared.
+    return float(np.sum(gaussian_filter1d(impulse, sigma) ** 2))
 
 
 def rank_percentiles(field: np.ndarray) -> np.ndarray:
     """Replace each cell with its percentile among all cells in the grid."""
-    ranks = stats.rankdata(field).reshape(field.shape)
-    return (ranks - 0.5) / field.size
+    percentiles = stats.rankdata(field).reshape(field.shape)
+    percentiles -= 0.5
+    percentiles /= field.size
+    return percentiles
 
 
 def rank_correlation(first: np.ndarray, second: np.ndarray) -> float:

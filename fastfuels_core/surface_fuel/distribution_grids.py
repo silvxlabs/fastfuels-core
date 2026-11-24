@@ -163,17 +163,25 @@ def build_distribution_grids(
     factor = mixing_factor(correlation_matrix(keys, correlations))
 
     rng = np.random.default_rng(seed)
-    percentiles = band_percentiles(shape, sigmas, speckles, factor, rng)
-    _warn_if_correlations_drift(keys, correlations, percentiles)
+    paired = {band for pair in correlations or [] for band in pair["bands"]}
+    grids = {}
+    kept = []
+    for key, cell_percentiles, distribution in zip(
+        keys, band_percentiles(shape, sigmas, speckles, factor, rng), distributions
+    ):
+        grids[key] = percentiles_to_values(cell_percentiles, distribution)
+        # Only paired bands are needed to check correlations, and float32 is
+        # plenty for that.
+        kept.append(cell_percentiles.astype(np.float32) if key in paired else None)
 
-    return {
-        key: percentiles_to_values(cell_percentiles, distribution)
-        for key, cell_percentiles, distribution in zip(keys, percentiles, distributions)
-    }
+    _warn_if_correlations_drift(keys, correlations, kept)
+    return grids
 
 
 def _warn_if_correlations_drift(
-    keys: list, correlations: list[dict] | None, percentiles: list[np.ndarray]
+    keys: list,
+    correlations: list[dict] | None,
+    percentiles: list[np.ndarray | None],
 ) -> None:
     """Warn about listed pairs whose correlation in the grids missed by a lot."""
     index = {key: i for i, key in enumerate(keys)}
